@@ -31,3 +31,14 @@ build/
 
 ### VS Code ###
 .vscode/
+
+
+# Maven wrapper 过滤
+.mvn/
+mvnw
+mvnw.cmd
+HELP.md
+# IDE配置
+.idea/
+target/
+*.class
