@@ -51,3 +51,51 @@
 - `GET /actuator/health` 的最终截图或响应。
 - `/swagger-ui/index.html` 的最终截图或响应。
 - Docker Compose 启动 MySQL、Redis 后的 DataGrip 连接记录。
+
+## Day 2：2026-07-20
+
+### 今天对应任务
+
+- 当前文档：`01-工程与基础业务开发链.md`
+- 当前步骤：步骤 3：只启动 MySQL 与 Redis
+- 今日目标：用 Docker Compose 启动 MySQL 和 Redis，并用 DataGrip 验证 MySQL 连接
+
+### 今天学了什么
+
+- `deploy/docker-compose.yml` 与后端配置的分工：
+  - 它解决什么问题：`docker-compose.yml` 负责启动 MySQL、Redis 这类外部依赖服务；后端 `application.yml/properties` 负责告诉 Spring Boot 怎么连接这些服务。
+  - 我现在会用到哪里：后续 Spring Boot 连接 MySQL、Redis 时，会连接 Docker Compose 启动出来的服务。
+- Docker 端口映射：
+  - 它解决什么问题：把容器内部端口暴露给本机工具访问。
+  - 我现在会用到哪里：MySQL 容器内部仍是 `3306`，但本机 DataGrip 使用 `localhost:3307` 连接，因为 Compose 中写的是 `3307:3306`。
+- DataGrip 连接验证：
+  - 它解决什么问题：不用猜数据库是否可用，直接通过图形工具连接 MySQL 并执行 SQL 验证。
+  - 我现在会用到哪里：后续 Flyway 建表、商品数据、订单数据都要用 DataGrip 做验收。
+
+### 今天遇到的问题
+
+| 问题 | 出现场景 | 最后怎么解决 | 是否已彻底理解 |
+|---|---|---|---|
+| Docker Compose 第一次启动失败 | 执行 `docker compose up -d` 时提示无法连接 Docker API | 打开 Docker Desktop，等待 Docker 引擎启动后重新执行命令，MySQL 和 Redis 成功启动 | 是 |
+| 不清楚为什么配置放在 `deploy/docker-compose.yml` | 以为所有 yml 都应该写在后端项目里 | 理解为：`deploy/docker-compose.yml` 是给 Docker 启动依赖服务看的；后端 `application.yml/properties` 是给 Spring Boot 连接服务看的 | 是 |
+| MySQL 端口不是文档里的 `3306` | 本机采用 `3307:3306` 避免端口冲突 | DataGrip 连接本机端口 `3307`，Docker 再转发到容器内 MySQL 的 `3306` | 是 |
+
+### 重要记录
+
+- 成功的接口：今天没有新增后端接口。
+- 失败过的接口：无。
+- DataGrip 看到的数据：连接 `ai_commerce` 成功，执行 `SELECT 1;` 返回 `1`。
+- Redis 验收：`docker exec ai-commerce-redis redis-cli ping` 返回 `PONG`。
+- MySQL 连接信息：`localhost:3307`，数据库名 `ai_commerce`。
+- 关键报错：Docker Desktop 未启动时，Docker 命令无法连接 Docker API。
+- 参考资料：`01-工程与基础业务开发链.md` 步骤 3；`06-每日推进看板与任务安排.md`。
+
+### 今天还没理解透
+
+- Spring Boot 连接 MySQL 的配置还没正式写，后续进入步骤 6 时再系统处理。
+- Redis 今天只完成启动和 `PING` 验收，还没有接入后端业务。
+
+### 明天遇到再补
+
+- 步骤 5：统一响应、业务异常、全局异常处理、参数校验。
+- 今日加餐中创建的异常处理相关代码需要单独验收和提交。

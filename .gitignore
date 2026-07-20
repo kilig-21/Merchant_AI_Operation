@@ -42,3 +42,6 @@ HELP.md
 .idea/
 target/
 *.class
+
+# 其他配置文件
+deploy/.env
