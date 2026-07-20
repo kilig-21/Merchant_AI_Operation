@@ -13,6 +13,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class PingController{
     @GetMapping("/ping")
     public ApiResponse<String> ping(){
-        return ApiResponse.error("pong");
+        return ApiResponse.ok("pong");
     }
 }

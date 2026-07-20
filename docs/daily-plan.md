@@ -7,9 +7,9 @@
 
 | 项目 | 进度 |
 |---|---|
-| 总步骤 | `████░░░░░░` 4 / 36 |
+| 总步骤 | `█████░░░░░` 5 / 36 |
 | 当前阶段 | 第 1 阶段：工程与基础业务 |
-| 本周任务 | `████░░░` 4 / 7 |
+| 本周任务 | `█████░░` 5 / 7 |
 | 周验收 | 未开始 |
 | 最近提交 | `chore: add mysql redis compose` |
 
@@ -18,13 +18,13 @@
 | ------ | ---------------------------- |
 | 当前阶段   | 第 1 阶段：工程与基础业务               |
 | 当前文档   | `01-工程与基础业务开发链.md`           |
-| 当前步骤   | 步骤 3：MySQL 与 Redis 已启动并通过 DataGrip 验收；步骤 4 已完成最小 `/api/ping` 闭环；步骤 5 加餐已开始，待单独验收 |
+| 当前步骤   | 步骤 5：统一响应、业务异常、参数校验、请求日志已完成加餐验收 |
 | 本周目标   | 可启动的前后端骨架                    |
 | 今日目标   | 用 Docker Compose 启动 MySQL 与 Redis，并用 DataGrip 验证 MySQL 连接 |
 | 昨日完成   | 后端最小 `/api/ping` 闭环                    |
-| 当前卡点   | 步骤 5 加餐代码待单独验收 |
+| 当前卡点   | 步骤 5 加餐代码待提交；核心任务截图已补 |
 | 最近一次提交 | `chore: add mysql redis compose`                           |
-| 明日优先   | 继续步骤 5：统一响应、业务异常、全局异常处理与参数校验 |
+| 明日优先   | 步骤 6：连接数据库并创建第一批表，使用 Flyway 迁移 |
 
 ## 每日任务
 ## Day 1：2026-07-19
@@ -68,7 +68,7 @@
 ### 今日阶段
 
 - 当前文档：`01-工程与基础业务开发链.md`
-- 当前步骤：步骤 3：只启动 MySQL 与 Redis；加餐预习步骤 5：统一响应、异常和校验
+- 当前步骤：步骤 3：只启动 MySQL 与 Redis；加餐完成步骤 5：统一响应、异常、校验和请求日志
 - 今日目标：用 Docker Compose 启动 MySQL 与 Redis，并用 DataGrip 验收 MySQL 连接
 
 ### 今天要学
@@ -83,7 +83,7 @@
 - [x] 任务 1：创建 `deploy/docker-compose.yml`，配置 MySQL 8.4 与 Redis 7.4
 - [x] 任务 2：启动 Docker Desktop 后执行 `docker compose up -d`
 - [x] 任务 3：用 Redis `PING` 与 DataGrip `SELECT 1;` 验收服务
-- [ ] 加餐：开始步骤 5，修正 `ApiResponse` 并创建业务异常相关类（待单独验收和提交）
+- [x] 加餐：完成步骤 5，修正 `ApiResponse`，创建业务异常、全局异常处理、参数校验和请求日志
 
 ### 今天验收
 
@@ -94,10 +94,15 @@
 - [x] DataGrip 执行 `SELECT 1;` 返回 `1`
 - [x] 截图/请求记录已写入 `docs/learning-log.md`
 - [x] 已提交 Git，提交信息：`chore: add mysql redis compose`
+- [x] `/api/debug/biz-error` 返回统一业务异常 JSON
+- [x] `/api/debug/system-error` 返回统一系统异常 JSON
+- [x] `/api/debug/validate` 合法参数返回 `code: 0`
+- [x] `/api/debug/validate` 非法参数返回 `code: 400`
+- [x] IDEA 控制台能打印请求方法、URL、HTTP 状态和耗时
 
 ### 今天完成
 
-- 完成了：步骤 3 已通过验收；MySQL 使用本机端口 `3307` 映射容器端口 `3306`，Redis 使用 `6379`；`deploy/.env` 已加入 `.gitignore`。
-- 没完成：步骤 5 加餐只完成部分代码，尚未完整验收。
+- 完成了：步骤 3 已通过验收；MySQL 使用本机端口 `3307` 映射容器端口 `3306`，Redis 使用 `6379`；`deploy/.env` 已加入 `.gitignore`。加餐完成步骤 5 的统一响应、业务异常、全局异常处理、参数校验和请求日志。
+- 没完成：步骤 5 加餐代码尚未提交 Git。
 - 卡住点：第一次执行 `docker compose up -d` 时 Docker Desktop 没有启动，导致无法连接 Docker API；启动 Docker Desktop 后解决。
-- 明天优先做：如果今天不继续加餐，明天从步骤 5 的全局异常处理和临时校验接口继续。
+- 明天优先做：步骤 6，配置 Spring Boot 连接 MySQL，并用 Flyway 创建第一批表。

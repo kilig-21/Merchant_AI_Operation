@@ -15,25 +15,26 @@ public class SecurityConfig{
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
-                .csrf(AbstractHttpConfigurer::disable)
-                .httpBasic(AbstractHttpConfigurer::disable)
-                .formLogin(AbstractHttpConfigurer::disable)
-                .authorizeHttpRequests(auth->
-                        auth.requestMatchers(
-                                        "/api/ping",
-                                        "/actuator/health",
-                                        "/swagger-ui/**",
-                                        "/v3/api-docs/**"
+        .csrf(AbstractHttpConfigurer::disable)//把token关了
+        .httpBasic(AbstractHttpConfigurer::disable)
+        .formLogin(AbstractHttpConfigurer::disable)
+        .authorizeHttpRequests(auth->
+                auth.requestMatchers(
+                    "/api/ping",
+                    "/actuator/health",
+                    "/swagger-ui/**",
+                    "/v3/api-docs/**",
+                    "/api/debug/**"
+                ).permitAll()
+                        //剩下的全部要验证!!!!
 
-                        ).permitAll()
-                                //剩下的全部要验证!!!!
 
-                                //匹配前面规则没覆盖到的所有剩余接口
-                                .anyRequest()
-                                //只允许已登录、身份核验通过的用户访问
-                                .authenticated()
-                )
-                .build();
+                        //匹配前面规则没覆盖到的所有剩余接口
+                        .anyRequest()
+                        //只允许已登录、身份核验通过的用户访问
+                        .authenticated()
+        )
+        .build();
     }
 }
 
