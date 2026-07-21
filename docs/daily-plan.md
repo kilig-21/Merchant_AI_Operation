@@ -7,9 +7,9 @@
 
 | 项目 | 进度 |
 |---|---|
-| 总步骤 | `█████░░░░░` 5 / 36 |
+| 总步骤 | `██████░░░░` 6 / 36 |
 | 当前阶段 | 第 1 阶段：工程与基础业务 |
-| 本周任务 | `█████░░` 5 / 7 |
+| 本周任务 | `██████░` 6 / 7 |
 | 周验收 | 未开始 |
 | 最近提交 | `chore: add mysql redis compose` |
 
@@ -18,13 +18,13 @@
 | ------ | ---------------------------- |
 | 当前阶段   | 第 1 阶段：工程与基础业务               |
 | 当前文档   | `01-工程与基础业务开发链.md`           |
-| 当前步骤   | 步骤 5：统一响应、业务异常、参数校验、请求日志已完成加餐验收 |
+| 当前步骤   | 步骤 6：Spring Boot 已连接 MySQL，Flyway 已创建第一批表 |
 | 本周目标   | 可启动的前后端骨架                    |
-| 今日目标   | 用 Docker Compose 启动 MySQL 与 Redis，并用 DataGrip 验证 MySQL 连接 |
-| 昨日完成   | 后端最小 `/api/ping` 闭环                    |
-| 当前卡点   | 步骤 5 加餐代码待提交；核心任务截图已补 |
+| 今日目标   | 配置 Spring Boot 连接 MySQL，并用 Flyway 创建第一批表 |
+| 昨日完成   | MySQL/Redis 启动验收；步骤 5 加餐能力完成                    |
+| 当前卡点   | 无；待补文档记录与 Git 提交 |
 | 最近一次提交 | `chore: add mysql redis compose`                           |
-| 明日优先   | 步骤 6：连接数据库并创建第一批表，使用 Flyway 迁移 |
+| 明日优先   | 第 1 周复盘和补漏：确认 Swagger/Actuator、从零启动链路、提交代码 |
 
 ## 每日任务
 ## Day 1：2026-07-19
@@ -106,3 +106,40 @@
 - 没完成：步骤 5 加餐代码尚未提交 Git。
 - 卡住点：第一次执行 `docker compose up -d` 时 Docker Desktop 没有启动，导致无法连接 Docker API；启动 Docker Desktop 后解决。
 - 明天优先做：步骤 6，配置 Spring Boot 连接 MySQL，并用 Flyway 创建第一批表。
+
+## Day 3：2026-07-21
+
+### 今日阶段
+
+- 当前文档：`01-工程与基础业务开发链.md`
+- 当前步骤：步骤 6：连接数据库并落地第一批表
+- 今日目标：配置 Spring Boot 连接 MySQL，并用 Flyway 创建第一批业务表
+
+### 今天要学
+
+- 知识点 1：Spring Boot 的 `spring.datasource.*` 配置与 IDEA 环境变量
+- 知识点 2：Flyway 版本迁移文件命名、执行记录和 `flyway_schema_history`
+- 知识点 3：Spring Boot 自动配置与 `@SpringBootApplication(exclude = ...)` 的影响
+- 学到什么程度算够：能说清楚后端启动时先创建 MySQL 连接，再由 Flyway 扫描 `db/migration`，按 `V1`、`V2` 顺序执行未运行过的 SQL，并把结果记录到 `flyway_schema_history`。
+
+### 今天要做
+
+- [x] 任务 1：配置 `application.properties` 连接 Docker 中的 MySQL，密码从 IDEA 环境变量读取
+- [x] 任务 2：创建 `V1__init_schema.sql`，包含 `tenant`、`sys_user`、`product_spu`、`product_sku`
+- [x] 任务 3：启动后端触发 Flyway，并用 DataGrip 验收表结构和迁移记录
+
+### 今天验收
+
+- [x] IDEA 后端启动正常
+- [x] `/api/ping` 返回 `{"code":0,"message":"ok","data":"pong"}`
+- [x] DataGrip 中可见 `flyway_schema_history`、`tenant`、`sys_user`、`product_spu`、`product_sku`
+- [ ] 前端页面或浏览器 Network 结果正确（今天未做前端）
+- [x] 截图/请求记录已写入 `docs/learning-log.md`
+- [ ] 已提交 Git，提交信息：建议 `feat(db): add initial schema migration`
+
+### 今天完成
+
+- 完成了：Spring Boot 已通过 `localhost:3307` 连接 MySQL；Flyway 已执行 `V1__init_schema.sql`；第二次启动显示数据库已是版本 1，无需重复迁移。
+- 没完成：今天还未提交 Git；第 1 周复盘还未做。
+- 卡住点：一开始没有 Flyway 日志，因为启动类里排除了 `DataSourceAutoConfiguration` 和 `FlywayAutoConfiguration`；移除 `exclude` 后解决。
+- 明天优先做：做第 1 周复盘和补漏，确认 Swagger/Actuator、从零启动链路，并提交代码。

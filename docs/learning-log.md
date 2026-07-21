@@ -144,3 +144,59 @@
 
 - 步骤 6：连接数据库并创建第一批表。
 - 使用 Flyway 创建迁移文件后，要在 DataGrip 中确认业务表和 `flyway_schema_history`。
+
+## Day 3：2026-07-21
+
+### 今天对应任务
+
+- 当前文档：`01-工程与基础业务开发链.md`
+- 当前步骤：步骤 6：连接数据库并创建第一批表
+- 今日目标：让 Spring Boot 连接 Docker 中的 MySQL，并用 Flyway 自动创建第一批表。
+
+### 今天学了什么
+
+- Spring Boot 数据库连接配置：
+  - 它解决什么问题：告诉后端 MySQL 在哪里、用哪个数据库、哪个账号和密码连接。
+  - 我现在会用到哪里：后端通过 `jdbc:mysql://localhost:3307/ai_commerce` 连接 Docker 容器里的 MySQL。
+- IDEA 环境变量：
+  - 它解决什么问题：避免把真实数据库密码写进 `application.properties` 和 Git。
+  - 我现在会用到哪里：`spring.datasource.password=${MYSQL_ROOT_PASSWORD}` 会在后端启动时读取 IDEA 运行配置里的 `MYSQL_ROOT_PASSWORD`。
+- Flyway：
+  - 它解决什么问题：把数据库结构变更也变成有版本、有记录、可重复验收的迁移脚本。
+  - 我现在会用到哪里：`V1__init_schema.sql` 第一次启动时创建业务表，执行记录保存在 `flyway_schema_history`。
+- Flyway 文件名版本：
+  - 它解决什么问题：让 Flyway 能判断迁移脚本的执行顺序和哪些脚本已执行。
+  - 我现在会用到哪里：`V1`、`V2`、`V3` 决定执行顺序；`__` 后面的 `init_schema` 只是描述文字，Flyway 会记录它但不理解业务含义。
+- Spring Boot 自动配置：
+  - 它解决什么问题：根据依赖和配置自动创建 `DataSource`、Flyway、MyBatis 等基础对象。
+  - 我现在会用到哪里：启动类保持 `@SpringBootApplication`，不要排除 `DataSourceAutoConfiguration` 和 `FlywayAutoConfiguration`，否则数据库连接和迁移不会执行。
+
+### 今天遇到的问题
+
+| 问题 | 出现场景 | 最后怎么解决 | 是否已彻底理解 |
+|---|---|---|---|
+| `${MYSQL_ROOT_PASSWORD}` 在 IDEA 里没有特殊颜色 | 编辑 `application.properties` 时看到占位符不像普通配置一样高亮 | 理解为 Spring Boot 在运行时读取环境变量，不靠 IDEA 静态高亮判断是否可用；在运行配置里手动添加 `MYSQL_ROOT_PASSWORD` | 是 |
+| IDEA 打开的是 `server` 文件夹，不会自动读根目录 `deploy/.env` | 想让后端直接拿 Docker Compose 的 `.env` 密码 | 理解为 `deploy/.env` 给 Docker Compose 用，IDEA 环境变量给 Spring Boot 用；两边使用同名变量保持一致 | 是 |
+| 后端启动成功但没有 Flyway 日志，数据库也没有表 | 第一次配置完数据源和迁移脚本后重启，控制台只显示 Tomcat 启动 | 启动类里排除了 `DataSourceAutoConfiguration`、`FlywayAutoConfiguration` 等自动配置，导致数据库和迁移都被跳过；移除 `exclude` 后解决 | 是 |
+| 只加 `flyway-core` 不够稳 | 使用 MySQL 8.4 和新版 Flyway 时需要明确数据库支持模块 | 在 `pom.xml` 中保留 `flyway-core` 和 `flyway-mysql`，前者是 Flyway 主功能，后者是 MySQL 支持 | 是 |
+| SQL 表名和状态值拼写容易出错 | 编写 `V1__init_schema.sql` 时出现 `sys_uers/sys_uer`、`create_at`、`DARFT` | 检查并改为 `sys_user`、`created_at`、`DRAFT` | 是 |
+
+### 重要记录
+
+- 成功的接口：`GET http://localhost:8080/api/ping` 返回 `{"code":0,"message":"ok","data":"pong"}`。
+- 失败过的接口：无。
+- DataGrip 看到的数据：`SHOW TABLES;` 返回 `flyway_schema_history`、`product_sku`、`product_spu`、`sys_user`、`tenant`。
+- Flyway 记录：`SELECT version, description, script, success FROM flyway_schema_history;` 返回 `version = 1`、`description = init schema`、`script = V1__init_schema.sql`、`success = 1`。
+- 关键日志：第一次成功迁移时看到 `Migrating schema ai_commerce to version "1 - init schema"` 和 `Successfully applied 1 migration`；第二次启动看到 `Schema ai_commerce is up to date. No migration necessary.`
+- 关键报错：无红色报错；曾经的问题是没有 Flyway 日志，原因是自动配置被排除。
+- 参考资料：`01-工程与基础业务开发链.md` 步骤 6；`06-每日推进看板与任务安排.md`。
+
+### 今天还没理解透
+
+- `tenant`、`sys_user`、`product_spu`、`product_sku` 之间还只是表结构层面的理解，后续写登录和商品接口时再继续加深。
+- MyBatis 还没有正式使用，后续步骤写 Mapper 时再系统理解它如何把 Java 方法和 SQL 连接起来。
+
+### 明天遇到再补
+
+- 第 1 周复盘和补漏：确认 Swagger/Actuator、从零启动 MySQL/Redis/后端、补 Git 提交。
+- 后续如果要改表，不修改已经执行过的 `V1__init_schema.sql`，而是新增 `V2__xxx.sql`。
