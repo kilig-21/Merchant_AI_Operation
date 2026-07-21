@@ -196,6 +196,27 @@
 - `tenant`、`sys_user`、`product_spu`、`product_sku` 之间还只是表结构层面的理解，后续写登录和商品接口时再继续加深。
 - MyBatis 还没有正式使用，后续步骤写 Mapper 时再系统理解它如何把 Java 方法和 SQL 连接起来。
 
+### 侧边任务/对话补充记录
+
+- Flyway 版本文件名的理解：
+  - `V1__init_schema.sql` 中的 `V1` 是给 Flyway 判断执行顺序和是否执行过的。
+  - 两个下划线 `__` 是 Flyway 规定的分隔符，用来隔开版本号和描述。
+  - `init_schema` 只是描述文字，Flyway 会记录到 `flyway_schema_history`，但不会理解它的业务含义；起清楚名字是为了人以后能看懂。
+- Flyway 第二次启动为什么不重复建表：
+  - 第一次执行成功后，Flyway 会把 `version = 1`、`script = V1__init_schema.sql`、`success = 1` 写入 `flyway_schema_history`。
+  - 第二次启动时，Flyway 对比代码里的 `V1` 和数据库记录，发现已经成功执行过，所以显示 `Schema is up to date. No migration necessary.`
+- 表建在哪里：
+  - 表实际建在 Docker 容器 `ai-commerce-mysql` 内部的 MySQL 服务里。
+  - 本机通过 `localhost:3307` 访问，Docker 再转发到容器内部 `3306`。
+  - `mysql-data` volume 会保存 MySQL 数据，普通重启容器不会丢表。
+- `flyway-mysql` 是否多余：
+  - 不多余。`flyway-core` 是 Flyway 主功能，`flyway-mysql` 是 MySQL 支持模块。
+  - 使用 MySQL 8.4 和新版 Flyway 时，保留 `flyway-mysql` 更稳。
+- 不要把密码写进项目文件：
+  - `deploy/.env` 给 Docker Compose 启动 MySQL 用。
+  - IDEA 运行配置里的 `MYSQL_ROOT_PASSWORD` 给 Spring Boot 连接 MySQL 用。
+  - `application.properties` 保持 `spring.datasource.password=${MYSQL_ROOT_PASSWORD}`，避免密码进入 Git。
+
 ### 明天遇到再补
 
 - 第 1 周复盘和补漏：确认 Swagger/Actuator、从零启动 MySQL/Redis/后端、补 Git 提交。
