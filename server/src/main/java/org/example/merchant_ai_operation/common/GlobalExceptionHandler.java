@@ -5,6 +5,7 @@ package org.example.merchant_ai_operation.common;
 
 //全局异常类
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 //@RestControllerAdvice意思是：这是一个全局 Controller 异常处理器。Controller 或它后面调用的代码抛异常时，它可以统一接住。
 //全局异常处理器，统一拦截所有 @RestController 抛出的异常，封装统一返回体（就是你上面的 GlobalExceptionHandler）
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
     //精确处理业务问题:在业务代码中抛出
@@ -58,9 +60,9 @@ public class GlobalExceptionHandler {
     //兜底异常
     @ExceptionHandler(value = Exception.class)
     public ApiResponse<?> handleException(Exception ex){
+        log.error("Unhandled exception", ex);
         return ApiResponse.error(500, "系统异常，请稍后再试");
     }
-
 
 
 }

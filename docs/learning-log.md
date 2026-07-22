@@ -221,3 +221,104 @@
 
 - 第 1 周复盘和补漏：确认 Swagger/Actuator、从零启动 MySQL/Redis/后端、补 Git 提交。
 - 后续如果要改表，不修改已经执行过的 `V1__init_schema.sql`，而是新增 `V2__xxx.sql`。
+
+## Day 4：2026-07-22
+
+### 今天对应任务
+
+- 当前文档：`01-工程与基础业务开发链.md`、`06-每日推进看板与任务安排.md`
+- 当前步骤：第 1 周复盘和补漏
+- 今日目标：从零验收 MySQL/Redis/后端/接口文档/Flyway，并修复 Swagger UI 兼容问题。
+
+### 今天学了什么
+
+- 从零启动链路：
+  - 它解决什么问题：不用只凭“昨天能跑”来判断项目状态，而是按依赖服务、后端启动、数据库迁移、接口请求逐层确认。
+  - 我现在会用到哪里：以后每周验收、换电脑启动项目、排查“项目突然打不开”时，都先按这条链路检查。
+- Swagger UI 与 `/v3/api-docs`：
+  - 它解决什么问题：Swagger UI 只是页面，真正的接口定义来自 `/v3/api-docs`。页面打不开接口列表时，要直接访问 `/v3/api-docs` 看它返回了什么。
+  - 我现在会用到哪里：后续新增登录、商品、订单接口后，如果 Swagger 页面异常，先查 `/v3/api-docs`。
+- 异常排查链路：
+  - 它解决什么问题：避免一遇到 500 就乱改代码。先判断请求是否进后端、是否被 Security 拦截、是否进入目标组件，再看真实异常。
+  - 我现在会用到哪里：后续所有后端接口报错都按这个顺序排查。
+- `ex.printStackTrace()` 与 `log.error("Unhandled exception", ex)`：
+  - 它解决什么问题：`ex.printStackTrace()` 适合临时把异常栈打印到控制台；`log.error("Unhandled exception", ex)` 交给日志系统记录，适合正式保留。
+  - 我现在会用到哪里：全局异常处理器保留正式日志，临时排错后移除裸 `printStackTrace()`。
+- 依赖版本兼容：
+  - 它解决什么问题：`NoSuchMethodError` 常见原因是运行时依赖版本不匹配，不一定是业务代码写错。
+  - 我现在会用到哪里：后续升级 Spring Boot、MyBatis、springdoc、Spring AI 等依赖时，要同步看兼容版本。
+
+### 今天遇到的问题
+
+| 问题 | 出现场景 | 最后怎么解决 | 是否已彻底理解 |
+|---|---|---|---|
+| 第一次 Redis `PING` 提示 `No such container` | 执行 `docker exec` 时容器名拼错 | 改用正确容器名 `ai-commerce-redis` 后返回 `PONG` | 是 |
+| Swagger UI 显示 `Unable to render this definition` | 打开 `/swagger-ui/index.html` 时页面能打开，但不能渲染接口列表 | 直接访问 `/v3/api-docs`，发现返回的是统一错误 JSON，而不是 OpenAPI JSON | 是 |
+| `/v3/api-docs` 返回 `{"code":500,"message":"系统异常，请稍后再试","data":null}` | springdoc 生成接口文档时内部报错，被 `GlobalExceptionHandler` 兜底包装 | 临时在兜底异常中加入 `ex.printStackTrace()`，让真实异常打印到 IDEA 控制台 | 是 |
+| `NoSuchMethodError: ControllerAdviceBean.<init>(java.lang.Object)` | 访问 `/v3/api-docs` 后 IDEA 控制台打印真实异常 | 判断为 springdoc `2.2.0` 与 Spring Boot `3.5.16` / Spring Framework 版本不兼容，将 `springdoc-openapi-starter-webmvc-ui` 升级到 `2.8.17` | 是 |
+| 临时异常打印不适合长期保留 | 为排查 Swagger 问题加入了 `ex.printStackTrace()` | 改为 `log.error("Unhandled exception", ex)`，对用户仍返回统一错误，对开发者保留完整异常栈 | 是 |
+
+### 重要记录
+
+- 成功的接口：
+  - `GET http://localhost:8080/api/ping` 返回 `{"code":0,"message":"ok","data":"pong"}`。
+  - `GET http://localhost:8080/actuator/health` 返回 `{"status":"UP"}`。
+  - `GET http://localhost:8080/v3/api-docs` 返回包含 `"openapi":"3.1.0"` 的 OpenAPI JSON。
+  - `GET http://localhost:8080/swagger-ui/index.html` 能显示 `debug-controller` 和 `ping-controller`。
+- 失败过的接口：
+  - 修复前 `GET /v3/api-docs` 返回统一错误 JSON：`{"code":500,"message":"系统异常，请稍后再试","data":null}`。
+- DataGrip 看到的数据：
+  - `SHOW TABLES;` 返回 `flyway_schema_history`、`product_sku`、`product_spu`、`sys_user`、`tenant`。
+  - `SELECT version, description, script, success FROM flyway_schema_history;` 返回 `version = 1`、`description = init schema`、`script = V1__init_schema.sql`、`success` 为成功状态。
+- Redis 验收：
+  - `docker exec ai-commerce-redis redis-cli ping` 返回 `PONG`。
+- 后端启动日志：
+  - MySQL 连接成功，数据库地址为 `jdbc:mysql://localhost:3307/ai_commerce`。
+  - Flyway 显示 `Current version of schema ai_commerce: 1` 和 `Schema ai_commerce is up to date. No migration necessary.`
+  - Tomcat 启动在 `8080` 端口。
+- 关键报错：
+  - `NoSuchMethodError: ControllerAdviceBean.<init>(java.lang.Object)`。
+- 关键修改：
+  - `springdoc-openapi-starter-webmvc-ui` 从 `2.2.0` 升级到 `2.8.17`。
+  - `GlobalExceptionHandler` 兜底异常使用 `log.error("Unhandled exception", ex)` 记录真实异常。
+- 截图记录：
+  - `docs/images/day-4/docker-compose-services-running.png`
+  - `docs/images/day-4/redis-pong.png`
+  - `docs/images/day-4/backend-startup-flyway-up-to-date.png`
+  - `docs/images/day-4/api-ping-success.png`
+  - `docs/images/day-4/actuator-health-up.png`
+  - `docs/images/day-4/v3-api-docs-error-before-fix.png`
+  - `docs/images/day-4/v3-api-docs-openapi-after-fix.png`
+  - `docs/images/day-4/swagger-ui-api-list.png`
+  - `docs/images/day-4/datagrip-show-tables.png`
+  - `docs/images/day-4/datagrip-flyway-schema-history.png`
+- 参考资料：
+  - `01-工程与基础业务开发链.md` 步骤 4、步骤 6。
+  - `06-每日推进看板与任务安排.md` 第 1 周 Day 7 和周验收规则。
+  - springdoc 官方兼容矩阵：Spring Boot `3.5.x` 对应 springdoc `2.8.x`。
+
+### 今天还没理解透
+
+- 目前只理解到 `NoSuchMethodError` 多半是依赖版本不兼容；更细的 Spring Framework 方法签名变化以后遇到再深入。
+- HTTP 状态仍可能是 200，但业务 JSON 里是 `code: 500`；后续要不要改成 `ResponseEntity` 同步 HTTP 状态码，等登录和权限接口时再统一设计。
+
+### 侧边任务/对话补充记录
+
+- 怎么一步步定位错误：
+  - 先确认 `/api/ping` 和 `/actuator/health` 正常，排除“整个后端挂了”。
+  - 再确认 Swagger UI 静态页面能打开，说明坏的不是页面资源。
+  - 直接访问 `/v3/api-docs`，发现返回统一错误 JSON，说明问题在接口定义生成过程。
+  - 临时打印真实异常，看到 `NoSuchMethodError`。
+  - 根据异常来源 `org.springdoc` 判断是 springdoc 与 Spring Boot 版本不兼容。
+- `log.error("Unhandled exception", ex)` 会记录什么：
+  - 第一部分是自定义提示 `Unhandled exception`，方便搜索日志。
+  - 第二部分是完整异常对象，日志框架会打印异常类型、异常消息、调用栈和 `Caused by` 原因链。
+  - 不要写成 `log.error("Unhandled exception: " + ex)`，那样通常不会打印完整异常栈。
+- 为什么正式代码不长期保留 `ex.printStackTrace()`：
+  - 它直接向控制台标准错误输出打印，适合临时排错。
+  - 正式项目用日志系统更好，因为日志会带时间、级别、线程、类名，也方便后续写入日志文件和按级别过滤。
+
+### 明天遇到再补
+
+- 进入步骤 7：注册、登录与 `GET /api/auth/me`。
+- 开始学习 BCrypt、JWT、Bearer Token、SecurityContext 和登录后的当前用户。
