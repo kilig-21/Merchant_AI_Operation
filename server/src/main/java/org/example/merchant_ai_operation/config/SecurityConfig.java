@@ -4,6 +4,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 
 
@@ -24,6 +26,8 @@ public class SecurityConfig{
                     "/actuator/health",
                     "/swagger-ui/**",
                     "/v3/api-docs/**",
+                    "/api/debug/**",
+                    "/api/auth/**",
                     "/api/debug/**"
                 ).permitAll()
                         //剩下的全部要验证!!!!
@@ -36,6 +40,14 @@ public class SecurityConfig{
         )
         .build();
     }
+
+    @Bean
+    public PasswordEncoder passwordEncoder(){
+        return new BCryptPasswordEncoder();
+
+    }
+
+
 }
 
 

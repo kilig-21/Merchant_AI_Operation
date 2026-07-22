@@ -60,7 +60,7 @@
         <dependency>
             <groupId>org.mybatis.spring.boot</groupId>
             <artifactId>mybatis-spring-boot-starter</artifactId>
-            <version>2.3.0</version>
+            <version>3.0.5</version>
         </dependency>
 
         <!-- Redis 缓存整合 -->

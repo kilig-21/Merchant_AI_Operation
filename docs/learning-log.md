@@ -322,3 +322,90 @@
 
 - 进入步骤 7：注册、登录与 `GET /api/auth/me`。
 - 开始学习 BCrypt、JWT、Bearer Token、SecurityContext 和登录后的当前用户。
+
+### 步骤 7 加餐记录
+
+- 当前文档：`01-工程与基础业务开发链.md`
+- 当前步骤：步骤 7：实现注册、登录与「当前用户」接口
+- 今日加餐目标：先跑通临时 token 登录业务链路，不在今天接入完整 JWT。
+
+#### 加餐学了什么
+
+- `auth`、`security`、`user` 的分工：
+  - `auth` 负责登录注册业务，例如 `AuthController`、`AuthService`、登录请求和登录响应。
+  - `security` 负责安全基础设施，例如后续的 JWT 解析、过滤器、当前登录人。
+  - `user` 负责 `sys_user` 表相关实体和查询。
+- DTO / VO / Entity：
+  - `LoginRequest` 是 DTO，用来接收前端传来的 `username` 和 `password`。
+  - `LoginResponse`、`CurrentUserVO` 是 VO，用来返回给前端看。
+  - `SysUser` 是 Entity，对应数据库 `sys_user` 表，里面有 `passwordHash`，不能直接返回给前端。
+- BCrypt：
+  - 数据库不保存明文密码，只保存 BCrypt 哈希。
+  - 登录时用 `passwordEncoder.matches(明文密码, 数据库哈希)` 校验。
+  - BCrypt 每次生成的哈希都不同，因为内部带随机盐；只要 `matches` 为 `true` 就说明匹配。
+- MyBatis 半自动映射：
+  - SQL 由开发者自己写清楚。
+  - MyBatis 负责参数绑定、执行 SQL、把结果映射成 Java 对象。
+  - 当前使用 `tenant_id AS tenantId`、`password_hash AS passwordHash` 这种方式显式映射数据库下划线字段和 Java 小驼峰字段。
+- 构造器注入：
+  - Controller 或 Service 需要 Mapper、Service、PasswordEncoder 时，通过构造方法声明依赖。
+  - Spring 容器负责把对应 Bean 传进来，不需要手动 `new`。
+
+#### 加餐遇到的问题
+
+| 问题 | 出现场景 | 最后怎么解决 | 是否已彻底理解 |
+|---|---|---|---|
+| `security` 包和 `config/SecurityConfig` 容易混 | 建登录模块包结构时疑惑为什么已有 `SecurityConfig` 还要建 `security` 包 | 理解为 `SecurityConfig` 负责组装安全规则，`security` 包后续放 JWT、Filter、CurrentUser 等安全零件 | 是 |
+| `secrurity` / `comtroller` 拼写错误 | 建包时把 `security`、`controller` 拼错 | 改为正确包名，避免 Java `package` 与目录长期错位 | 是 |
+| `AuthService` 一开始放进 `security` 包 | 登录业务服务被误放到安全基础设施包里 | 移动到 `auth/service`，`security` 留给后续 JWT 和过滤器 | 是 |
+| `AuthController` 参数一开始用了 `@PathVariable` | `POST /api/auth/login` 登录请求实际从 JSON Body 读取参数 | 改为 `@Valid @RequestBody LoginRequest request` | 是 |
+| `/api/auth/login` 被 Security 拦截风险 | 白名单最初写成 `/api/auth`，不能匹配 `/api/auth/login` | 改为 `"/api/auth/**"` | 是 |
+| `UserMapper` 启动时 Bean 定义失败 | 使用 MyBatis Starter `2.3.0` 搭配 Spring Boot `3.5.16` | 升级 `mybatis-spring-boot-starter` 到 `3.0.5` | 是 |
+| 初始 BCrypt 哈希和 `123456` 不匹配 | `POST /api/auth/login` 正确账号密码返回 401；临时 `password-match` 返回 `false` | 不修改已执行过的 `V2`，新增 `V3__reset_test_user_password.sql` 重置测试用户密码哈希 | 是 |
+| 登录接口曾返回系统异常 | 请求地址写成 `/api/auth/logind`，多了一个 `d` | 改为正确地址 `/api/auth/login` | 是 |
+
+#### 加餐重要记录
+
+- 新增 DTO/VO：
+  - `LoginRequest`
+  - `CurrentUserVO`
+  - `LoginResponse`
+- 新增业务代码：
+  - `AuthController`
+  - `AuthService`
+  - `SysUser`
+  - `UserMapper`
+- 新增迁移：
+  - `V2__init_auth_users.sql`：初始化 2 个商家租户和 3 个测试用户。
+  - `V3__reset_test_user_password.sql`：重置测试用户 BCrypt 密码哈希。
+- 关键依赖调整：
+  - `mybatis-spring-boot-starter` 从 `2.3.0` 升级到 `3.0.5`，用于适配 Spring Boot `3.5.16`。
+- 成功接口：
+  - `POST /api/auth/login`，请求 `merchant_a_admin / 123456`，返回 `todo-access-token` 和当前用户信息。
+  - `POST /api/auth/login`，请求错误密码 `wrong`，返回 `code: 401` 和 `用户名或密码错误`。
+- 临时接口处理：
+  - 曾用 `/api/debug/user/{username}` 验收 `UserMapper` 查询。
+  - 曾用 `/api/debug/password-match/{username}/{password}` 验收 BCrypt 哈希匹配。
+  - 两个临时接口已删除，避免长期暴露调试能力。
+- 截图记录：
+  - `docs/images/day-4/password-hash-tool-output.png`
+  - `docs/images/day-4/datagrip-auth-users.png`
+  - `docs/images/day-4/datagrip-auth-tenants.png`
+  - `docs/images/day-4/debug-user-query-success.png`
+  - `docs/images/day-4/debug-user-query-not-found.png`
+  - `docs/images/day-4/flyway-v3-reset-password.png`
+  - `docs/images/day-4/debug-password-match-success.png`
+  - `docs/images/day-4/auth-login-success.png`
+  - `docs/images/day-4/auth-login-wrong-password.png`
+
+#### 加餐还没理解透
+
+- 现在返回的是临时字符串 `todo-access-token`，还不是真正 JWT。
+- `GET /api/auth/me` 还没有实现，当前用户还不能从 token 中恢复。
+- 目前登录失败业务 `code` 是 401，但 HTTP 状态仍可能是 200；后续做 JWT 和权限时再统一考虑是否改为 `ResponseEntity`。
+
+#### 明天遇到再补
+
+- 接入 JWT：`JwtService`、JWT secret 环境变量、真实 accessToken。
+- 增加 JWT Filter，把 token 解析成当前用户并放入 `SecurityContext`。
+- 实现 `GET /api/auth/me`。
