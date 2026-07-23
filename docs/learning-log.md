@@ -409,3 +409,119 @@
 - 接入 JWT：`JwtService`、JWT secret 环境变量、真实 accessToken。
 - 增加 JWT Filter，把 token 解析成当前用户并放入 `SecurityContext`。
 - 实现 `GET /api/auth/me`。
+
+## Day 5：2026-07-23
+
+### 今天对应任务
+
+- 当前文档：`01-工程与基础业务开发链.md`
+- 当前步骤：步骤 7：实现注册、登录与「当前用户」接口
+- 今日目标：接入 JWT，完成 `GET /api/auth/me`，让登录态能从 token 中恢复。
+
+### 今天学了什么
+
+- JWT：
+  - 它解决什么问题：登录成功后，后端不再返回临时字符串，而是返回一个带签名和过期时间的 accessToken。
+  - 我现在会用到哪里：前端以后每次请求受保护接口时，都要把这个 token 放进 `Authorization` 请求头。
+- `JwtService`：
+  - 它解决什么问题：统一负责创建 token 和解析 token，避免登录接口、过滤器里到处手写 JWT 细节。
+  - 我现在会用到哪里：`login` 登录成功时调用 `createToken`；JWT Filter 收到请求时调用 `parse`。
+- 构造器注入配置值：
+  - 它解决什么问题：`@Value("${app.jwt.secret}")` 和 `@Value("${app.jwt.expire-hours}")` 让 Spring 创建 `JwtService` 时，把配置值传进构造器。
+  - 我现在会用到哪里：JWT secret 从 `JWT_SECRET` 环境变量读取，避免把密钥写死到代码里。
+- Bearer Token：
+  - 它解决什么问题：约定前端用 `Authorization: Bearer <token>` 把登录凭证传给后端。
+  - 我现在会用到哪里：请求 `/api/auth/me`、后续商品管理、订单管理等受保护接口时都要这样带 token。
+- `JwtAuthentication` 过滤器：
+  - 它解决什么问题：每个请求进入 Controller 前，先读取 `Authorization` 请求头；如果有合法 JWT，就把当前用户写入 `SecurityContext`。
+  - 我现在会用到哪里：后续所有需要登录、角色、租户隔离的接口，都依赖它恢复当前用户。
+- `SecurityContext`：
+  - 它解决什么问题：保存当前请求的认证结果，让后续代码能知道“当前是谁”。
+  - 我现在会用到哪里：`CurrentUser.required()` 从这里取出 `LoginPrincipal`。
+- `CurrentUser`：
+  - 它解决什么问题：封装从 `SecurityContext` 获取当前登录人的细节，避免业务代码到处直接操作 Spring Security API。
+  - 我现在会用到哪里：`AuthService.me()` 已经使用它；后续商家商品接口会用它取得当前商家的 `tenantId`。
+
+### 今天遇到的问题
+
+| 问题 | 出现场景 | 最后怎么解决 | 是否已彻底理解 |
+|---|---|---|---|
+| IDEA 环境变量格式容易写错 | 配置 `JWT_SECRET` 时，环境变量栏前面还有一段 MySQL 密码 | 理解为 IDEA 环境变量必须写成 `MYSQL_ROOT_PASSWORD=xxx;JWT_SECRET=xxx`，每段都要有变量名和值 | 是 |
+| `JwtService` 构造器看起来不像构造器注入 | 构造器参数是 `@Value(...) String secret`，不是 `UserMapper` 这种 Bean | 理解为构造器注入既可以注入 Bean，也可以注入配置值；Spring 负责把配置值传进构造器 | 是 |
+| `LoginPrincipal` 字段写成 `userid` | 新建 record 时字段命名不统一 | 改成 `userId`，保持 Java 小驼峰，后续调用 `principal.userId()` 更自然 | 是 |
+| JWT Filter 判断条件写反 | 最初写成 `header == null || !header.startsWith("Bearer ")` 时才解析 token | 改为 `header != null && header.startsWith("Bearer ")`，只有真的带 Bearer token 才解析 | 是 |
+| 不理解 `catch` | 看到 JWT Filter 里的 `catch (Exception e)` 不清楚作用 | 理解为 `try` 里解析 token 出错时，`catch` 抓住异常并返回 401，不继续进入 Controller | 基本理解 |
+| 不理解 `HttpStatus.UNAUTHORIZED.value()` | 看到 `value()` 不知道作用 | 理解为 `HttpStatus.UNAUTHORIZED` 表示 401 这个状态，`.value()` 是取出数字 `401`，传给 `response.setStatus` | 是 |
+| `PasswordEncoder` 想删掉 | 接入 JWT 后疑惑 BCrypt 的 `PasswordEncoder` 是否还需要 | 理解为 `PasswordEncoder` 负责登录时校验密码，`JwtService` 负责登录成功后生成/解析 token，二者不能互相替代 | 是 |
+| `/api/auth/me` 不带 token 返回 403 | 收窄白名单后访问受保护接口，Spring Security 默认返回 403 | 增加 `exceptionHandling().authenticationEntryPoint(...)`，让未登录访问返回 401 | 是 |
+| 带 token 仍返回 401 | `Authorization` Header 已写但没有生效，或 JWT Filter 未挂进链路 | 在 Apifox 勾选 `Authorization` Header，并在 `SecurityConfig` 中补上 `addFilterBefore(jwtAuthentication, UsernamePasswordAuthenticationFilter.class)` | 是 |
+| 请求方法写错 | 把 `/api/auth/me` 用 `POST` 请求，并带了登录 Body | 改为 `GET /api/auth/me`，Body 选 `none`，身份只通过 `Authorization` Header 传递 | 是 |
+| 登录接口空 Body 返回 `code: 500` | `POST /api/auth/login` 时 Body 为空 | 判断为请求体缺失异常未单独处理；今天先记录，后续可补请求体缺失返回 400 | 是 |
+| Maven 测试失败 | 用命令行跑 `mvnw test` 时 Spring 测试上下文启动失败 | 测试报告显示 MySQL `root` 密码不匹配，说明测试命令环境变量与 IDEA 不一致；接口在 IDEA 中已验收通过 | 是 |
+
+### 重要记录
+
+- 成功的接口：
+  - `POST http://localhost:8080/api/auth/login`，请求 `merchant_a_admin / 123456`，返回三段式 JWT accessToken。
+  - `GET http://localhost:8080/api/auth/me`，带 `Authorization: Bearer <accessToken>`，返回 `code: 0` 和当前用户完整信息。
+- 失败过的接口：
+  - `GET /api/auth/me` 不带 token 或未勾选 Header 时返回 HTTP 401。
+  - `POST /api/auth/me` 返回 401，因为接口实际是 `GET /api/auth/me`。
+  - `POST /api/auth/login` 空 Body 返回 `code: 500`，后续可补请求体缺失异常处理。
+- DataGrip 看到的数据：今天未新增表；`/api/auth/me` 通过 `userId=2` 查询 `sys_user`，返回 `merchant_a_admin`。
+- 关键修改：
+  - 新增 `java-jwt` 依赖。
+  - 新增 `app.jwt.secret=${JWT_SECRET}` 和 `app.jwt.expire-hours=2`。
+  - 新增 `LoginPrincipal`、`JwtService`、`JwtAuthentication`、`CurrentUser`。
+  - `AuthService.login` 返回真实 JWT。
+  - `SecurityConfig` 改为无状态 Session，接入 JWT Filter，并让未登录访问返回 401。
+  - `UserMapper` 新增 `selectById`，`AuthService.me` 从 token 取 `userId` 后查数据库返回完整用户。
+- 截图记录：
+  - `docs/images/day-5/auth-login-jwt-success.png`
+  - `docs/images/day-5/auth-me-no-token-401.png`
+  - `docs/images/day-5/auth-me-success.png`
+- 验证记录：
+  - IDEA 启动后端并通过 Apifox 验收成功。
+  - 命令行执行 `mvnw test` 时，代码已进入编译和测试启动阶段，但测试上下文因 MySQL 密码环境不一致失败：`Access denied for user 'root'`。
+- 参考资料：
+  - `01-工程与基础业务开发链.md` 步骤 7。
+  - `06-每日推进看板与任务安排.md` 的每日任务与验收规则。
+
+### 侧边任务/对话补充记录
+
+- `Content-Type: application/json` 为什么没手动写也能成功：
+  - Apifox 中 Body 选择 JSON 时，会自动添加 `Content-Type: application/json`。
+  - 后端的 `@RequestBody` 依赖这个请求头判断要把请求体按 JSON 转成 DTO。
+- `catch` 的理解：
+  - `try` 里放“可能出错”的代码，例如解析 JWT。
+  - `catch` 负责接住异常，例如 token 过期、签名错误、格式不对。
+  - 在 JWT Filter 里，解析失败就设置 HTTP 401 并 `return`，不让请求继续进入 Controller。
+- `value()` 的理解：
+  - `HttpStatus.UNAUTHORIZED` 是枚举，表示 401 这个状态。
+  - `HttpStatus.UNAUTHORIZED.value()` 取出真正的数字 `401`，因为 `response.setStatus` 需要整数。
+- `Authorization` Header 要勾选：
+  - Apifox 里 Header 行即使显示了值，如果左侧没勾选，实际请求也不会发送。
+  - 本次 `/api/auth/me` 从 401 到成功，就是确认 Header 启用并接入过滤器后跑通的。
+- 401 和 403 的区别：
+  - 401 更偏向“没有有效登录身份”。
+  - 403 更偏向“已经识别身份，但权限不够”。
+  - 今天通过 `authenticationEntryPoint` 把未登录访问受保护接口统一调整为 401。
+- 为什么 `/me` 后来要查数据库：
+  - 第一版只从 JWT 恢复 `userId/tenantId/userType`，所以 `username` 为 `null`。
+  - 升级后通过 `userId` 查 `sys_user`，能返回完整用户信息，也能检查账号是否被禁用。
+- 为什么不能删 `PasswordEncoder`：
+  - JWT 处理的是“登录成功之后的身份凭证”。
+  - BCrypt `PasswordEncoder` 处理的是“登录时密码是否正确”。
+  - 两个环节相邻但职责不同。
+
+### 今天还没理解透
+
+- `UsernamePasswordAuthenticationToken` 名字里有 username/password，但当前用法其实是“放入已认证用户和权限”的通用认证对象；后续做角色权限时再加深。
+- `SecurityFilterChain` 中多个过滤器的完整顺序还没完全展开；目前先理解 JWT Filter 要放在默认用户名密码过滤器前面。
+- 登录接口空 Body 返回 500 还需要后续补一个更精确的异常处理，让它返回 400。
+
+### 明天遇到再补
+
+- 补消费者注册接口：`POST /api/auth/register`。
+- 补请求体缺失异常处理，让空 Body 不再返回 500。
+- 开始步骤 8：商家/消费者角色权限、401/403 验收和租户边界。

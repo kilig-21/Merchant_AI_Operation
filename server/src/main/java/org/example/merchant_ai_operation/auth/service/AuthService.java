@@ -5,6 +5,9 @@ import org.example.merchant_ai_operation.auth.dto.LoginRequest;
 import org.example.merchant_ai_operation.auth.vo.CurrentUserVO;
 import org.example.merchant_ai_operation.auth.vo.LoginResponse;
 import org.example.merchant_ai_operation.common.BizException;
+import org.example.merchant_ai_operation.security.CurrentUser;
+import org.example.merchant_ai_operation.security.JwtService;
+import org.example.merchant_ai_operation.security.LoginPrincipal;
 import org.example.merchant_ai_operation.user.SysUser;
 import org.example.merchant_ai_operation.user.UserMapper;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -13,13 +16,16 @@ import org.springframework.stereotype.Service;
 @Service
 public class AuthService {
 
-    //字段注入:
+    //构造器bean注入:
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
-    public AuthService(UserMapper userMapper, PasswordEncoder passwordEncoder) {
+
+    public AuthService(UserMapper userMapper, PasswordEncoder passwordEncoder, JwtService jwtService) {
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
     }
 
     public LoginResponse login(LoginRequest request){
@@ -37,13 +43,33 @@ public class AuthService {
             throw new BizException(401, "用户名或密码错误");
         }
 
-        //返回给用户的东西:
+        //只返回能给用户看的东西:
         CurrentUserVO currentUser = CurrentUserVO.from(user);
 
-        return new LoginResponse("todo-access-token", currentUser);
-
-
+        String accessToken=jwtService.createToken(
+                user.getId(),
+                user.getTenantId(),
+                user.getUserType());
+        //最后组装:
+        return new LoginResponse(accessToken, currentUser);
     }
+
+
+    public CurrentUserVO me() {
+        LoginPrincipal principal = CurrentUser.required();
+
+        SysUser user = userMapper.selectById(principal.userId());
+        if (user == null) {
+            throw new BizException(401, "登录状态已失效");
+        }
+
+        if (!Integer.valueOf(1).equals(user.getStatus())) {
+            throw new BizException(403, "账号已被禁用");
+        }
+
+        return CurrentUserVO.from(user);
+    }
+
 
 
 

@@ -24,4 +24,20 @@ public interface UserMapper {
             """)
     SysUser selectByUsername(String username);
 
+
+    //根据id查用户:
+    @Select("""
+        SELECT
+            id,
+            tenant_id AS tenantId,
+            username,
+            password_hash AS passwordHash,
+            user_type AS userType,
+            status,
+            created_at AS createdAt
+        FROM sys_user
+        WHERE id = #{id}
+        LIMIT 1
+        """)
+    SysUser selectById(Long id);
 }

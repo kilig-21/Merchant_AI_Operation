@@ -7,24 +7,24 @@
 
 | 项目 | 进度 |
 |---|---|
-| 总步骤 | `██████░░░░` 6 / 36 |
+| 总步骤 | `███████░░░` 7 / 36 |
 | 当前阶段 | 第 1 阶段：工程与基础业务 |
-| 本周任务 | `███████` 7 / 7 |
+| 本周任务 | `█░░░░░░` 1 / 7 |
 | 周验收 | 已通过 |
-| 最近提交 | `fix(api-docs): update springdoc and log unexpected exceptions` |
+| 最近提交 | `feat(auth): add password login flow` |
 
 ## 进度看板
 | 项目     | 当前状态                         |
 | ------ | ---------------------------- |
 | 当前阶段   | 第 1 阶段：工程与基础业务               |
 | 当前文档   | `01-工程与基础业务开发链.md`           |
-| 当前步骤   | 步骤 7 进行中：临时 token 登录接口已跑通；下一步接入 JWT 与 `/api/auth/me` |
-| 本周目标   | 可启动的前后端骨架                    |
-| 今日目标   | 第 1 周复盘和补漏；加餐完成步骤 7 登录业务前半段 |
-| 昨日完成   | Spring Boot 已连接 MySQL，Flyway 已创建第一批表，并已提交 `feat(db): add initial schema migration` |
-| 当前卡点   | 无；步骤 7 加餐代码和文档待提交 |
-| 最近一次提交 | `fix(api-docs): update springdoc and log unexpected exceptions`                           |
-| 明日优先   | 接入 JWT，完成 `GET /api/auth/me` |
+| 当前步骤   | 步骤 7 基本完成：真实 JWT 登录与 `GET /api/auth/me` 已跑通；消费者注册待补 |
+| 本周目标   | 完成鉴权闭环，进入角色、租户隔离与商品管理前置准备 |
+| 今日目标   | 接入 JWT，完成 `GET /api/auth/me`，让登录态能从 token 恢复 |
+| 昨日完成   | 第 1 周验收通过；临时 token 登录接口已跑通，并已提交 `feat(auth): add password login flow` |
+| 当前卡点   | Maven 测试命令连接 MySQL 时密码环境不一致；IDEA 启动与接口验收正常 |
+| 最近一次提交 | `feat(auth): add password login flow`                           |
+| 明日优先   | 补消费者注册接口；随后准备步骤 8 权限边界与租户隔离 |
 
 ## 每日任务
 ## Day 1：2026-07-19
@@ -226,3 +226,44 @@
 
 - 开始 JWT 前，确认登录接口成功/失败截图已记录。
 - 步骤 7 加餐代码提交后，再进入 JWT 与 `/api/auth/me`。
+
+## Day 5：2026-07-23
+
+### 今日阶段
+
+- 当前文档：`01-工程与基础业务开发链.md`
+- 当前步骤：步骤 7：实现注册、登录与「当前用户」接口
+- 今日目标：接入 JWT，完成 `GET /api/auth/me`，让 `todo-access-token` 变成真实 token。
+
+### 今天要学
+
+- 知识点 1：JWT 的生成、签名、过期时间和解析校验
+- 知识点 2：Bearer Token、`Authorization` 请求头和 `Content-Type: application/json`
+- 知识点 3：Spring Security Filter、无状态 Session、`SecurityContext`
+- 知识点 4：`catch`、`HttpStatus.UNAUTHORIZED.value()`、构造器注入配置值与 Bean 的区别
+- 学到什么程度算够：能说清楚登录成功后后端如何生成 JWT；请求 `/api/auth/me` 时后端如何从 `Authorization: Bearer <token>` 解析当前用户，并从数据库返回完整用户信息。
+
+### 今天要做
+
+- [x] 任务 1：增加 `java-jwt` 依赖和 `app.jwt.*` 配置，登录成功返回真实 JWT
+- [x] 任务 2：创建 `JwtService`、`LoginPrincipal`、`JwtAuthentication`、`CurrentUser`，并把 JWT Filter 接入 `SecurityConfig`
+- [x] 任务 3：实现 `GET /api/auth/me`，从 token 恢复当前用户并查询数据库返回完整信息
+
+### 今天验收
+
+- [x] IDEA 后端启动正常
+- [x] `POST /api/auth/login` 正确账号密码返回三段式 JWT
+- [x] `GET /api/auth/me` 不带 token 返回 HTTP 401
+- [x] `GET /api/auth/me` 带 `Authorization: Bearer <accessToken>` 返回 `code: 0`
+- [x] `/api/auth/me` 返回完整用户信息：`id=2`、`username=merchant_a_admin`、`userType=MERCHANT_ADMIN`、`tenantId=1001`
+- [ ] DataGrip 中数据正确（今天未新增表，沿用 `sys_user`）
+- [ ] 前端页面或浏览器 Network 结果正确（今天未做前端）
+- [x] 截图/请求记录已写入 `docs/learning-log.md`
+- [ ] 已提交 Git，提交信息建议：`feat(auth): add jwt current user`
+
+### 今天完成
+
+- 完成了：真实 JWT 登录已跑通；`/api/auth/me` 已受保护；无 token 返回 401；带正确 token 能从 `SecurityContext` 取出当前用户，并通过 `userId` 查询 `sys_user` 返回完整用户信息。
+- 没完成：消费者注册接口尚未实现；`POST /api/auth/login` 空 Body 目前仍会被兜底为 `code: 500`，后续可补请求体缺失异常处理。
+- 卡住点：Apifox 中 `Authorization` Header 未勾选时实际不会发送；`POST /api/auth/me` 与 `GET /api/auth/me` 混用导致 401；`SecurityConfig` 一度漏掉 `addFilterBefore`，导致 JWT 过滤器没有进入请求链路。
+- 明天优先做：补消费者注册接口；再进入步骤 8，收紧商家/消费者角色权限和租户边界。

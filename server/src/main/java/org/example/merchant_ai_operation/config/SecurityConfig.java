@@ -1,25 +1,46 @@
 package org.example.merchant_ai_operation.config;
 
+import org.example.merchant_ai_operation.security.JwtAuthentication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-
-
-
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 
 @Configuration
 public class SecurityConfig{
+
+    private final JwtAuthentication jwtAuthentication;
+    public SecurityConfig(JwtAuthentication jwtAuthentication) {
+        this.jwtAuthentication = jwtAuthentication;
+    }
+
+
+
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
         .csrf(AbstractHttpConfigurer::disable)//把token关了
         .httpBasic(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)
+        .sessionManagement(session ->
+                //意思是：我们不用后端 Session 保存登录状态，每次请求都靠 JWT。
+                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+        )
+                .exceptionHandling(exception ->
+                        exception.authenticationEntryPoint((request, response, authException) ->
+                                response.setStatus(HttpStatus.UNAUTHORIZED.value())
+                        )
+                )
+
+
+
         .authorizeHttpRequests(auth->
                 auth.requestMatchers(
                     "/api/ping",
@@ -27,8 +48,7 @@ public class SecurityConfig{
                     "/swagger-ui/**",
                     "/v3/api-docs/**",
                     "/api/debug/**",
-                    "/api/auth/**",
-                    "/api/debug/**"
+                    "/api/auth/login"
                 ).permitAll()
                         //剩下的全部要验证!!!!
 
@@ -38,6 +58,7 @@ public class SecurityConfig{
                         //只允许已登录、身份核验通过的用户访问
                         .authenticated()
         )
+        .addFilterBefore(jwtAuthentication, UsernamePasswordAuthenticationFilter.class)
         .build();
     }
 

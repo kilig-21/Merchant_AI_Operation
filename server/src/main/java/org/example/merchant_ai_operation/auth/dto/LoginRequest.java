@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 
 
 
+//请求体
 public record LoginRequest(
         //@NotBlank表示这个字段不能是 null、空字符串、纯空格
         //message:是参数错误时返回给前端看的提示。
