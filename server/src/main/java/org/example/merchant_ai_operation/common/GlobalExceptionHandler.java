@@ -6,6 +6,7 @@ package org.example.merchant_ai_operation.common;
 //全局异常类
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -56,6 +57,16 @@ public class GlobalExceptionHandler {
         return ApiResponse.error(400,message);
 
     }
+
+
+    //为什么它不是 MethodArgumentNotValidException？
+    //因为空 Body 或 JSON 格式坏掉时，请求还没成功转成 LoginRequest / RegisterRequest 这种 DTO，
+    // 所以也就还没走到 @Valid。这类问题由 HttpMessageNotReadableException 表示，更靠近“请求体读不出来”。
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ApiResponse<Void> handleHttpMessageNotReadableException(HttpMessageNotReadableException ex) {
+        return ApiResponse.error(400, "请求体不能为空或 JSON 格式不正确");
+    }
+
 
     //兜底异常
     @ExceptionHandler(value = Exception.class)

@@ -19,4 +19,19 @@ public final class CurrentUser {
 
         return principal;
     }
+
+    public static  Long requiredMerchantTenantId(){
+        LoginPrincipal principal=required();
+
+        if (principal.tenantId()==null
+                ||principal.userType() == null
+                ||!principal.userType().startsWith("MERCHANT_")) {
+            throw new AccessDeniedException("不是商家账号");
+
+        }
+
+        //返回商家的Id
+        return principal.tenantId();
+    }
+
 }

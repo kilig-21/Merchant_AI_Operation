@@ -3,6 +3,7 @@ package org.example.merchant_ai_operation.auth.controller;
 
 import jakarta.validation.Valid;
 import org.example.merchant_ai_operation.auth.dto.LoginRequest;
+import org.example.merchant_ai_operation.auth.dto.RegisterRequest;
 import org.example.merchant_ai_operation.auth.service.AuthService;
 import org.example.merchant_ai_operation.auth.vo.CurrentUserVO;
 import org.example.merchant_ai_operation.auth.vo.LoginResponse;
@@ -29,4 +30,12 @@ public class AuthController {
         return ApiResponse.ok(authService.me());
 
     }
+
+
+    @PostMapping("/register")
+    public ApiResponse<CurrentUserVO> register(@RequestBody @Valid RegisterRequest registerRequest){
+        return ApiResponse.ok(authService.register(registerRequest));
+    }
+
+
 }

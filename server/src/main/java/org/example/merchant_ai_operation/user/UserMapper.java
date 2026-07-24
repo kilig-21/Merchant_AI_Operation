@@ -1,7 +1,9 @@
 package org.example.merchant_ai_operation.user;
 
 
+import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 @Mapper//告诉 Spring：这是 MyBatis 的数据库访问接口。
@@ -40,4 +42,29 @@ public interface UserMapper {
         LIMIT 1
         """)
     SysUser selectById(Long id);
+
+    //添加消费者:所以商家id写死为null;
+    //用户类型就写死为消费者;
+    @Insert("""
+        INSERT INTO sys_user (
+            id,
+            tenant_id,
+            username,
+            password_hash,
+            user_type,
+            status
+        )
+        VALUES (
+            #{id},
+            NULL,
+            #{username},
+            #{passwordHash},
+            'CONSUMER',
+            1
+        )
+    """)
+    int insertConsumer(@Param("id") Long id,
+                       @Param("username") String username,
+                       @Param("passwordHash") String passwordHash);
+
 }

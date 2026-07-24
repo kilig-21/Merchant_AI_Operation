@@ -53,6 +53,7 @@ public class JwtAuthentication  extends OncePerRequestFilter {
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(principal, null, authorities);
 
+                //setAuthentication : 放进当前请求的 SecurityContext
                 SecurityContextHolder.getContext().setAuthentication(authentication);
 
             }catch (Exception e) {

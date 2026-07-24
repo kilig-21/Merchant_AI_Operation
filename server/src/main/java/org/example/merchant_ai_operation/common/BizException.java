@@ -1,10 +1,11 @@
 package org.example.merchant_ai_operation.common;
 
 
-
+import lombok.Getter;
 
 // BizException 表示业务规则不允许继续，例如库存不足、商品不存在、重复提交
 //继承Exception那么他就是有一个异常类
+@Getter
 public class BizException extends RuntimeException {//运行时错误
 
 
@@ -18,9 +19,6 @@ public class BizException extends RuntimeException {//运行时错误
     public BizException(int code,String message){
         super(message);
         this.code=code;
-    }
-    public int getCode(){
-        return code;
     }
 
 

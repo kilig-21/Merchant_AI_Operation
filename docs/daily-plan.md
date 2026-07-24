@@ -7,24 +7,24 @@
 
 | 项目 | 进度 |
 |---|---|
-| 总步骤 | `███████░░░` 7 / 36 |
+| 总步骤 | `████████░░` 8 / 36 |
 | 当前阶段 | 第 1 阶段：工程与基础业务 |
-| 本周任务 | `█░░░░░░` 1 / 7 |
+| 本周任务 | `██░░░░░` 2 / 7 |
 | 周验收 | 已通过 |
-| 最近提交 | `feat(auth): add password login flow` |
+| 最近提交 | `feat(auth): add jwt current user` |
 
 ## 进度看板
 | 项目     | 当前状态                         |
 | ------ | ---------------------------- |
 | 当前阶段   | 第 1 阶段：工程与基础业务               |
 | 当前文档   | `01-工程与基础业务开发链.md`           |
-| 当前步骤   | 步骤 7 基本完成：真实 JWT 登录与 `GET /api/auth/me` 已跑通；消费者注册待补 |
+| 当前步骤   | 步骤 8 最小权限边界已通过：消费者注册、商家角色限制与租户上下文验收完成 |
 | 本周目标   | 完成鉴权闭环，进入角色、租户隔离与商品管理前置准备 |
-| 今日目标   | 接入 JWT，完成 `GET /api/auth/me`，让登录态能从 token 恢复 |
-| 昨日完成   | 第 1 周验收通过；临时 token 登录接口已跑通，并已提交 `feat(auth): add password login flow` |
-| 当前卡点   | Maven 测试命令连接 MySQL 时密码环境不一致；IDEA 启动与接口验收正常 |
-| 最近一次提交 | `feat(auth): add password login flow`                           |
-| 明日优先   | 补消费者注册接口；随后准备步骤 8 权限边界与租户隔离 |
+| 今日目标   | 补消费者注册接口，并完成 `/api/merchant/**` 的 401/403/200 权限边界验收 |
+| 昨日完成   | 真实 JWT 登录与 `GET /api/auth/me` 已跑通，并已提交 `feat(auth): add jwt current user` |
+| 当前卡点   | 暂无主线卡点；Docker Desktop 曾启动异常，已由用户自行修复 |
+| 最近一次提交 | `feat(auth): add jwt current user`                           |
+| 明日优先   | 开始步骤 9：商家商品最小后端闭环，先建商品创建/列表的基础结构 |
 
 ## 每日任务
 ## Day 1：2026-07-19
@@ -267,3 +267,47 @@
 - 没完成：消费者注册接口尚未实现；`POST /api/auth/login` 空 Body 目前仍会被兜底为 `code: 500`，后续可补请求体缺失异常处理。
 - 卡住点：Apifox 中 `Authorization` Header 未勾选时实际不会发送；`POST /api/auth/me` 与 `GET /api/auth/me` 混用导致 401；`SecurityConfig` 一度漏掉 `addFilterBefore`，导致 JWT 过滤器没有进入请求链路。
 - 明天优先做：补消费者注册接口；再进入步骤 8，收紧商家/消费者角色权限和租户边界。
+
+## Day 6：2026-07-24
+
+### 今日阶段
+
+- 当前文档：`01-工程与基础业务开发链.md`
+- 当前步骤：步骤 7 收口；步骤 8：先把权限边界锁住
+- 今日目标：补消费者注册接口；补请求体缺失异常处理；完成 `/api/merchant/**` 的 401/403/200 最小权限验收
+
+### 今天要学
+
+- 知识点 1：注册 DTO、Controller、Service、Mapper 的分工
+- 知识点 2：`PasswordEncoder`、`BCryptPasswordEncoder`、`encode` 与 `matches`
+- 知识点 3：`requestMatchers(...).permitAll()`、`hasAnyRole(...)`、`authenticated()` 的顺序和职责
+- 知识点 4：`authenticationEntryPoint` 与 `accessDeniedHandler` 的区别
+- 学到什么程度算够：能说清楚注册时为什么只开放消费者、密码为什么存 BCrypt 哈希、消费者为什么不能访问商家接口，以及 401/403 分别表示什么。
+
+### 今天要做
+
+- [x] 任务 1：新增 `POST /api/auth/register`，只允许注册消费者，密码用 BCrypt 哈希入库
+- [x] 任务 2：补 `HttpMessageNotReadableException`，让空 Body 或坏 JSON 返回 `code: 400`
+- [x] 任务 3：收紧 `/api/merchant/**` 角色权限，新增 `/api/merchant/context` 验收商家租户上下文
+
+### 今天验收
+
+- [x] `POST /api/auth/register` 正常注册 `consumer_today_01`，返回 `userType=CONSUMER`、`tenantId=null`
+- [x] 重复注册 `consumer_today_01` 返回 `code: 409` 和 `用户名已存在`
+- [x] 注册接口空 Body 返回 `code: 400` 和 `请求体不能为空或 JSON 格式不正确`
+- [x] DataGrip 中 `consumer_today_01` 的 `tenant_id` 为 `NULL`、`user_type` 为 `CONSUMER`、`status` 为 `1`
+- [x] DataGrip 中 `password_hash` 不是明文 `123456`，而是 BCrypt 哈希
+- [x] `GET /api/merchant/context` 不带 token 返回 HTTP 401
+- [x] `GET /api/merchant/context` 带消费者 token 返回 HTTP 403
+- [x] `GET /api/merchant/context` 带 `merchant_a_admin` token 返回 `code: 0`、`tenantId=1001`、`userType=MERCHANT_ADMIN`
+- [x] `MerchantContextController` 已移动到 `merchant/controller` 包
+- [x] `mvnw -DskipTests compile` 编译通过
+- [x] 截图/请求记录已写入 `docs/learning-log.md`
+- [ ] 已提交 Git，提交信息建议：`feat(auth): add consumer register and merchant guard`
+
+### 今天完成
+
+- 完成了：步骤 7 的消费者注册接口收口；登录、注册、`/auth/me` 形成完整消费者鉴权链路；步骤 8 的最小权限边界通过验收，已区分 401 未认证、403 权限不足和商家成功访问。
+- 没完成：还没有开始商品管理接口；今天只做权限边界，不提前进入商品 CRUD。
+- 卡住点：Docker Desktop 启动异常曾阻塞 MySQL/Redis；注册接口最初漏加白名单导致未认证；消费者 token 访问商家接口一开始返回 401，补 `accessDeniedHandler` 后正确返回 403。
+- 明天优先做：进入步骤 9，开始商家商品最小后端闭环；先从商家当前 `tenantId` 创建 SPU，再逐步补 SKU、库存和列表。

@@ -525,3 +525,113 @@
 - 补消费者注册接口：`POST /api/auth/register`。
 - 补请求体缺失异常处理，让空 Body 不再返回 500。
 - 开始步骤 8：商家/消费者角色权限、401/403 验收和租户边界。
+
+## Day 6：2026-07-24
+
+### 今天对应任务
+
+- 当前文档：`01-工程与基础业务开发链.md`
+- 当前步骤：步骤 7 收口；步骤 8：先把权限边界锁住
+- 今日目标：补消费者注册接口，并完成商家/消费者角色权限与租户边界的最小验收。
+
+### 今天学了什么
+
+- 消费者注册接口：
+  - 它解决什么问题：让普通消费者可以自己创建账号，而商家账号仍由初始化数据或后台流程提供。
+  - 我现在会用到哪里：后续消费者浏览商品、购物车、下单、查询订单都需要消费者账号。
+- 注册 DTO：
+  - 它解决什么问题：`RegisterRequest` 只接收 `username/password`，不允许前端传 `userType` 或 `tenantId` 来伪造身份。
+  - 我现在会用到哪里：所有写接口都会先用 DTO 明确允许前端传什么，不信任前端多传的敏感字段。
+- `PasswordEncoder` 与 BCrypt：
+  - 它解决什么问题：注册时用 `passwordEncoder.encode(...)` 把明文密码转为 BCrypt 哈希；数据库永远不存 `123456` 这种明文。
+  - 我现在会用到哪里：注册用 `encode`，登录用 `matches`，二者是一对。
+- Spring Security 角色规则：
+  - 它解决什么问题：登录只能证明“你是谁”，`hasAnyRole` 才能证明“你能不能访问商家后台”。
+  - 我现在会用到哪里：`/api/merchant/**` 只允许 `MERCHANT_ADMIN` 和 `MERCHANT_OPERATOR`，消费者即使登录也不能访问。
+- 401 与 403：
+  - 它解决什么问题：把“没登录/凭证无效”和“已登录但权限不够”区分清楚。
+  - 我现在会用到哪里：前端后续可以根据 401 跳登录，根据 403 显示无权限页面。
+- 租户上下文：
+  - 它解决什么问题：商家接口从 `CurrentUser.requiredMerchantTenantId()` 取得当前商家租户 ID，而不是相信前端传来的 `tenantId`。
+  - 我现在会用到哪里：后续商品、订单、经营数据查询都必须带当前租户条件。
+
+### 今天遇到的问题
+
+| 问题 | 出现场景 | 最后怎么解决 | 是否已彻底理解 |
+|---|---|---|---|
+| Docker Desktop 启动异常 | Docker Desktop 报 `vpnkit-bridge handshake failed`，Docker Engine 无法启动 | 先排查 WSL、Docker 服务和 `.docker` 权限；用户最终自行修复 Docker Desktop，恢复 MySQL/Redis 验收环境 | 基本理解 |
+| 注册接口一开始返回未认证 | 新增 `POST /api/auth/register` 后请求被 Spring Security 拦截 | 用户发现白名单漏加注册路径；补 `/api/auth/register`，后续进一步建议用 `/api/auth/**` 避免遗漏 | 是 |
+| `RegisterRequest` 字符串提示曾有引号问题 | 新建 DTO 时中文校验提示字符串没有完整闭合 | 用编译检查定位，修正 `@NotBlank`、`@Size` 的 `message` 字符串 | 是 |
+| 登录/注册空 Body 返回不清晰 | 请求体为空时，还没转成 DTO，就不会进入 `@Valid` | 新增 `HttpMessageNotReadableException` 处理，返回 `code: 400` 和清晰提示 | 是 |
+| 消费者 token 访问商家接口先返回 401 | 消费者已经登录，但访问 `/api/merchant/context` 仍被当作未认证 | 在 `SecurityConfig.exceptionHandling` 中补 `accessDeniedHandler`，让权限不足返回 403 | 是 |
+| `MerchantContextController` 包位置不清晰 | 最初把商家验收接口放在普通 `controller` 包 | 移动到 `merchant/controller`，保持商家端模块结构清楚 | 是 |
+
+### 重要记录
+
+- 成功的接口：
+  - `POST /api/auth/register`，请求 `consumer_today_01 / 123456`，返回 `code: 0`、`userType=CONSUMER`、`tenantId=null`。
+  - `POST /api/auth/login`，请求 `consumer_today_01 / 123456`，返回消费者 JWT。
+  - `GET /api/auth/me`，带消费者 token 返回 `consumer_today_01`。
+  - `GET /api/merchant/context`，带 `merchant_a_admin` token 返回 `tenantId=1001` 和 `userType=MERCHANT_ADMIN`。
+- 失败过的接口：
+  - `POST /api/auth/register` 重复用户名返回 `code: 409` 和 `用户名已存在`。
+  - `POST /api/auth/register` 空 Body 返回 `code: 400` 和 `请求体不能为空或 JSON 格式不正确`。
+  - `GET /api/merchant/context` 不带 token 返回 HTTP 401。
+  - `GET /api/merchant/context` 带消费者 token 返回 HTTP 403。
+- DataGrip 看到的数据：
+  - `sys_user` 中 `consumer_today_01` 的 `tenant_id` 为 `NULL`、`user_type` 为 `CONSUMER`、`status` 为 `1`。
+  - `password_hash` 为 BCrypt 哈希，形如 `$2a$10$...`，不是明文密码。
+- 关键修改：
+  - 新增 `RegisterRequest`。
+  - `UserMapper` 新增 `insertConsumer`。
+  - `AuthService` 新增 `register`。
+  - `AuthController` 新增 `POST /api/auth/register`。
+  - `GlobalExceptionHandler` 新增 `HttpMessageNotReadableException` 处理。
+  - `SecurityConfig` 收紧 `/api/merchant/**` 角色权限，并补 `accessDeniedHandler`。
+  - `CurrentUser` 新增 `requiredMerchantTenantId()`。
+  - 新增 `merchant/controller/MerchantContextController`。
+- 验证记录：
+  - `mvnw -DskipTests compile` 编译通过。
+  - Apifox 完成注册、重复注册、空 Body、消费者 403、商家 200 验收。
+- 参考资料：
+  - `01-工程与基础业务开发链.md` 步骤 7、步骤 8。
+  - `06-每日推进看板与任务安排.md` 的每日验收与记录规则。
+
+### 侧边任务/对话补充记录
+
+- Docker Desktop 插曲：
+  - 疑惑点：Docker Desktop 重启后仍报错，`docker version` 只有 Client 或提示 Engine 无法启动。
+  - 最后理解：这是 Docker Desktop/WSL 后端问题，不是项目代码问题；主线开发依赖 MySQL/Redis，所以 Docker 修好前后端接口无法完整验收。
+  - 后续会用到哪里：每天开工如果数据库连接失败，先看 Docker Desktop、容器状态和 `docker compose`，再看 Spring Boot。
+- 为什么注册接口要进白名单：
+  - 疑惑点：`/api/auth/register` 一开始未认证，因为安全白名单没有覆盖它。
+  - 最后理解：登录和注册都属于“还没有身份前必须能访问”的认证入口；写成 `/api/auth/**` 比一个个列 `login/register` 更不容易漏。
+  - 后续会用到哪里：后续如果加 `refresh-token`、`forgot-password`，要判断它们是否也属于公开认证入口。
+- `PasswordEncoder`、接口和实现类：
+  - 疑惑点：`PasswordEncoder` 是接口，为什么 `@Bean` 方法可以返回 `new BCryptPasswordEncoder()`。
+  - 最后理解：`BCryptPasswordEncoder` 是 `PasswordEncoder` 的实现类；变量类型写接口，运行时对象是真正的 BCrypt 实现，这就是接口引用指向实现类对象。
+  - 后续会用到哪里：Service 依赖接口，不依赖具体算法；以后换 Argon2 等算法时，业务代码不用大改。
+- `encode` 和 `matches`：
+  - 疑惑点：加密是不是只要注入 `PasswordEncoder` 后调用 `.encode()`。
+  - 最后理解：注册时 `encode(明文密码)` 得到哈希并入库；登录时 `matches(明文密码, 数据库哈希)` 判断是否匹配。不能把明文再次 `encode` 后直接字符串比较，因为 BCrypt 每次结果都不同。
+  - 后续会用到哪里：所有创建或重置密码的地方都用 `encode`，所有登录或校验密码的地方都用 `matches`。
+- `requestMatchers` 和后续规则的关系：
+  - 疑惑点：`.requestMatchers("/api/merchant/**").hasAnyRole(...)` 是否必须成对出现。
+  - 最后理解：`requestMatchers` 负责选中路径，后面的 `permitAll/authenticated/hasRole/hasAnyRole` 负责给这些路径定规则。
+  - 后续会用到哪里：配置 `/api/public/**`、`/api/admin/**`、`/api/merchant/**` 等不同接口边界时都按这个模式写。
+- 为什么 403 要在 `SecurityConfig.exceptionHandling` 里处理：
+  - 疑惑点：消费者 token 访问商家接口时，为什么不是加一个 `GlobalExceptionHandler`。
+  - 最后理解：权限不足发生在 Spring Security Filter Chain 中，很多时候请求还没进 Controller；`GlobalExceptionHandler` 主要处理 Controller/Service 层异常，安全过滤器里的认证/授权异常要在 `exceptionHandling` 里配置。
+  - 后续会用到哪里：统一处理未登录、权限不足、token 过期等安全层结果时，优先看 Spring Security 配置。
+
+### 今天还没理解透
+
+- Spring Security 内部如何在多个过滤器之间传递 `Authentication`，目前只需要知道 JWT Filter 会写入 `SecurityContext`。
+- `hasRole`、`hasAnyRole`、`hasAuthority` 的细微区别，当前先记住 `hasAnyRole` 会自动补 `ROLE_` 前缀。
+- 当前注册用户 ID 仍用 `System.currentTimeMillis()` 临时生成，后续进入更正式 ID 方案时需要替换。
+
+### 明天遇到再补
+
+- 开始步骤 9：商家商品最小后端闭环。
+- 商品接口必须使用 `CurrentUser.requiredMerchantTenantId()` 取得当前商家租户 ID。
+- 先实现创建 SPU 和商家商品列表，再逐步补 SKU、库存和上架状态。
