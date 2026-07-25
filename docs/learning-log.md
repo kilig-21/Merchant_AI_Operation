@@ -635,3 +635,111 @@
 - 开始步骤 9：商家商品最小后端闭环。
 - 商品接口必须使用 `CurrentUser.requiredMerchantTenantId()` 取得当前商家租户 ID。
 - 先实现创建 SPU 和商家商品列表，再逐步补 SKU、库存和上架状态。
+
+## Day 7：2026-07-25
+
+### 今天对应任务
+
+- 当前文档：`01-工程与基础业务开发链.md`
+- 当前步骤：步骤 9：完成商品的最小后端闭环
+- 今日目标：跑通商家商品最小后端闭环第一版：创建 SPU、新增 SKU、初始库存入库与商家商品列表查询。
+
+### 今天学了什么
+
+- SPU 与 SKU：
+  - 它解决什么问题：SPU 保存商品本体信息，例如「蓝牙耳机」；SKU 保存具体可售规格、价格和库存，例如「白色 / 标准版」「黑色 / Pro版」。
+  - 我现在会用到哪里：后续消费者浏览商品、选择规格、下单扣库存都要依赖 SPU/SKU 的分工。
+- DTO、Entity、VO：
+  - 它解决什么问题：DTO 限定前端能传什么，Entity 对应数据库表，VO 决定接口返回给前端看什么，避免把请求、数据库和响应混成一团。
+  - 我现在会用到哪里：`CreateProductRequest`、`CreateSkuRequest` 是 DTO；`ProductSpu`、`ProductSku` 是 Entity；`MerchantProductVO` 是商家列表返回对象。
+- 租户隔离：
+  - 它解决什么问题：商家接口不能相信前端传来的 `tenantId`，否则攻击者可以伪造别的商家 ID 造成数据泄露或篡改。
+  - 我现在会用到哪里：创建 SPU、新增 SKU、查询商品列表都从 `CurrentUser.requiredMerchantTenantId()` 获取当前商家租户 ID。
+- MyBatis 注解式 Mapper：
+  - 它解决什么问题：把 Java 方法和 SQL 绑定起来，`@Insert` 负责插入，`@Select` 负责查询，`@Param` 给 SQL 占位符命名。
+  - 我现在会用到哪里：`ProductSpuMapper` 插入 SPU、校验 SPU 是否属于当前租户、查询商家商品列表；`ProductSkuMapper` 插入 SKU。
+- `@PathVariable`：
+  - 它解决什么问题：从 URL 路径中取变量，例如 `/api/merchant/products/{id}/skus` 里的 `{id}` 是 SPU ID。
+  - 我现在会用到哪里：新增 SKU 时，Controller 从路径中取 SPU ID，再交给 Service 做归属校验。
+- `BigDecimal`：
+  - 它解决什么问题：金额不能用 `double`，否则小数计算可能出现精度误差。
+  - 我现在会用到哪里：`ProductSku.salePrice` 和 `CreateSkuRequest.salePrice` 使用 `BigDecimal`。
+- `LIMIT/OFFSET` 分页：
+  - 它解决什么问题：商品列表不能一次查出全部数据，`LIMIT` 控制一页多少条，`OFFSET` 控制跳过多少条。
+  - 我现在会用到哪里：`GET /api/merchant/products?page=1&size=10&keyword=耳机` 查询当前商家的商品列表。
+
+### 今天遇到的问题
+
+| 问题 | 出现场景 | 最后怎么解决 | 是否已彻底理解 |
+|---|---|---|---|
+| 误以为 DTO 字符串没闭合 | PowerShell 读取中文源码时显示乱码，看起来像缺少右引号 | 通过 IDEA 截图和 `mvnw -DskipTests compile` 编译结果确认代码实际正确；后续不再用终端乱码判断中文字符串语法 | 是 |
+| `ProductService` 最初放错包 | 文件建在 `merchant/service`，而不是商品模块下面 | 移动到 `merchant/product/service`，让商品相关 Controller、Service、Mapper、DTO、Entity、VO 聚合在同一模块下 | 是 |
+| `ProductService` 初版缺少返回值和分号 | 方法声明返回 `Long`，但插入后没有 `return`，异常语句少分号 | 补 `return spu.getId()` 和分号，并通过编译验证 | 是 |
+| 不清楚昨天 token 如何继续使用 | 验收 403/200 时不知道昨天的 token | 重新调用 `POST /api/auth/login` 获取消费者 token 和商家 token；理解 JWT 有过期时间，昨天 token 不必保留 | 是 |
+| 新增 SKU 前为什么要查 SPU 归属 | 商家传入 URL 中的 SPU ID | 用 `countByIdAndTenantId(spuId, tenantId)` 确认该 SPU 属于当前商家；查不到就返回「商品不存在」 | 是 |
+
+### 重要记录
+
+- 成功的接口：
+  - `POST /api/merchant/products` 不带 token 返回 HTTP 401。
+  - `POST /api/merchant/products` 带消费者 token 返回 HTTP 403。
+  - `POST /api/merchant/products` 带 `merchant_a_admin` token 返回 `code: 0` 和商品 ID。
+  - `POST /api/merchant/products/1784967699881/skus` 成功新增「白色 / 标准版」和「黑色 / Pro版」两个 SKU。
+  - `GET /api/merchant/products?page=1&size=10` 返回当前商家商品列表。
+  - `GET /api/merchant/products?page=1&size=10&keyword=耳机` 能查到「蓝牙耳机」。
+- 失败过的接口：
+  - 消费者 token 访问商家商品创建接口返回 HTTP 403，属于预期失败。
+  - 不带 token 访问商家商品创建接口返回 HTTP 401，属于预期失败。
+- DataGrip 看到的数据：
+  - `product_spu` 中「蓝牙耳机」的 `tenant_id=1001`，`status=DRAFT`。
+  - `product_sku` 中两条 SKU 的 `tenant_id=1001`，`spu_id=1784967699881`，价格分别为 `199.00` 和 `299.00`。
+  - 两条 SKU 的初始库存已写入，`locked_stock=0`，`version=0`，`status=ON_SALE`。
+- 关键修改：
+  - 新增 `CreateProductRequest`、`CreateSkuRequest`。
+  - 新增 `ProductSpu`、`ProductSku`。
+  - 新增 `ProductSpuMapper`、`ProductSkuMapper`。
+  - 新增 `ProductService`。
+  - 新增 `MerchantProductController`。
+  - 新增 `MerchantProductVO`。
+  - `ProductSpuMapper` 新增 `countByIdAndTenantId` 和 `selectMerchantProducts`。
+- 验证记录：
+  - `mvnw -DskipTests compile` 编译通过。
+  - Apifox 完成创建 SPU、消费者 403、商家 200、新增 SKU、商品列表和 keyword 查询验收。
+- 参考资料：
+  - `01-工程与基础业务开发链.md` 步骤 9。
+  - `06-每日推进看板与任务安排.md` 的每日任务与验收规则。
+
+### 侧边任务/对话补充记录
+
+- 为什么不直接用 MyBatis 生成器：
+  - 疑惑点：既然 MyBatis 或 MyBatis-Plus 可以根据表生成 Entity、Mapper、Service，为什么还手写。
+  - 最后理解：当前阶段重点是理解 DTO、Entity、VO、Mapper、Service、Controller 的职责，以及租户隔离 SQL 为什么必须手写清楚；等手写过最小闭环后，再用生成器作为加速工具更合适。
+  - 后续会用到哪里：订单、购物车、促销等模块如果重复 CRUD 较多，可以考虑在理解分层后引入代码生成。
+- 为什么 `tenantId` 不能从前端传：
+  - 疑惑点：创建商品时如果前端也传 `tenantId` 是否更方便。
+  - 最后理解：前端输入可能被伪造，租户 ID 必须从 JWT 当前用户中恢复；商品创建、SKU 新增、列表查询都应使用后端取得的 `tenantId`。
+  - 后续会用到哪里：商家订单、经营数据、Agent 工具和知识库检索都必须按同样原则限制租户。
+- 为什么新增 SKU 要先校验 SPU 归属：
+  - 疑惑点：URL 已经带了商品 ID，是否可以直接插入 SKU。
+  - 最后理解：商家 A 可能拿商家 B 的 SPU ID 请求新增 SKU，所以必须用当前 `tenantId` 和 `spuId` 一起查询；查不到时返回「商品不存在」更安全。
+  - 后续会用到哪里：修改商品、改库存、下架、查看详情、订单归属校验都要按“资源 ID + 当前租户”查询。
+- 为什么列表返回 VO：
+  - 疑惑点：`ProductSpu` 字段和列表返回差不多，是否可以直接返回 Entity。
+  - 最后理解：VO 是接口展示模型，后续可以加入 SKU 数量、最低价、总库存、更新时间等聚合字段，而不污染数据库实体。
+  - 后续会用到哪里：消费者公开商品详情尤其需要 VO，避免泄露 `locked_stock`、成本价或内部字段。
+- `mvnw -DskipTests compile` 怎么跑：
+  - 疑惑点：不知道这条命令在哪里执行。
+  - 最后理解：在项目的 `server` 目录执行 `.\mvnw -DskipTests compile`；它会编译后端代码但跳过测试，适合每天小步验收语法和 Spring 装配。
+  - 后续会用到哪里：每次新增 Controller、Service、Mapper 后都先跑编译，再去 Apifox 验收。
+
+### 今天还没理解透
+
+- 商品列表暂时只查 SPU，还没有聚合 SKU 数、最低价、总可售库存。
+- 商品上架/下架状态还没有接口，当前新建 SPU 是 `DRAFT`，SKU 默认 `ON_SALE`。
+- `System.currentTimeMillis()` 仍是临时 ID 方案，后续需要替换成更正式的 ID 生成方式。
+
+### 明天遇到再补
+
+- 补商品上架/下架接口，并明确 SPU 与 SKU 状态的关系。
+- 增强商家商品列表：返回 SKU 数、最低价、总可售库存。
+- 或进入步骤 10：消费者公开商品列表和商品详情接口。

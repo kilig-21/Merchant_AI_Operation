@@ -7,24 +7,24 @@
 
 | 项目 | 进度 |
 |---|---|
-| 总步骤 | `████████░░` 8 / 36 |
+| 总步骤 | `█████████░` 9 / 36 |
 | 当前阶段 | 第 1 阶段：工程与基础业务 |
-| 本周任务 | `██░░░░░` 2 / 7 |
+| 本周任务 | `███░░░░` 3 / 7 |
 | 周验收 | 已通过 |
-| 最近提交 | `feat(auth): add jwt current user` |
+| 最近提交 | `feat(auth): add consumer register and merchant guard` |
 
 ## 进度看板
 | 项目     | 当前状态                         |
 | ------ | ---------------------------- |
 | 当前阶段   | 第 1 阶段：工程与基础业务               |
 | 当前文档   | `01-工程与基础业务开发链.md`           |
-| 当前步骤   | 步骤 8 最小权限边界已通过：消费者注册、商家角色限制与租户上下文验收完成 |
-| 本周目标   | 完成鉴权闭环，进入角色、租户隔离与商品管理前置准备 |
-| 今日目标   | 补消费者注册接口，并完成 `/api/merchant/**` 的 401/403/200 权限边界验收 |
-| 昨日完成   | 真实 JWT 登录与 `GET /api/auth/me` 已跑通，并已提交 `feat(auth): add jwt current user` |
-| 当前卡点   | 暂无主线卡点；Docker Desktop 曾启动异常，已由用户自行修复 |
-| 最近一次提交 | `feat(auth): add jwt current user`                           |
-| 明日优先   | 开始步骤 9：商家商品最小后端闭环，先建商品创建/列表的基础结构 |
+| 当前步骤   | 步骤 9 商家商品最小后端闭环第一版已通过：创建 SPU、新增 SKU、初始库存和商家列表查询完成 |
+| 本周目标   | 完成鉴权闭环，进入角色、租户隔离与商品管理最小闭环 |
+| 今日目标   | 跑通商家商品最小后端闭环：创建 SPU、新增 SKU、初始库存入库与商家商品列表 |
+| 昨日完成   | 步骤 8 最小权限边界已通过，并已提交 `feat(auth): add consumer register and merchant guard` |
+| 当前卡点   | 暂无主线卡点；商品上架接口、SKU 汇总列表和正式 ID 方案后续再补 |
+| 最近一次提交 | `feat(auth): add consumer register and merchant guard`                           |
+| 明日优先   | 在步骤 9 基础上补商品上架/下架、列表 SKU 汇总，或进入步骤 10 消费者公开商品接口 |
 
 ## 每日任务
 ## Day 1：2026-07-19
@@ -311,3 +311,46 @@
 - 没完成：还没有开始商品管理接口；今天只做权限边界，不提前进入商品 CRUD。
 - 卡住点：Docker Desktop 启动异常曾阻塞 MySQL/Redis；注册接口最初漏加白名单导致未认证；消费者 token 访问商家接口一开始返回 401，补 `accessDeniedHandler` 后正确返回 403。
 - 明天优先做：进入步骤 9，开始商家商品最小后端闭环；先从商家当前 `tenantId` 创建 SPU，再逐步补 SKU、库存和列表。
+
+## Day 7：2026-07-25
+
+### 今日阶段
+
+- 当前文档：`01-工程与基础业务开发链.md`
+- 当前步骤：步骤 9：完成商品的最小后端闭环
+- 今日目标：跑通商家商品最小后端闭环第一版：创建 SPU、新增 SKU、初始库存入库与商家商品列表查询。
+
+### 今天要学
+
+- 知识点 1：SPU 与 SKU 的区别：SPU 表示商品本体，SKU 表示具体可售规格、价格和库存。
+- 知识点 2：DTO、Entity、VO 的分工：请求体、数据库对象和接口返回对象不要混在一起。
+- 知识点 3：商家商品接口的租户边界：`tenantId` 必须从 JWT 当前用户取得，不能相信前端传值。
+- 知识点 4：MyBatis 注解式 Mapper、`@PathVariable`、`LIMIT/OFFSET` 分页和 `BigDecimal` 金额字段。
+- 学到什么程度算够：能说清楚商家 token 如何通过 `CurrentUser.requiredMerchantTenantId()` 限定商品创建、SKU 新增和列表查询的租户范围；能解释为什么价格不用 `double`、为什么列表返回 VO。
+
+### 今天要做
+
+- [x] 任务 1：新增商家创建 SPU 接口 `POST /api/merchant/products`
+- [x] 任务 2：新增 SKU 创建接口 `POST /api/merchant/products/{id}/skus`，并写入初始库存
+- [x] 任务 3：新增商家商品列表接口 `GET /api/merchant/products?page=&size=&keyword=`
+
+### 今天验收
+
+- [x] `POST /api/merchant/products` 不带 token 返回 HTTP 401
+- [x] `POST /api/merchant/products` 带消费者 token 返回 HTTP 403
+- [x] `POST /api/merchant/products` 带 `merchant_a_admin` token 返回 `code: 0` 和商品 ID
+- [x] DataGrip 中 `product_spu` 可见「蓝牙耳机」，`tenant_id=1001`，`status=DRAFT`
+- [x] `POST /api/merchant/products/{id}/skus` 成功新增「白色 / 标准版」和「黑色 / Pro版」两个 SKU
+- [x] DataGrip 中 `product_sku` 两条 SKU 的 `tenant_id=1001`，`spu_id` 指向同一个 SPU，价格和库存正确
+- [x] `GET /api/merchant/products?page=1&size=10` 返回当前商家商品列表
+- [x] `GET /api/merchant/products?page=1&size=10&keyword=耳机` 能查询到「蓝牙耳机」
+- [x] `mvnw -DskipTests compile` 编译通过
+- [x] 截图/请求记录已写入 `docs/learning-log.md`
+- [ ] 已提交 Git，提交信息建议：`feat(product): add merchant product basics`
+
+### 今天完成
+
+- 完成了：步骤 9 的商家商品最小后端闭环第一版已跑通，包含创建 SPU、新增 SKU、初始库存入库、商家列表查询，以及沿用 `/api/merchant/**` 的 401/403/200 权限边界。
+- 没完成：商品上架/下架接口还没做；商品列表暂未返回 SKU 数、最低价、总库存等汇总字段；ID 仍使用 `System.currentTimeMillis()` 临时方案。
+- 卡住点：PowerShell 读取中文源码时多次显示乱码，导致误判字符串是否闭合；后续以 IDEA 语法检查和 `mvnw -DskipTests compile` 编译结果为准。
+- 明天优先做：补商品上架/下架与列表汇总字段，或开始步骤 10：消费者公开商品接口。
