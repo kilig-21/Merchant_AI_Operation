@@ -9,22 +9,22 @@
 |---|---|
 | 总步骤 | `█████████░` 9 / 36 |
 | 当前阶段 | 第 1 阶段：工程与基础业务 |
-| 本周任务 | `███░░░░` 3 / 7 |
+| 本周任务 | `████░░░` 4 / 7 |
 | 周验收 | 已通过 |
-| 最近提交 | `feat(auth): add consumer register and merchant guard` |
+| 最近提交 | `feat(product): add merchant product basics` |
 
 ## 进度看板
 | 项目     | 当前状态                         |
 | ------ | ---------------------------- |
 | 当前阶段   | 第 1 阶段：工程与基础业务               |
 | 当前文档   | `01-工程与基础业务开发链.md`           |
-| 当前步骤   | 步骤 9 商家商品最小后端闭环第一版已通过：创建 SPU、新增 SKU、初始库存和商家列表查询完成 |
+| 当前步骤   | 步骤 9 商家商品最小后端闭环已补强：创建 SPU、新增 SKU、上架/下架、初始库存和商家列表汇总完成 |
 | 本周目标   | 完成鉴权闭环，进入角色、租户隔离与商品管理最小闭环 |
-| 今日目标   | 跑通商家商品最小后端闭环：创建 SPU、新增 SKU、初始库存入库与商家商品列表 |
-| 昨日完成   | 步骤 8 最小权限边界已通过，并已提交 `feat(auth): add consumer register and merchant guard` |
-| 当前卡点   | 暂无主线卡点；商品上架接口、SKU 汇总列表和正式 ID 方案后续再补 |
-| 最近一次提交 | `feat(auth): add consumer register and merchant guard`                           |
-| 明日优先   | 在步骤 9 基础上补商品上架/下架、列表 SKU 汇总，或进入步骤 10 消费者公开商品接口 |
+| 今日目标   | 收口步骤 9：补商品上架/下架接口与商家商品列表 SKU 汇总字段 |
+| 昨日完成   | 步骤 9 第一版已通过，并已提交 `feat(product): add merchant product basics` |
+| 当前卡点   | 暂无主线卡点；正式 ID 方案与消费者公开商品接口后续再补 |
+| 最近一次提交 | `feat(product): add merchant product basics`                           |
+| 明日优先   | 进入步骤 10：消费者公开商品列表、商品详情和 SKU 可售状态查询 |
 
 ## 每日任务
 ## Day 1：2026-07-19
@@ -354,3 +354,45 @@
 - 没完成：商品上架/下架接口还没做；商品列表暂未返回 SKU 数、最低价、总库存等汇总字段；ID 仍使用 `System.currentTimeMillis()` 临时方案。
 - 卡住点：PowerShell 读取中文源码时多次显示乱码，导致误判字符串是否闭合；后续以 IDEA 语法检查和 `mvnw -DskipTests compile` 编译结果为准。
 - 明天优先做：补商品上架/下架与列表汇总字段，或开始步骤 10：消费者公开商品接口。
+
+## Day 8：2026-07-27
+
+### 今日阶段
+
+- 当前文档：`01-工程与基础业务开发链.md`
+- 当前步骤：步骤 9 收口：补商品上架/下架与商家商品列表汇总字段
+- 今日目标：让商家商品管理闭环补齐“创建 SPU -> 新增 SKU -> 上架/下架 -> 列表看到 SKU 汇总”的完整链路。
+
+### 今天要学
+
+- 知识点 1：SPU 状态与 SKU 状态的关系：新建 SPU 为 `DRAFT`，上架后为 `ON_SALE`，下架后为 `OFF_SALE`。
+- 知识点 2：MyBatis `@Update` 返回 `int` 表示受影响行数，可以判断更新是否真的命中当前商家的商品。
+- 知识点 3：列表聚合查询：`LEFT JOIN`、`COUNT`、`MIN`、`SUM`、`COALESCE` 如何把 SKU 信息汇总到 SPU 列表 VO。
+- 学到什么程度算够：能说清楚为什么上架前要检查 SKU 数量，为什么更新状态必须带 `id + tenant_id`，以及 `COALESCE(SUM(...), 0)` 为什么能把无 SKU 商品的总库存兜底为 0。
+
+### 今天要做
+
+- [x] 任务 1：新增商品上架接口 `POST /api/merchant/products/{id}/publish`
+- [x] 任务 2：新增商品下架接口 `POST /api/merchant/products/{id}/unpublish`
+- [x] 任务 3：增强商家商品列表，返回 `skuCount`、`minSalePrice`、`totalAvailableStock`
+
+### 今天验收
+
+- [x] `mvnw -DskipTests compile` 编译通过
+- [x] `POST /api/merchant/products/1784967699881/publish` 带商家 token 返回 `code: 0`
+- [x] DataGrip 中「蓝牙耳机」`status` 变为 `ON_SALE`
+- [x] `POST /api/merchant/products/1784967699881/unpublish` 带商家 token 返回 `code: 0`
+- [x] DataGrip 中「蓝牙耳机」`status` 变为 `OFF_SALE`
+- [x] `GET /api/merchant/products?page=1&size=10` 返回 `skuCount=2`、`minSalePrice=199.00`、`totalAvailableStock=70`
+- [x] 消费者 token 访问商品上架接口返回 HTTP 403
+- [x] 商家 token 访问不存在商品 `999999999999` 的上架接口返回 `code: 404` 和 `商品不存在`
+- [x] `.vs/` 已加入 `.gitignore`，避免提交 Visual Studio 本机缓存
+- [x] 截图/请求记录已写入 `docs/learning-log.md`
+- [ ] 已提交 Git，提交信息建议：`feat(product): add publish status and sku summaries`
+
+### 今天完成
+
+- 完成了：步骤 9 的商家商品最小后端闭环已补强，新增商品上架/下架接口，列表返回 SKU 数、最低价和总可售库存，并完成商家成功、消费者 403、无效商品 404 的验收。
+- 没完成：还未进入步骤 10 的消费者公开商品接口；正式 ID 方案仍沿用后续再替换。
+- 卡住点：最开始未按“带着做”协作规则推进，后来改为逐步讲解、用户在 IDEA 中手写；Apifox 上架接口曾因 URL 带 `{}` 导致 401，改为真实路径后通过。
+- 明天优先做：进入步骤 10，实现消费者公开商品列表、商品详情和 SKU 可售状态查询，只展示已上架商品。

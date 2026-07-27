@@ -45,3 +45,5 @@ target/
 
 # 其他配置文件
 deploy/.env
+
+.vs/

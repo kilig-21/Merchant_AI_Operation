@@ -27,6 +27,8 @@ public class ProductService {
 
     }
 
+
+    //创建商品类型SPU
     public Long createProductSpu(CreateProductRequest request) {
 
         //它从当前 JWT 登录身份里拿商家租户 ID。
@@ -55,6 +57,8 @@ public class ProductService {
         return spu.getId();
     }
 
+
+    //创建具体商品SKU
     public Long createSku(Long spuId, CreateSkuRequest request){
         //首先先拿到商家id;
         Long tenantId = CurrentUser.requiredMerchantTenantId();
@@ -90,6 +94,8 @@ public class ProductService {
         return  sku.getId();
     }
 
+
+    //列出所有的商品的列表;
     public List<MerchantProductVO>  listMerchantProducts(Integer page,Integer size,String keyword){
         Long tenantId=CurrentUser.requiredMerchantTenantId();
 
@@ -103,6 +109,47 @@ public class ProductService {
         int offset = (safePage - 1) * safeSize;
         //把商家id,,一页显示多少个,跳过第几个传过去,传到mapper那里去;
         return productSpuMapper.selectMerchantProducts(tenantId, keyword, safeSize, offset);
+
+    }
+
+    //上架商品:
+    //链路:
+        //拿当前商家 tenantId
+        //-> 确认这个商品属于当前商家
+        //-> 确认商品至少有 1 个 SKU
+        //-> 把 SPU 状态改成 ON_SALE
+    public void publishProduct(Long spuId){
+        Long  tenantId = CurrentUser.requiredMerchantTenantId();
+        int spuCount=productSpuMapper.countByIdAndTenantId(spuId, tenantId);
+        if (spuCount != 1) {
+            throw new BizException(404,"商品不存在");
+        }
+        int skuCount =productSkuMapper.countBySpuIdAndTenantId(spuId, tenantId);
+        if (skuCount < 1) {
+            throw new BizException(409, "商品至少需要一个SKU才能上架");
+        }
+
+        // 符合条件后，把 SPU 状态改成 ON_SALE。
+        int updated = productSpuMapper.updateStatusByIdAndTenantId(spuId, tenantId, "ON_SALE");
+        if (updated != 1) {
+            throw new BizException(500, "商品上架失败");
+        }
+
+    }
+
+
+    //下架商品:
+    public void unpublishProduct(Long spuId){
+        Long  tenantId = CurrentUser.requiredMerchantTenantId();
+
+
+        int updated = productSpuMapper.updateStatusByIdAndTenantId(spuId, tenantId, "OFF_SALE");
+        //这里用 != 1，是因为按我们的业务，一个商品 ID 在当前商家下最多只能对应一条 SPU。
+        // 正常成功只能是 1。0 是失败，大于 1 理论上也不正常。
+        if (updated != 1) {
+            throw new BizException(404, "商品不存在");
+        }
+
 
     }
 
