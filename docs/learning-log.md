@@ -949,3 +949,108 @@
 
 - 根据实际安排选择进入步骤 11 极简商品管理页面，或先继续后端步骤 12：购物车表与接口。
 - 如果继续后端，购物车加入 SKU 前必须复用今天形成的可售校验思路：SPU 上架、SKU 上架、库存大于 0。
+
+## Day 9 加餐：2026-07-28
+
+### 今天对应任务
+
+- 当前文档：`01-工程与基础业务开发链.md`、`04-Vue前端开发链.md`
+- 当前步骤：步骤 11 第一版：极简商品管理页面；对应前端步骤 31、32、33 起步
+- 今日目标：创建 Vue 3 前端基础壳，完成商家登录态公共能力，并接入真实商家商品列表接口。
+
+### 今天学了什么
+
+- Vue 单页应用启动链路：
+  - 它解决什么问题：Vue 项目不是多个独立 HTML 页面，而是先加载一个 `index.html`，再由 `main.ts` 启动应用，`App.vue` 作为根组件，`router-view` 根据地址显示不同页面组件。
+  - 我现在会用到哪里：后续登录页、商品管理页、消费者商品详情、购物车和订单页都会通过 `router/index.ts` 映射到不同 `View.vue`。
+- Vue Router：
+  - 它解决什么问题：把 `/merchant/login`、`/merchant/products`、`/403` 等前端地址和对应 `.vue` 页面组件关联起来。
+  - 我现在会用到哪里：商家后台和消费者端都需要多个页面；路由守卫还会根据登录态决定是否放行。
+- `ref` 与 `.value`：
+  - 它解决什么问题：`ref(0)` 创建的是 Vue 会追踪的响应式数据盒子，真实值在 `.value` 里；值变化后页面会自动更新。
+  - 我现在会用到哪里：登录表单、搜索关键字、商品列表、加载状态、错误提示都会用 `ref` 保存页面状态。
+- 列表渲染、条件显示和表格：
+  - 它解决什么问题：`v-for` 把商品数组渲染成多行，`:key="product.id"` 帮 Vue 识别每一行，`v-if/v-else` 根据库存或状态显示不同文案，`:disabled` 动态禁用按钮。
+  - 我现在会用到哪里：商品列表、购物车列表、订单项列表和 SKU 列表都是同样思路。
+- Axios、Vite 代理与 Pinia 登录态：
+  - 它解决什么问题：Axios 统一请求后端，Vite 把前端 `/api` 转发到后端 `localhost:8080`，Pinia 保存 token 和当前用户，刷新后再用 `/api/auth/me` 恢复用户。
+  - 我现在会用到哪里：所有后端接口都通过 `api/*.ts` 封装，所有需要登录的商家页面都从 `authStore` 读取登录态。
+
+### 今天遇到的问题
+
+| 问题 | 出现场景 | 最后怎么解决 | 是否已彻底理解 |
+|---|---|---|---|
+| 不理解为什么 Vue 项目需要 `vue-router` | 以为 HTML 里本来就能定义多个地址 | 理解为传统 HTML 是多个文件，Vue 单页应用只有一个 `index.html`，需要 Router 根据 URL 切换组件 | 是 |
+| 不理解 `router-view` 为什么必要 | 已经在 `router/index.ts` 里写了路径和组件映射，但不清楚为什么还要渲染到 `App.vue` | 理解为 Router 决定显示谁，`router-view` 决定显示在哪里；`App.vue` 可以保留公共布局，页面内容在 `router-view` 处切换 | 是 |
+| 误删了 `main.ts` 和 `App.vue` | 清理 Vite 默认演示代码时把启动入口也删掉 | 重新补回 `main.ts` 和 `App.vue`，理解 `index.html -> main.ts -> App.vue` 是必需启动链路 | 是 |
+| 不理解 `clickCount.value` | 写 `const clickCount = ref(0)` 和 `clickCount.value = clickCount.value + 1` 时困惑 `.value` | 理解为 `ref` 是响应式盒子，脚本里取值和赋值要用 `.value`，模板里 Vue 会自动拆开 | 是 |
+| 输入框写了但页面不明显 | `HomeView.vue` 里已有 `<input v-model="keyword">`，但浏览器中看不到明显输入框 | 给 `input` 添加宽度、内边距、边框和字号后显示正常 | 是 |
+| 表格操作列错位 | 给每行加了「减库存」按钮，但表头仍只有 3 列 | 给 `thead` 补上 `<th>操作</th>`，理解表头 `th` 数量应和每行 `td` 对齐 | 是 |
+| 登录失败提示像账号密码错误 | 后端未启动时，登录页只显示统一错误文案 | 通过前端终端看到 Vite 代理 `ECONNREFUSED`，确认真实原因是后端 8080 没连上；启动后端后登录成功 | 是 |
+| 误删了 `LoginView.vue` 内容 | 修改 redirect 逻辑时把登录页代码删空且无法撤回 | 重新补回完整 `LoginView.vue`，并加入 `redirect` 登录后回跳逻辑 | 是 |
+
+### 重要记录
+
+- 成功的接口：
+  - `POST /api/auth/login` 经 Vite 代理请求后端成功，返回 `accessToken` 和用户 `merchant_a_admin`。
+  - `GET /api/auth/me` 刷新页面后返回当前用户：`id=2`、`username=merchant_a_admin`、`userType=MERCHANT_ADMIN`、`tenantId=1001`。
+  - `GET /api/merchant/products?page=1&size=10` 在商家商品管理页成功返回真实商品列表。
+- 失败过的接口：
+  - 后端未启动时，前端请求 `POST /api/auth/login` 出现 Vite 代理 `ECONNREFUSED`，不是账号密码错误。
+- 浏览器看到的结果：
+  - `/` 和 `/merchant/products` 可以显示不同 Vue 页面。
+  - 登录成功后 `localStorage` 中出现 `access_token`。
+  - 删除 `access_token` 后访问 `/merchant/products` 自动跳到 `/merchant/login?redirect=/merchant/products`。
+  - 登录成功后按 `redirect` 回到 `/merchant/products`。
+  - `/403` 页面显示无权限提示。
+  - 商家商品管理页显示真实商品「蓝牙耳机」、状态和 SKU 数。
+- 截图记录：
+  - `docs/images/day-9-加餐/加餐-未登录跳转登录页.png`
+  - `docs/images/day-9-加餐/加餐-登录后回到商品页并保存token.png`
+  - `docs/images/day-9-加餐/加餐-403无权限页面.png`
+  - `docs/images/day-9-加餐/加餐-商家商品列表真实数据.png`
+  - `docs/images/day-9-加餐/加餐-前端构建成功.png`
+- 关键修改：
+  - 新建 Vue 3 + Vite + TypeScript 前端工程。
+  - 新增 `src/router/index.ts`、`HomeView.vue`、`LoginView.vue`、`ProductListView.vue`、`ForbiddenView.vue`。
+  - 新增 `src/api/http.ts`、`src/api/auth.ts`、`src/api/product.ts`。
+  - 新增 `src/stores/auth.ts` 保存 token、当前用户、登录、退出和 `/auth/me` 恢复逻辑。
+  - `vite.config.ts` 配置 `/api` 代理到 `http://localhost:8080`。
+  - `App.vue` 在 `onMounted` 调用 `authStore.loadCurrentUser()`。
+- 验证记录：
+  - `npm.cmd run dev` 前端启动正常。
+  - `npm.cmd run build` 构建通过，Vite 输出 `dist/index.html` 和打包资源。
+- 参考资料：
+  - `01-工程与基础业务开发链.md` 步骤 11。
+  - `04-Vue前端开发链.md` 步骤 31、32、33。
+  - `06-每日推进看板与任务安排.md` 的加餐任务安排、验收和 Git 提交规则。
+
+### 侧边任务/对话补充记录
+
+- React 和 Vue 怎么选：
+  - 疑惑点：不确定当前项目用 React 还是 Vue 更好。
+  - 最后理解：当前知识文档和学习路线都围绕 Vue 3，且商家后台表单、表格、分页较多，Vue 3 + Element Plus 更适合先做出项目闭环；React 可以项目后再补。
+  - 后续会用到哪里：前端路线继续按 `04-Vue前端开发链.md` 推进，不中途切 React。
+- Vite 生成的一堆文件分别是什么：
+  - 疑惑点：`web` 下突然出现很多配置和目录，不知道哪些能删。
+  - 最后理解：`index.html`、`main.ts`、`App.vue` 是启动链路；`src` 放业务代码；`package.json`、`vite.config.ts`、`tsconfig*.json` 是工具配置，先留在根目录符合默认约定。
+  - 后续会用到哪里：清理默认演示代码时只删演示素材，不删启动入口和工具配置。
+- 配置文件能不能放到一个文件夹：
+  - 疑惑点：根目录配置文件看起来很乱，想集中收纳。
+  - 最后理解：Vite 和 TypeScript 默认从根目录找配置；移动到 `config/` 后需要改命令和引用路径，初学阶段收益小、坑多。
+  - 后续会用到哪里：当前保留 Vite 默认布局，把业务代码组织在 `src/api`、`src/router`、`src/stores`、`src/views`。
+- 前端权限和后端权限的关系：
+  - 疑惑点：路由守卫拦截后，是不是就安全了。
+  - 最后理解：前端路由守卫只负责用户体验；真正安全仍靠后端 `/api/merchant/**` 的 401/403 和租户隔离。前端不能替代后端授权。
+  - 后续会用到哪里：消费者访问商家页面、商家 A/B 数据隔离、订单和 Agent 工作台都要继续以后端权限为最终边界。
+
+### 今天还没理解透
+
+- `computed` 的缓存机制还没展开，只先理解为“根据响应式数据自动计算”。
+- Axios 响应拦截器和 401 自动退出还没补，目前只做了请求前自动带 token。
+- Element Plus 已安装但还没有正式替换原生表格和表单。
+
+### 明天遇到再补
+
+- 如果继续前端，补 Axios 响应拦截器、退出登录按钮、Element Plus 表格、商品新建/SKU/上下架操作。
+- 如果回到后端，进入步骤 12：购物车表与接口，加入购物车前复用 SKU 可售校验思路。

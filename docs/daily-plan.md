@@ -7,24 +7,24 @@
 
 | 项目 | 进度 |
 |---|---|
-| 总步骤 | `██████████░` 10 / 36 |
+| 总步骤 | `███████████░` 11 / 36 |
 | 当前阶段 | 第 1 阶段：工程与基础业务 |
-| 本周任务 | `█████░░` 5 / 7 |
+| 本周任务 | `██████░` 6 / 7 |
 | 周验收 | 已通过 |
-| 最近提交 | `feat(product): add publish status and sku summaries` |
+| 最近提交 | `feat(product): add public product APIs` |
 
 ## 进度看板
 | 项目     | 当前状态                         |
 | ------ | ---------------------------- |
 | 当前阶段   | 第 1 阶段：工程与基础业务               |
 | 当前文档   | `01-工程与基础业务开发链.md`           |
-| 当前步骤   | 步骤 10 消费者公开商品接口已完成：公开列表、公开详情、SKU 可售状态和下架不可见验收通过 |
+| 当前步骤   | 步骤 11 加餐已完成第一版：Vue 基础壳、登录态、路由守卫和商家商品列表真实接口已跑通 |
 | 本周目标   | 完成鉴权闭环、角色/租户隔离、商家商品管理和消费者公开商品基础链路 |
-| 今日目标   | 完成步骤 10：消费者公开商品列表、商品详情和 SKU 可售状态查询 |
-| 昨日完成   | 步骤 9 已收口并提交 `feat(product): add publish status and sku summaries`；步骤 10 已完成公开接口探针和列表起步 |
+| 今日目标   | 加餐完成步骤 11 第一版：Vue 基础壳、商家登录态和真实商家商品列表 |
+| 昨日完成   | 步骤 9 已收口并提交 `feat(product): add publish status and sku summaries`；今天原计划步骤 10 已提交 `feat(product): add public product APIs` |
 | 当前卡点   | 暂无主线卡点；正式 ID 方案、购物车表和普通订单后续再补 |
-| 最近一次提交 | `feat(product): add publish status and sku summaries`                           |
-| 明日优先   | 进入步骤 11 极简商品管理页面，或先按后端优先进入步骤 12 购物车表与接口 |
+| 最近一次提交 | `feat(product): add public product APIs`                           |
+| 明日优先   | 进入步骤 12 购物车表与接口，或继续补步骤 11 的新建商品/SKU/上下架页面操作 |
 
 ## 每日任务
 ## Day 1：2026-07-19
@@ -441,3 +441,47 @@
 - 没完成：还没有进入前端页面、购物车和订单；正式 ID 方案仍未替换。
 - 卡住点：`@PathVariable` 方法一开始缺少带 `{storeId}` 的 `@GetMapping` 路径导致 500；`PublicSkuVO` 最初放到商家包导致公开模块边界混乱；详情查询一开始尝试让 SPU SQL 直接映射带 `skus` 的详情 VO，后来拆出 `PublicProductBaseVO` 后解决。
 - 明天优先做：根据精力选择步骤 11 极简商品管理页面，或继续后端优先进入步骤 12 购物车表与接口。
+
+## Day 9 加餐：2026-07-28
+
+### 今日阶段
+
+- 当前文档：`01-工程与基础业务开发链.md`、`04-Vue前端开发链.md`
+- 当前步骤：步骤 11 第一版：极简商品管理页面；对应前端步骤 31、32、33 起步
+- 今日目标：创建 Vue 3 前端基础壳，完成商家登录态公共能力，并接入真实商家商品列表接口。
+
+### 今天要学
+
+- 知识点 1：Vue 单页应用启动链路：`index.html -> main.ts -> App.vue -> router-view -> View.vue`
+- 知识点 2：Vue 基础语法：`ref`、`.value`、`computed`、`v-model`、`v-for`、`v-if/v-else`、`@click`、`:disabled`
+- 知识点 3：Axios、Vite 代理、Pinia 登录态、`localStorage` token、路由守卫
+- 学到什么程度算够：能说清楚为什么 Vue 只有一个 `index.html`，为什么路由把不同 URL 映射到不同组件，为什么登录后要保存 token，并在刷新后用 `/api/auth/me` 恢复当前用户。
+
+### 今天要做
+
+- [x] 任务 1：在 `web` 创建 Vue 3 + Vite + TypeScript 工程，并安装 Vue Router、Pinia、Axios、Element Plus
+- [x] 任务 2：完成前端登录态公共能力：Axios 实例、Vite `/api` 代理、登录接口封装、Pinia auth store、登录页、`/auth/me` 恢复用户、路由守卫和 403 页面
+- [x] 任务 3：完成商家商品列表第一版，调用 `GET /api/merchant/products?page=1&size=10` 显示真实商品数据
+
+### 今天验收
+
+- [x] `npm.cmd run dev` 启动前端，`http://localhost:5173/` 可访问
+- [x] `/` 和 `/merchant/products` 能通过 `vue-router` 显示不同页面组件
+- [x] Vue 练习页完成变量显示、点击事件、列表渲染、条件显示、搜索过滤和表格操作按钮
+- [x] `POST /api/auth/login` 通过 Vite 代理请求后端成功，返回 `accessToken` 和 `merchant_a_admin`
+- [x] 登录成功后 `localStorage` 中出现 `access_token`
+- [x] 刷新 `/merchant/products` 后，`GET /api/auth/me` 返回当前用户 `id=2`、`userType=MERCHANT_ADMIN`、`tenantId=1001`
+- [x] 删除 `access_token` 后访问 `/merchant/products` 自动跳转 `/merchant/login?redirect=/merchant/products`
+- [x] 登录成功后能按 `redirect` 回到 `/merchant/products`
+- [x] `/403` 页面可访问并显示无权限提示
+- [x] 商家商品管理页成功显示后端真实商品「蓝牙耳机」、状态和 SKU 数
+- [x] `npm.cmd run build` 构建通过
+- [x] 截图/请求记录已写入 `docs/learning-log.md`，截图命名放在 `docs/images/day-9-加餐/加餐-*.png`
+- [ ] 已提交 Git，提交信息建议：`feat(web): add merchant product list shell`
+
+### 今天完成
+
+- 完成了：步骤 11 第一版已跑通，前端从空目录变为可启动 Vue 工程；商家登录、token 保存、刷新恢复用户、未登录拦截、403 兜底和真实商品列表都已完成。
+- 没完成：还没有做新建商品表单、新增 SKU、上架/下架按钮、分页控件和 Element Plus 组件化改造。
+- 卡住点：误删过 `main.ts`、`App.vue` 和 `LoginView.vue` 内容；登录失败曾被误以为账号密码错误，实际是后端未启动导致 Vite 代理 `ECONNREFUSED`；配置文件看起来杂乱，但目前保留在根目录最符合 Vite 默认约定。
+- 明天优先做：如果继续前端，补商品管理页的新建商品/SKU/上下架操作；如果回到后端，进入步骤 12 购物车表与接口。
