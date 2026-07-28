@@ -845,3 +845,107 @@
 - 进入步骤 10：消费者公开商品接口。
 - 公开接口只返回 `ON_SALE` 商品，不泄露 `locked_stock`、成本价、商家内部字段。
 - 继续用 VO 表达消费者可见数据，避免直接返回 Entity。
+
+## Day 9：2026-07-28
+
+### 今天对应任务
+
+- 当前文档：`01-工程与基础业务开发链.md`
+- 当前步骤：步骤 10：实现消费者公开商品接口
+- 今日目标：完成公开商品列表、商品详情和 SKU 可售状态查询；只展示已上架商品，不泄露商家内部字段。
+
+### 今天学了什么
+
+- 公开接口白名单：
+  - 它解决什么问题：消费者未登录时也能浏览公开商品，所以 `/api/public/**` 需要在 `SecurityConfig` 里 `permitAll()`。
+  - 我现在会用到哪里：后续店铺首页、商品详情、促销公开入口都属于公开接口，但仍要在 SQL 层限制只返回可见数据。
+- 公开接口和商家接口的边界：
+  - 它解决什么问题：商家后台可以看草稿、下架和管理字段；消费者公开接口只能看 `ON_SALE` 商品，不能泄露 `tenantId`、`lockedStock`、`version`。
+  - 我现在会用到哪里：后续购物车、订单、前端页面都要基于公开商品接口返回的消费者可见字段。
+- VO 拆分：
+  - 它解决什么问题：列表、详情、SKU、SKU 可售状态的返回结构不同，拆成 `PublicProductListItemVO`、`PublicProductDetailVO`、`PublicSkuVO`、`PublicSkuAvailabilityVO` 更清楚。
+  - 我现在会用到哪里：后续订单快照、购物车展示、促销详情也会继续用 VO 表达接口展示数据。
+- `PublicProductBaseVO`：
+  - 它解决什么问题：SPU 基础详情 SQL 只返回 `id/name/description/updatedAt`，不能直接映射到带 `List<PublicSkuVO>` 的详情 VO。
+  - 我现在会用到哪里：Mapper 负责接收平铺 SQL 结果，Service 负责把基础信息和 SKU 列表组装成嵌套详情。
+- SKU 可售状态：
+  - 它解决什么问题：前端选择规格、加购物车或下单前，需要知道当前 SKU 是否还能买。
+  - 我现在会用到哪里：步骤 12 购物车和步骤 13 普通订单都会再次校验 SKU、SPU 状态和库存。
+
+### 今天遇到的问题
+
+| 问题 | 出现场景 | 最后怎么解决 | 是否已彻底理解 |
+|---|---|---|---|
+| 公开列表接口一开始返回 `code: 500` | `GET /api/public/stores/1001/products?page=1&size=10` 请求进入后端后报系统异常 | `@PathVariable Long storeId` 需要配合 `@GetMapping("/api/public/stores/{storeId}/products")`，原来只写 `@GetMapping` 导致找不到路径变量 | 是 |
+| 分页 offset 公式写错 | `PublicProductService` 里计算偏移量时写成 `(safePage - 1) * safePage` | 改为 `(safePage - 1) * safeSize`，因为偏移量等于“页码前面的页数 * 每页条数” | 是 |
+| `PublicSkuVO` 最初放错包 | 公开商品详情里引用到了 `merchant.product.vo.PublicSkuVO` | 把 `PublicSkuVO` 移到 `publicapi.product.vo`，让消费者公开接口的 VO 都归在 publicapi 模块下 | 是 |
+| 详情查询一开始可能映射失败 | SPU 详情 SQL 只返回 4 个字段，但 `PublicProductDetailVO` 有 `skus` 列表 | 新增 `PublicProductBaseVO` 承接 SPU 基础 SQL，Service 再查询 SKU 列表并组装成 `PublicProductDetailVO` | 是 |
+| 不清楚外键是否能自动返回 `skus` | 讨论是否给 SPU/SKU 建外键来解决详情嵌套返回 | 理解为外键只保证数据库关系完整性，不会让 MyBatis 自动查出 `List<PublicSkuVO>`；接口嵌套结构仍要靠查询和组装 | 是 |
+| IDEA 提示 `ASC` 冗余 | `ORDER BY s.sale_price ASC` 中 `ASC` 被标黄 | 理解为 SQL 默认升序，`ASC` 可省略但保留更利于学习；`DESC` 降序时不能省 | 是 |
+
+### 重要记录
+
+- 成功的接口：
+  - `GET /api/public/products/ping` 未登录返回 `public-product-pong`。
+  - `GET /api/public/stores/1001/products?page=1&size=10` 未登录返回「蓝牙耳机」，包含 `minSalePrice=199.00`、`totalAvailableStock=70`。
+  - `GET /api/public/products/1784967699881` 返回商品详情和 `skus` 数组。
+  - `GET /api/public/skus/1784970220075/availability` 返回 `purchasable=true`、`availableStock=50`、`message=可购买`。
+  - `GET /api/public/skus/999999999999/availability` 返回 `purchasable=false`、`availableStock=0`、`message=商品不存在或已下架`。
+  - 商品下架后，`GET /api/public/products/1784967699881` 返回 `code: 404` 和 `商品不存在`。
+  - 商品下架后，`GET /api/public/skus/1784970220075/availability` 返回 `purchasable=false` 和 `商品不存在或已下架`。
+- 失败过的接口：
+  - 公开列表曾因 `@PathVariable` 缺少路径模板返回 `code: 500`。
+  - 公开详情曾因 VO 包位置和详情 VO 映射结构不合适返回 `code: 500`。
+- DataGrip 看到的数据：
+  - 公开列表聚合出的最低价 `199.00` 和总可售库存 `70` 与 SKU 数据一致。
+  - 商品下架后，公开详情不可见，SKU 可售状态也变为不可购买。
+- 关键修改：
+  - `SecurityConfig` 放行 `/api/public/**`。
+  - 新增 `PublicProductController` 的公开列表、详情和 SKU 可售状态接口。
+  - 新增 `PublicProductService` 处理分页、详情组装和 SKU 可售状态兜底。
+  - 新增 `PublicProductMapper` 的公开商品列表、SPU 基础详情、SKU 列表和 SKU 可售状态查询。
+  - 新增 `PublicProductListItemVO`、`PublicProductBaseVO`、`PublicProductDetailVO`、`PublicSkuVO`、`PublicSkuAvailabilityVO`。
+- 验证记录：
+  - `mvnw -DskipTests compile` 编译通过。
+  - Apifox 完成公开列表、公开详情、SKU 可售、缺失 SKU、商品下架后详情不可见、商品下架后 SKU 不可购买验收。
+- 截图记录：
+  - `docs/images/day-9/public-list-success.png`
+  - `docs/images/day-9/public-detail-success.png`
+  - `docs/images/day-9/sku-availability-success.png`
+  - `docs/images/day-9/sku-availability-missing.png`
+  - `docs/images/day-9/public-detail-after-unpublish.png`
+  - `docs/images/day-9/sku-availability-after-unpublish.png`
+  - `docs/images/day-9/maven-compile-success.png`
+- 参考资料：
+  - `01-工程与基础业务开发链.md` 步骤 10、6.2 消费者公开接口。
+  - `06-每日推进看板与任务安排.md` 的每日任务、验收和 Git 提交规则。
+
+### 侧边任务/对话补充记录
+
+- `=` 和 `==` 的区别：
+  - 疑惑点：`int safePage = page == null || page < 1 ? 1 : page;` 里为什么既有 `=` 又有 `==`。
+  - 最后理解：`=` 是赋值，把右边结果放进变量；`==` 是判断是否相等，用来判断 `page` 是否为 `null`。
+  - 后续会用到哪里：所有参数兜底、状态判断、条件更新都要区分“赋值”和“比较”。
+- `@PathVariable` 必须对应 URL 模板：
+  - 疑惑点：方法参数写了 `@PathVariable Long storeId`，但接口仍然返回系统异常。
+  - 最后理解：URL 模板里必须有 `{storeId}`，例如 `@GetMapping("/api/public/stores/{storeId}/products")`，Spring 才知道从哪里取值。
+  - 后续会用到哪里：商品详情、SKU 可售状态、购物车项、订单详情等路径参数接口都一样。
+- `BaseVO` 与 `DetailVO` 的分工：
+  - 疑惑点：为什么不直接在 SPU 查询结果上加 `List<PublicSkuVO> skus`。
+  - 最后理解：SPU SQL 是平铺行结果，`skus` 来自另一张表的多行查询；Mapper 接平铺结果，Service 组装嵌套详情。
+  - 后续会用到哪里：订单详情里的订单项、购物车列表里的 SKU 信息也可能使用同样的“基础信息 + 子列表”组装方式。
+- 外键和接口嵌套返回不是一回事：
+  - 疑惑点：是否给 SPU/SKU 建外键就能让详情自动返回 `skus`。
+  - 最后理解：外键约束数据完整性，不能替代查询；MyBatis 不会因为外键存在就自动填充 Java 对象里的 List。
+  - 后续会用到哪里：后面建购物车和订单表时，外键是否使用要单独讨论，但接口返回仍要靠查询和组装。
+
+### 今天还没理解透
+
+- MyBatis 的 `@Results`、`@Many` 或 XML 嵌套映射暂时没展开，当前先用两次查询和 Service 组装保持清晰。
+- 公开接口当前没有店铺表详情展示，只用 `tenantId` 作为 `storeId`，后续前端或店铺页可能要补店铺公开信息。
+- 正式 ID 方案仍未替换，当前商品和 SKU 仍沿用 `System.currentTimeMillis()`。
+
+### 明天遇到再补
+
+- 根据实际安排选择进入步骤 11 极简商品管理页面，或先继续后端步骤 12：购物车表与接口。
+- 如果继续后端，购物车加入 SKU 前必须复用今天形成的可售校验思路：SPU 上架、SKU 上架、库存大于 0。

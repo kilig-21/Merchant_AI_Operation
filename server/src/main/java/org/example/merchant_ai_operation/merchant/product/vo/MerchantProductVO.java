@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 //返回给前端的
+//是商品的列表页:所以展示的内容比较泛
 public record MerchantProductVO(
 
         Long id,                    // 商品ID

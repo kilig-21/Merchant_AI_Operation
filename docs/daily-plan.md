@@ -7,24 +7,24 @@
 
 | 项目 | 进度 |
 |---|---|
-| 总步骤 | `█████████░` 9 / 36 |
+| 总步骤 | `██████████░` 10 / 36 |
 | 当前阶段 | 第 1 阶段：工程与基础业务 |
-| 本周任务 | `████░░░` 4 / 7 |
+| 本周任务 | `█████░░` 5 / 7 |
 | 周验收 | 已通过 |
-| 最近提交 | `feat(product): add merchant product basics` |
+| 最近提交 | `feat(product): add publish status and sku summaries` |
 
 ## 进度看板
 | 项目     | 当前状态                         |
 | ------ | ---------------------------- |
 | 当前阶段   | 第 1 阶段：工程与基础业务               |
 | 当前文档   | `01-工程与基础业务开发链.md`           |
-| 当前步骤   | 步骤 9 商家商品最小后端闭环已补强：创建 SPU、新增 SKU、上架/下架、初始库存和商家列表汇总完成 |
-| 本周目标   | 完成鉴权闭环，进入角色、租户隔离与商品管理最小闭环 |
-| 今日目标   | 收口步骤 9：补商品上架/下架接口与商家商品列表 SKU 汇总字段 |
-| 昨日完成   | 步骤 9 第一版已通过，并已提交 `feat(product): add merchant product basics` |
-| 当前卡点   | 暂无主线卡点；正式 ID 方案与消费者公开商品接口后续再补 |
-| 最近一次提交 | `feat(product): add merchant product basics`                           |
-| 明日优先   | 进入步骤 10：消费者公开商品列表、商品详情和 SKU 可售状态查询 |
+| 当前步骤   | 步骤 10 消费者公开商品接口已完成：公开列表、公开详情、SKU 可售状态和下架不可见验收通过 |
+| 本周目标   | 完成鉴权闭环、角色/租户隔离、商家商品管理和消费者公开商品基础链路 |
+| 今日目标   | 完成步骤 10：消费者公开商品列表、商品详情和 SKU 可售状态查询 |
+| 昨日完成   | 步骤 9 已收口并提交 `feat(product): add publish status and sku summaries`；步骤 10 已完成公开接口探针和列表起步 |
+| 当前卡点   | 暂无主线卡点；正式 ID 方案、购物车表和普通订单后续再补 |
+| 最近一次提交 | `feat(product): add publish status and sku summaries`                           |
+| 明日优先   | 进入步骤 11 极简商品管理页面，或先按后端优先进入步骤 12 购物车表与接口 |
 
 ## 每日任务
 ## Day 1：2026-07-19
@@ -396,3 +396,48 @@
 - 没完成：还未进入步骤 10 的消费者公开商品接口；正式 ID 方案仍沿用后续再替换。
 - 卡住点：最开始未按“带着做”协作规则推进，后来改为逐步讲解、用户在 IDEA 中手写；Apifox 上架接口曾因 URL 带 `{}` 导致 401，改为真实路径后通过。
 - 明天优先做：进入步骤 10，实现消费者公开商品列表、商品详情和 SKU 可售状态查询，只展示已上架商品。
+
+## Day 9：2026-07-28
+
+### 今日阶段
+
+- 当前文档：`01-工程与基础业务开发链.md`
+- 当前步骤：步骤 10：实现消费者公开商品接口
+- 今日目标：完成公开商品列表、商品详情和 SKU 可售状态查询；只展示已上架商品，不泄露商家内部字段。
+
+### 今天要学
+
+- 知识点 1：公开接口与商家接口的边界：`/api/public/**` 未登录可访问，但必须只返回消费者可见数据。
+- 知识点 2：VO 分层：列表 VO、详情 VO、SKU VO、BaseVO 分别服务不同查询和返回结构。
+- 知识点 3：MyBatis 查询与对象组装：平铺 SQL 结果由 Mapper 接收，嵌套结构由 Service 组装。
+- 知识点 4：SKU 可售状态：同时检查 SKU 状态、SPU 状态和可售库存。
+- 学到什么程度算够：能说清楚为什么公开接口要放行但仍要限制 `ON_SALE`，为什么 `PublicProductDetailVO` 里的 `skus` 不能靠单条 SPU SQL 自动获得，以及为什么下架后详情不可见、SKU 不可购买。
+
+### 今天要做
+
+- [x] 任务 1：放行 `/api/public/**`，并用 `GET /api/public/products/ping` 验收公开通道。
+- [x] 任务 2：实现公开商品列表 `GET /api/public/stores/{storeId}/products?page=&size=`。
+- [x] 任务 3：实现公开商品详情 `GET /api/public/products/{spuId}` 和 SKU 可售状态 `GET /api/public/skus/{skuId}/availability`。
+
+### 今天验收
+
+- [x] `GET /api/public/products/ping` 未登录返回 `public-product-pong`
+- [x] `GET /api/public/stores/1001/products?page=1&size=10` 未登录返回「蓝牙耳机」
+- [x] 公开商品列表返回 `minSalePrice=199.00`、`totalAvailableStock=70`
+- [x] 公开商品列表不返回 `tenantId`、`lockedStock`、`version`
+- [x] `GET /api/public/products/1784967699881` 返回商品详情和 `skus` 数组
+- [x] 商品详情不返回 `tenantId`、`lockedStock`、`version`
+- [x] `GET /api/public/skus/1784970220075/availability` 返回 `purchasable=true`、`availableStock=50`、`message=可购买`
+- [x] 不存在 SKU `999999999999` 返回 `purchasable=false`、`availableStock=0`、`message=商品不存在或已下架`
+- [x] 商品下架后，公开详情返回 `code: 404` 和 `商品不存在`
+- [x] 商品下架后，SKU 可售状态返回 `purchasable=false`
+- [x] `mvnw -DskipTests compile` 编译通过
+- [x] 截图/请求记录已写入 `docs/learning-log.md`
+- [ ] 已提交 Git，提交信息建议：`feat(product): add public product APIs`
+
+### 今天完成
+
+- 完成了：步骤 10 的消费者公开商品接口闭环已完成，包含公开列表、公开详情、SKU 可售状态、下架不可见和不存在 SKU 兜底结果。
+- 没完成：还没有进入前端页面、购物车和订单；正式 ID 方案仍未替换。
+- 卡住点：`@PathVariable` 方法一开始缺少带 `{storeId}` 的 `@GetMapping` 路径导致 500；`PublicSkuVO` 最初放到商家包导致公开模块边界混乱；详情查询一开始尝试让 SPU SQL 直接映射带 `skus` 的详情 VO，后来拆出 `PublicProductBaseVO` 后解决。
+- 明天优先做：根据精力选择步骤 11 极简商品管理页面，或继续后端优先进入步骤 12 购物车表与接口。

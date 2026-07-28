@@ -54,7 +54,8 @@ public class SecurityConfig{
                     "/v3/api-docs/**",
                     "/api/debug/**",
                     "/api/auth/login",
-                    "/api/auth/register"
+                    "/api/auth/register",
+                    "/api/public/**"
                 ).permitAll()
 
                 .requestMatchers("/api/merchant/**")

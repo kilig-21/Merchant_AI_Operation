@@ -99,7 +99,7 @@ public class ProductService {
     public List<MerchantProductVO>  listMerchantProducts(Integer page,Integer size,String keyword){
         Long tenantId=CurrentUser.requiredMerchantTenantId();
 
-        int safePage = page == null || page < 1 ? 1 : page;//前端不传 page，默认第 1 页。
+        int safePage = (( page == null || page < 1 )? 1 : page);//前端不传 page，默认第 1 页。
 
         //前端不传 size，默认 10 条。
         //前端传特别大的 size=999999，后端最多给 50 条，避免一次查太多。
