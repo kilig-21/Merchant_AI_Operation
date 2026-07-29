@@ -7,24 +7,24 @@
 
 | 项目 | 进度 |
 |---|---|
-| 总步骤 | `███████████░` 11 / 36 |
+| 总步骤 | `████████████░` 12 / 36 |
 | 当前阶段 | 第 1 阶段：工程与基础业务 |
-| 本周任务 | `██████░` 6 / 7 |
+| 本周任务 | `███████` 7 / 7 |
 | 周验收 | 已通过 |
-| 最近提交 | `feat(product): add public product APIs` |
+| 最近提交 | `feat(cart): add consumer cart APIs` |
 
 ## 进度看板
 | 项目     | 当前状态                         |
 | ------ | ---------------------------- |
 | 当前阶段   | 第 1 阶段：工程与基础业务               |
 | 当前文档   | `01-工程与基础业务开发链.md`           |
-| 当前步骤   | 步骤 11 加餐已完成第一版：Vue 基础壳、登录态、路由守卫和商家商品列表真实接口已跑通 |
+| 当前步骤   | 步骤 12 已完成：购物车表与消费者购物车新增、查询、修改、删除接口已跑通 |
 | 本周目标   | 完成鉴权闭环、角色/租户隔离、商家商品管理和消费者公开商品基础链路 |
-| 今日目标   | 加餐完成步骤 11 第一版：Vue 基础壳、商家登录态和真实商家商品列表 |
-| 昨日完成   | 步骤 9 已收口并提交 `feat(product): add publish status and sku summaries`；今天原计划步骤 10 已提交 `feat(product): add public product APIs` |
-| 当前卡点   | 暂无主线卡点；正式 ID 方案、购物车表和普通订单后续再补 |
-| 最近一次提交 | `feat(product): add public product APIs`                           |
-| 明日优先   | 进入步骤 12 购物车表与接口，或继续补步骤 11 的新建商品/SKU/上下架页面操作 |
+| 今日目标   | 完成步骤 12：购物车表、加入购物车、查询列表、修改数量、删除购物车项 |
+| 昨日完成   | 步骤 10 公开商品接口与步骤 11 前端加餐已完成；今天完成步骤 12 购物车接口 |
+| 当前卡点   | 暂无主线卡点；正式 ID 方案后续再替换 |
+| 最近一次提交 | `feat(cart): add consumer cart APIs`                           |
+| 明日优先   | 进入步骤 13 普通订单最小闭环，或先补前端购物车页面 |
 
 ## 每日任务
 ## Day 1：2026-07-19
@@ -485,3 +485,52 @@
 - 没完成：还没有做新建商品表单、新增 SKU、上架/下架按钮、分页控件和 Element Plus 组件化改造。
 - 卡住点：误删过 `main.ts`、`App.vue` 和 `LoginView.vue` 内容；登录失败曾被误以为账号密码错误，实际是后端未启动导致 Vite 代理 `ECONNREFUSED`；配置文件看起来杂乱，但目前保留在根目录最符合 Vite 默认约定。
 - 明天优先做：如果继续前端，补商品管理页的新建商品/SKU/上下架操作；如果回到后端，进入步骤 12 购物车表与接口。
+
+## Day 10：2026-07-29
+
+### 今日阶段
+
+- 当前文档：`01-工程与基础业务开发链.md`
+- 当前步骤：步骤 12：购物车表与接口
+- 今日目标：完成 `cart_item` 表，并跑通消费者购物车新增、查询、修改数量和删除接口。
+
+### 今天要学
+
+- 知识点 1：购物车里的三个 ID：`cart_item.id` 是购物车项自己的 ID，`consumerId` 是当前消费者，`skuId` 是被加入购物车的具体商品规格。
+- 知识点 2：购物车唯一约束：同一个消费者同一个 SKU 只保留一行，用 `consumer_id + sku_id` 唯一约束避免重复行。
+- 知识点 3：购物车接口语义：`POST` 新增或合并数量，`GET` 查询列表，`PUT /{id}` 直接设置数量，`DELETE /{id}` 删除购物车项。
+- 知识点 4：消费者权限边界：购物车接口必须要求消费者 token；无 token 返回 401，商家 token 返回 403。
+- 知识点 5：加入和修改数量时复用 SKU 可售校验：SPU/SKU 必须可售，目标数量不能超过可售库存。
+- 学到什么程度算够：能说清楚为什么购物车操作必须使用 `id + consumerId` 防越权，为什么删除购物车不需要校验商品是否上架，以及为什么商家 token 不能访问消费者购物车。
+
+### 今天要做
+
+- [x] 任务 1：新增 Flyway `V4__add_cart_item.sql`，创建 `cart_item` 表、唯一约束和索引。
+- [x] 任务 2：实现购物车新增与查询：`POST /api/cart/items`、`GET /api/cart/items`。
+- [x] 任务 3：实现购物车修改数量与删除：`PUT /api/cart/items/{id}`、`DELETE /api/cart/items/{id}`。
+
+### 今天验收
+
+- [x] Flyway 成功执行 `V4__add_cart_item.sql`，`ai_commerce` schema 到版本 4。
+- [x] DataGrip 中可见 `cart_item` 表，`flyway_schema_history` 记录 `add cart item` 成功。
+- [x] `POST /api/cart/items` 消费者 token + 上架 SKU 返回 `code: 0`，并生成购物车项。
+- [x] 重复加入同一 SKU 合并数量，`cart_item` 仍只有一行，`quantity` 从 1 变为 2。
+- [x] SKU 对应 SPU 下架时，加入购物车返回 `code: 409` 和 `商品不可购买`。
+- [x] `quantity=0` 返回 `code: 400` 和 `数量必须大于等于1`。
+- [x] `quantity=999` 返回 `code: 409` 和 `库存不足`。
+- [x] `GET /api/cart/items` 消费者 token 返回购物车列表。
+- [x] `GET /api/cart/items` 不带 token 返回 HTTP 401。
+- [x] 商家 token 访问购物车接口返回 `code: 403` 和 `不是消费者账号`。
+- [x] `PUT /api/cart/items/{id}` 能把数量修改为 3。
+- [x] `DELETE /api/cart/items/{id}` 删除成功后，`GET /api/cart/items` 返回空列表。
+- [x] 重复删除同一个购物车项返回 `code: 404` 和 `购物车项不存在`。
+- [x] `mvnw -DskipTests compile` 编译通过。
+- [x] 截图/请求记录已写入 `docs/learning-log.md`，截图放在 `docs/images/day-10/`。
+- [x] 已提交 Git，提交信息：`feat(cart): add consumer cart APIs`
+
+### 今天完成
+
+- 完成了：步骤 12 购物车表与接口闭环已完成，包含建表、加入购物车、合并数量、查询列表、修改数量、删除、重复删除、库存不足、商品不可购买、401/403 权限边界。
+- 没完成：购物车列表暂时只返回 `id`、`skuId`、`quantity`，还没有返回 SKU 名称、价格、图片等前端展示字段；正式 ID 方案仍沿用后续再替换。
+- 卡住点：DataGrip 左侧表结构一度没有刷新出 `cart_item`，但 `SHOW TABLES` 已能查到；商家 token 查询购物车一度返回系统异常，原因是误导入了 `java.nio.file.AccessDeniedException`，改为 Spring Security 的 `AccessDeniedException` 后正确返回 403。
+- 明天优先做：进入步骤 13 普通订单最小闭环；如果想先补前端体验，可先做消费者购物车页面和购物车列表展示字段。

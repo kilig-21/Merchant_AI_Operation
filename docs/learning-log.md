@@ -1054,3 +1054,119 @@
 
 - 如果继续前端，补 Axios 响应拦截器、退出登录按钮、Element Plus 表格、商品新建/SKU/上下架操作。
 - 如果回到后端，进入步骤 12：购物车表与接口，加入购物车前复用 SKU 可售校验思路。
+
+## Day 10：2026-07-29
+
+### 今天对应任务
+
+- 当前文档：`01-工程与基础业务开发链.md`
+- 当前步骤：步骤 12：购物车表与接口
+- 今日目标：创建购物车表，完成消费者加入购物车、查询购物车、修改数量、删除购物车项的后端闭环。
+
+### 今天学了什么
+
+- 购物车里的三个 ID：
+  - 它解决什么问题：`cart_item.id` 用来定位购物车里的某一行记录；`consumerId` 用来标识当前消费者；`skuId` 用来标识具体商品规格。
+  - 我现在会用到哪里：`PUT /api/cart/items/{id}` 和 `DELETE /api/cart/items/{id}` 用的是 `cart_item.id`，不是 `skuId`；查询和防越权时必须带 `consumerId`。
+- `consumer_id + sku_id` 唯一约束：
+  - 它解决什么问题：同一个消费者重复加入同一个 SKU 时，不会产生多行重复购物车项，而是在原有行上合并数量。
+  - 我现在会用到哪里：`POST /api/cart/items` 先用 `consumerId + skuId` 查是否已有记录，有则 `increaseQuantity`，没有才 `insert`。
+- SKU 可售校验复用：
+  - 它解决什么问题：加入购物车和修改购物车数量前，都要确认商品仍然可购买，且数量不超过可售库存。
+  - 我现在会用到哪里：购物车 Service 调用 `PublicProductMapper.selectSkuAvailability`，复用公开商品侧形成的 `purchasable` 和 `availableStock` 判断。
+- `id + consumerId` 防越权：
+  - 它解决什么问题：不能只按 `cart_item.id` 修改或删除，否则可能出现用户 A 操作用户 B 购物车记录的风险。
+  - 我现在会用到哪里：`selectByIdAndConsumerId`、`updateQuantityByIdAndConsumerId`、`deleteByIdAndConsumerId` 都同时带 `id` 和当前消费者 ID。
+- 401 与 403 的边界：
+  - 它解决什么问题：没登录是 401；登录了但账号类型不对，例如商家 token 访问消费者购物车，是 403。
+  - 我现在会用到哪里：消费者购物车接口统一调用 `CurrentUser.requiredConsumerId()`，账号类型不对时抛 `AccessDeniedException("不是消费者账号")`。
+
+### 今天遇到的问题
+
+| 问题 | 出现场景 | 最后怎么解决 | 是否已彻底理解 |
+|---|---|---|---|
+| Flyway 明明执行成功，但 DataGrip 左侧表列表一度看不到 `cart_item` | 后端启动日志显示 v4 迁移成功，`SHOW TABLES` 能查到 `cart_item`，但左侧树还只有 5 张表 | 理解为 DataGrip 左侧对象树有缓存，需要刷新 schema；最终 DataGrip 和 `SHOW TABLES` 都确认表存在 | 是 |
+| 不清楚 `skuId`、`consumerId`、`id` 三个 ID 的区别 | 写购物车 DTO、Entity、Mapper 时三个 ID 同时出现 | 明确为：`skuId` 是商品规格，`consumerId` 是消费者，`cart_item.id` 是购物车项记录本身 | 是 |
+| 商品明明 SKU 是 `ON_SALE`，加入购物车却返回“商品不可购买” | 查询 SKU 时看到 `sku_status=ON_SALE` 和库存 50，但接口返回 409 | 继续 join 查询 SPU，发现 `spu_status=OFF_SALE`；购物车校验必须同时看 SKU 和 SPU，商家上架 SPU 后加入成功 | 是 |
+| 商家 token 查询购物车返回 `code: 500` 系统异常 | 验收“商家 token 应该返回 403”时，接口返回系统异常 | 发现全局异常处理器导入了错误的 `java.nio.file.AccessDeniedException`；改为 `org.springframework.security.access.AccessDeniedException` 后返回 `code: 403` 和 `不是消费者账号` | 是 |
+| 不确定查询购物车列表是不是今天任务 | 完成加入购物车后，下一步出现 `GET /api/cart/items` | 确认为步骤 12 的自然范围：只做新增无法验收购物车状态，查询列表是购物车最小闭环的一部分 | 是 |
+| 不确定修改数量和删除任务会不会太多 | 查询列表完成后准备继续 `PUT` 和 `DELETE` | 理解为两者复用已有 Mapper/Service/Controller 模式，任务量不大，并且是购物车接口最小闭环必须能力 | 是 |
+
+### 重要记录
+
+- 成功的接口：
+  - `POST /api/cart/items` 消费者 token 加入上架 SKU 成功，返回 `id=1785313298146`、`skuId=1784970220075`、`quantity=1`。
+  - 重复 `POST /api/cart/items` 同一 SKU 成功合并数量，返回同一个购物车项 `id=1785313298146`，`quantity=2`。
+  - `GET /api/cart/items` 消费者 token 返回购物车列表。
+  - `PUT /api/cart/items/1785313298146`，Body 为 `{"quantity":3}`，返回 `quantity=3`。
+  - `DELETE /api/cart/items/1785313298146` 删除成功，随后 `GET /api/cart/items` 返回空数组。
+- 失败和边界接口：
+  - 不带 token 访问 `GET /api/cart/items` 返回 HTTP 401。
+  - 商家 token 访问 `GET /api/cart/items` 返回 `code: 403` 和 `不是消费者账号`。
+  - `POST /api/cart/items` 在 SPU 下架时返回 `code: 409` 和 `商品不可购买`。
+  - `quantity=0` 返回 `code: 400` 和 `数量必须大于等于1`。
+  - `quantity=999` 返回 `code: 409` 和 `库存不足`。
+  - 重复删除已删除的购物车项返回 `code: 404` 和 `购物车项不存在`。
+- DataGrip 看到的数据：
+  - `flyway_schema_history` 中版本 4 的脚本 `V4__add_cart_item.sql` 成功执行。
+  - `SHOW TABLES` 可见 `cart_item`。
+  - 重复加入同一 SKU 后，`cart_item` 只有一行，`quantity=2`。
+  - 删除购物车项后，购物车列表为空。
+- 关键修改：
+  - 新增 `V4__add_cart_item.sql`，创建 `cart_item` 表、唯一约束和索引。
+  - 新增 `cart` 模块的 controller、dto、entity、mapper、service、vo。
+  - `CurrentUser` 新增 `requiredConsumerId()`，用于消费者接口身份校验。
+  - `GlobalExceptionHandler` 增加 Spring Security `AccessDeniedException` 处理，账号类型不对返回 403。
+- 验证记录：
+  - `mvnw -DskipTests compile` 编译通过。
+  - Apifox 完成新增、重复新增、查询、修改、删除、重复删除、无 token、商家 token、参数错误、库存不足和商品不可购买验收。
+- 截图记录：
+  - `docs/images/day-10/flyway-v4-migration-success.png`
+  - `docs/images/day-10/cart-item-table-created.png`
+  - `docs/images/day-10/cart-add-success.png`
+  - `docs/images/day-10/cart-list-success.png`
+  - `docs/images/day-10/cart-update-success.png`
+  - `docs/images/day-10/cart-update-validation-400.png`
+  - `docs/images/day-10/cart-update-stock-409.png`
+  - `docs/images/day-10/cart-delete-success.png`
+  - `docs/images/day-10/cart-list-empty-after-delete.png`
+  - `docs/images/day-10/cart-delete-missing-404.png`
+  - `docs/images/day-10/cart-merchant-token-403.png`
+  - `docs/images/day-10/cart-product-not-purchasable-409.png`
+- 参考资料：
+  - `01-工程与基础业务开发链.md` 步骤 12。
+  - `06-每日推进看板与任务安排.md` 的每日任务、验收、侧边记录和 Git 提交规则。
+
+### 侧边任务/对话补充记录
+
+- 误改前端文件和 `dist` 删除：
+  - 疑惑点：发现前端文件有很多地方修改，不确定是不是助手误改；后来删除了 `dist` 文件夹。
+  - 最后理解：`dist` 是前端构建产物，可以删除并通过重新 build 生成；真正要保留的是源码和配置。恢复版本时保留了当天新增的协作规则。
+  - 后续会用到哪里：前端构建产物不要当成主线代码学习对象，Git 也不应该提交 `dist`。
+- 今天新增协作规则：
+  - 疑惑点：恢复版本前，希望先记住“前端由助手直接做，后端继续带着做”的规则。
+  - 最后理解：规则 10 已写入 `docs/collaboration-rules.md`；以后 Vue 页面由助手直接实现，后端代码继续由用户跟着写。
+  - 后续会用到哪里：每日任务安排时，前端实现不占用户主要学习任务；后端仍按 Controller/Service/Mapper/DTO 分步学习。
+- `SHOW TABLES` 与 DataGrip 左侧树不一致：
+  - 疑惑点：SQL 结果里有 `cart_item`，但左侧树里看不到。
+  - 最后理解：SQL 查询结果以数据库真实状态为准；左侧树可能需要刷新 schema。
+  - 后续会用到哪里：Flyway 建表、字段变更或索引变更后，如果图形界面没刷新，先用 SQL 直接确认。
+- 商家 token 为什么不能查购物车：
+  - 疑惑点：商家也是登录用户，为什么访问购物车不是空列表而是 403。
+  - 最后理解：购物车属于消费者业务域，商家账号没有消费者身份；返回 403 能更清楚表达“你登录了，但不是这个接口需要的角色”。
+  - 后续会用到哪里：订单、支付、商家后台、消费者前台都要区分账号类型，不能只判断“是否登录”。
+- 修改数量和新增数量的区别：
+  - 疑惑点：Mapper 里 `increaseQuantity` 和 `updateQuantityByIdAndConsumerId` 看起来都在改数量。
+  - 最后理解：新增同 SKU 时是“在原数量上加本次数量”；购物车页面修改数量时是“直接设置成用户输入的目标数量”。
+  - 后续会用到哪里：购物车页的加减按钮、数量输入框和订单确认前库存校验都要区分这两种语义。
+
+### 今天还没理解透
+
+- 购物车列表暂时只返回基础字段，还没有扩展为包含 SKU 名称、价格、图片、可售状态的展示型 VO。
+- 正式 ID 生成方案还没替换，目前仍使用 `System.currentTimeMillis()` 临时生成。
+- 购物车加入和修改数量还没有加事务，后续做订单和库存扣减时需要系统学习事务与并发控制。
+
+### 明天遇到再补
+
+- 进入步骤 13 普通订单时，重点关注“购物车项 -> 订单项”的数据复制、库存扣减和订单状态流转。
+- 如果先补前端购物车页，需要把后端购物车列表 VO 扩展到足够展示商品名称、价格和可售状态。

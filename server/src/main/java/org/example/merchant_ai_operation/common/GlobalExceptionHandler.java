@@ -10,6 +10,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.security.access.AccessDeniedException;
 
 // GlobalExceptionHandler 负责把后端抛出的异常统一转换成 ApiResponse JSON
 //@RestControllerAdvice意思是：这是一个全局 Controller 异常处理器。Controller 或它后面调用的代码抛异常时，它可以统一接住。
@@ -67,8 +68,15 @@ public class GlobalExceptionHandler {
         return ApiResponse.error(400, "请求体不能为空或 JSON 格式不正确");
     }
 
+    //处理身份错误的异常,不然他会丢给兜底而不是显示身份错误
+    @ExceptionHandler(AccessDeniedException.class)
+    public ApiResponse<Void> handleAccessDeniedException(AccessDeniedException ex) {
+        return ApiResponse.error(403, ex.getMessage());
+    }
+
 
     //兜底异常
+    //始终放在最下面兜底
     @ExceptionHandler(value = Exception.class)
     public ApiResponse<?> handleException(Exception ex){
         log.error("Unhandled exception", ex);
