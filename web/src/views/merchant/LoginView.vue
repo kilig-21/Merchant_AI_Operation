@@ -2,88 +2,10 @@
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
-
-const router = useRouter()
-const route = useRoute()
-const authStore = useAuthStore()
-
-const username = ref('merchant_a_admin')
-const password = ref('123456')
-const errorMessage = ref('')
-
-async function submitLogin() {
-  errorMessage.value = ''
-
-  try {
-    await authStore.signIn({
-      username: username.value,
-      password: password.value,
-    })
-
-    const redirect = typeof route.query.redirect === 'string'
-      ? route.query.redirect
-      : '/merchant/products'
-
-    router.push(redirect)
-  } catch (error) {
-    errorMessage.value = '登录失败，请确认后端已启动，或检查账号密码'
-  }
-}
+const router=useRouter();const route=useRoute();const auth=useAuthStore();const username=ref('merchant_a_admin');const password=ref('123456');const error=ref('');const loading=ref(false)
+async function submitLogin(){error.value='';loading.value=true;try{await auth.signIn({username:username.value,password:password.value});router.push(typeof route.query.redirect==='string'?route.query.redirect:'/merchant/products')}catch{error.value='登录失败，请检查账号密码或确认服务已启动。'}finally{loading.value=false}}
 </script>
-
-<template>
-  <main class="page">
-    <h1>商家登录</h1>
-
-    <form class="login-form" @submit.prevent="submitLogin">
-      <label>
-        账号
-        <input v-model="username" />
-      </label>
-
-      <label>
-        密码
-        <input v-model="password" type="password" />
-      </label>
-
-      <button type="submit">登录</button>
-
-      <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
-    </form>
-  </main>
-</template>
-
+<template><main class="merchant-login"><section class="login-copy"><p class="login-brand">ShelfFlow / merchant</p><div><p class="eyebrow">OPERATIONS CONSOLE</p><h1>清楚地看见<br>每一次经营。</h1><p>库存、商品与业务节奏，都在一个清晰的工作台里。</p></div><footer>为小型商家打造的经营工具</footer></section><section class="login-panel"><form @submit.prevent="submitLogin"><p class="eyebrow">商家工作台</p><h2>登录</h2><p class="form-intro">使用你的商家账户继续。</p><label class="field">账号<input v-model="username" autocomplete="username"/></label><label class="field">密码<input v-model="password" type="password" autocomplete="current-password"/></label><p v-if="error" class="page-error">{{ error }}</p><button class="primary-button" :disabled="loading">{{ loading?'正在登录…':'登录工作台' }}</button><a class="help" href="mailto:admin@shelfflow.local">忘记密码？联系管理员</a></form></section></main></template>
 <style scoped>
-.page {
-  padding: 32px;
-  font-family: Arial, sans-serif;
-}
-
-.login-form {
-  display: grid;
-  gap: 16px;
-  width: 320px;
-}
-
-label {
-  display: grid;
-  gap: 6px;
-}
-
-input {
-  padding: 8px 12px;
-  border: 1px solid #222;
-  font-size: 16px;
-}
-
-button {
-  padding: 8px 14px;
-  border: 1px solid #222;
-  background: white;
-  cursor: pointer;
-}
-
-.error {
-  color: #c00;
-}
+.merchant-login{min-height:100dvh;display:grid;grid-template-columns:1.05fr .95fr;background:#171a20}.login-copy{position:relative;display:flex;flex-direction:column;justify-content:space-between;padding:42px 60px;color:#fff;background:url('https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1500&q=85') center/cover}.login-copy:after{content:'';position:absolute;inset:0;background:rgba(23,26,32,.72)}.login-copy>*{position:relative;z-index:1}.login-brand{font-size:16px;font-weight:500;margin:0}.eyebrow{font-size:12px;letter-spacing:.8px;color:#8e8e8e;margin:0 0 18px}.login-copy h1{font-size:45px;letter-spacing:-1px;line-height:1.08;font-weight:500;margin:0}.login-copy div>p:last-child{font-size:15px;color:rgba(255,255,255,.72);line-height:1.6;max-width:320px;margin:22px 0 0}.login-copy footer{font-size:12px;color:rgba(255,255,255,.6)}.login-panel{background:#fff;display:grid;place-items:center;padding:42px}.login-panel form{width:min(370px,100%);display:grid;gap:18px}.login-panel h2{font-size:35px;font-weight:500;letter-spacing:-.5px;margin:0}.form-intro{font-size:14px;color:#5c5e62;margin:-7px 0 15px}.login-panel .primary-button{width:100%;margin-top:4px}.help{font-size:13px;color:#5c5e62;text-align:center;margin-top:4px}@media(max-width:760px){.merchant-login{grid-template-columns:1fr}.login-copy{min-height:290px;padding:28px}.login-copy h1{font-size:36px}.login-panel{padding:45px 24px;min-height:500px}}
 </style>

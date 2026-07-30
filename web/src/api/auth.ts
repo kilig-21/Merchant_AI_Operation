@@ -28,3 +28,8 @@ export async function getCurrentUser() {
   const response = await http.get<ApiResponse<CurrentUser>>('/auth/me')
   return response.data.data
 }
+
+export async function register(request: LoginRequest) {
+  const response = await http.post<ApiResponse<CurrentUser>>('/auth/register', request)
+  return response.data.data
+}

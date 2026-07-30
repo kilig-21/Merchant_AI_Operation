@@ -1,128 +1,15 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { getMerchantProducts, type MerchantProductItem } from '../../api/product'
-
-const products = ref<MerchantProductItem[]>([])
-const keyword = ref('')
-const loading = ref(false)
-const errorMessage = ref('')
-
-async function loadProducts() {
-  loading.value = true
-  errorMessage.value = ''
-
-  try {
-    products.value = await getMerchantProducts({
-      page: 1,
-      size: 10,
-      keyword: keyword.value || undefined,
-    })
-  } catch (error) {
-    errorMessage.value = '商品列表加载失败，请确认后端已启动并且已登录'
-  } finally {
-    loading.value = false
-  }
-}
-
-function statusText(status: MerchantProductItem['status']) {
-  if (status === 'ON_SALE') {
-    return '上架中'
-  }
-
-  if (status === 'OFF_SALE') {
-    return '已下架'
-  }
-
-  return '草稿'
-}
-
-onMounted(() => {
-  loadProducts()
-})
+import { useAuthStore } from '../../stores/auth'
+const auth=useAuthStore();const products=ref<MerchantProductItem[]>([]);const keyword=ref('');const loading=ref(false);const error=ref('')
+const demo:MerchantProductItem[]=[{id:1,name:'无线降噪耳机',description:'旗舰音质',status:'ON_SALE',skuCount:2,minSalePrice:699,totalAvailableStock:50,updatedAt:'今天 10:20'},{id:2,name:'便携桌面音箱',description:'紧凑桌面声场',status:'ON_SALE',skuCount:3,minSalePrice:289,totalAvailableStock:126,updatedAt:'昨天 18:40'},{id:3,name:'轻量保温杯',description:'新款待上架',status:'DRAFT',skuCount:1,minSalePrice:99,totalAvailableStock:80,updatedAt:'7月28日'},{id:4,name:'智能氛围灯',description:'已结束本季销售',status:'OFF_SALE',skuCount:2,minSalePrice:159,totalAvailableStock:0,updatedAt:'7月21日'}]
+const visible=computed(()=>products.value.filter(p=>p.name.includes(keyword.value)))
+function status(s:MerchantProductItem['status']){return s==='ON_SALE'?'上架中':s==='OFF_SALE'?'已下架':'草稿'}
+async function load(){loading.value=true;error.value='';try{products.value=await getMerchantProducts({page:1,size:20,keyword:keyword.value||undefined});if(!products.value.length)products.value=demo}catch{products.value=demo;error.value='当前为演示数据，连接服务后将展示真实商品。'}finally{loading.value=false}}
+onMounted(load)
 </script>
-
-<template>
-  <main class="page">
-    <h1>商家商品管理</h1>
-
-    <section class="toolbar">
-      <input v-model="keyword" placeholder="输入商品名称搜索" />
-      <button @click="loadProducts">搜索</button>
-    </section>
-
-    <p v-if="loading">加载中...</p>
-    <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
-
-    <table v-if="!loading && products.length > 0">
-      <thead>
-        <tr>
-          <th>商品名称</th>
-          <th>状态</th>
-          <th>SKU 数</th>
-          <th>最低价</th>
-          <th>总库存</th>
-        </tr>
-      </thead>
-
-      <tbody>
-        <tr v-for="product in products" :key="product.id">
-          <td>{{ product.name }}</td>
-          <td>{{ statusText(product.status) }}</td>
-          <td>{{ product.skuCount }}</td>
-          <td>{{ product.minSalePrice ?? '-' }}</td>
-          <td>{{ product.totalAvailableStock }}</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <p v-if="!loading && products.length === 0">暂无商品</p>
-  </main>
-</template>
-
+<template><main class="merchant-shell"><aside class="sidebar"><RouterLink class="logo" to="/merchant/products">ShelfFlow</RouterLink><p class="sidebar-label">商家工作台</p><nav><RouterLink class="active" to="/merchant/products">商品管理</RouterLink><a href="#">订单管理</a><a href="#">经营概览</a></nav><button class="signout" @click="auth.signOut()">退出登录</button></aside><section class="workspace"><header class="workspace-top"><div><p class="eyebrow">CATALOG / 2026</p><h1>商品管理</h1></div><div class="account">{{ auth.user?.username || 'merchant admin' }}</div></header><section class="metrics"><div><span>商品总数</span><strong>{{ products.length }}</strong></div><div><span>上架商品</span><strong>{{ products.filter(p=>p.status==='ON_SALE').length }}</strong></div><div><span>可售库存</span><strong>{{ products.reduce((n,p)=>n+p.totalAvailableStock,0) }}</strong></div><button class="primary-button">新增商品</button></section><section class="product-toolbar"><input v-model="keyword" class="search-input" placeholder="搜索商品名称" @keyup.enter="load"/><button class="secondary-button" @click="load">搜索</button><span>{{ visible.length }} 个结果</span></section><p v-if="error" class="demo-note">{{ error }}</p><section class="table-wrap"><div v-if="loading" class="loading-lines"><i v-for="i in 6" :key="i"/></div><table v-else-if="visible.length"><thead><tr><th>商品</th><th>价格</th><th>库存</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="product in visible" :key="product.id"><td><div class="product-cell"><span>{{ product.name.slice(0,1) }}</span><div><b>{{ product.name }}</b><small>{{ product.skuCount }} 个 SKU · {{ product.updatedAt }}</small></div></div></td><td>¥ {{ product.minSalePrice ?? '—' }}</td><td>{{ product.totalAvailableStock }}</td><td><em>{{ status(product.status) }}</em></td><td><button class="text-button">查看详情</button></td></tr></tbody></table><div v-else class="empty-state"><h2>暂时没有商品</h2><p>可通过“新增商品”开始管理你的货品。</p></div></section></section></main></template>
 <style scoped>
-.page {
-  padding: 32px;
-  font-family: Arial, sans-serif;
-}
-
-.toolbar {
-  display: flex;
-  gap: 12px;
-  margin: 24px 0;
-}
-
-input {
-  width: 260px;
-  padding: 8px 12px;
-  border: 1px solid #222;
-  font-size: 16px;
-}
-
-button {
-  padding: 8px 14px;
-  border: 1px solid #222;
-  background: white;
-  cursor: pointer;
-}
-
-table {
-  width: 760px;
-  margin-top: 16px;
-  border-collapse: collapse;
-}
-
-th,
-td {
-  padding: 10px 12px;
-  border: 1px solid #ddd;
-  text-align: left;
-}
-
-th {
-  background: #f6f6f6;
-}
-
-.error {
-  color: #c00;
-}
+.merchant-shell{min-height:100dvh;display:grid;grid-template-columns:224px 1fr;background:#fff}.sidebar{padding:30px 20px;background:#171a20;color:#fff;display:flex;flex-direction:column}.logo{font-size:18px;font-weight:500}.sidebar-label{font-size:12px;color:#8e8e8e;margin:38px 0 14px}.sidebar nav{display:grid;gap:4px}.sidebar nav a{padding:11px 12px;border-radius:4px;font-size:14px;color:#b8b9bc}.sidebar nav .active,.sidebar nav a:hover{color:#fff;background:rgba(255,255,255,.09)}.signout{margin-top:auto;background:none;border:0;padding:8px 12px;text-align:left;color:#8e8e8e;font-size:13px}.workspace{padding:42px clamp(28px,5vw,74px)}.workspace-top{display:flex;justify-content:space-between;align-items:start}.eyebrow{font-size:12px;letter-spacing:.7px;color:#5c5e62;margin:0 0 13px}.workspace h1{font-size:34px;letter-spacing:-.6px;font-weight:500;margin:0}.account{font-size:13px;padding-top:10px;color:#5c5e62}.metrics{display:grid;grid-template-columns:repeat(3,150px) auto;gap:30px;align-items:center;padding:31px 0}.metrics div{display:grid;gap:7px}.metrics span{font-size:12px;color:#5c5e62}.metrics strong{font-size:23px;font-weight:500}.metrics .primary-button{justify-self:end}.product-toolbar{display:flex;align-items:center;gap:10px;border-top:1px solid #eee;padding:23px 0}.product-toolbar input{max-width:290px}.product-toolbar span{margin-left:auto;font-size:13px;color:#5c5e62}.demo-note{font-size:12px;color:#8e8e8e;margin:0 0 12px}.table-wrap{border-top:1px solid #eee}table{width:100%;border-collapse:collapse}th{height:46px;text-align:left;font-size:12px;color:#5c5e62;font-weight:400;border-bottom:1px solid #eee}td{height:83px;font-size:14px;border-bottom:1px solid #eee}.product-cell{display:flex;align-items:center;gap:13px}.product-cell>span{display:grid;place-items:center;width:38px;height:38px;background:#f4f4f4;font-size:14px}.product-cell b{font-weight:500;display:block}.product-cell small{display:block;font-size:12px;color:#8e8e8e;margin-top:4px}em{font-size:13px;font-style:normal}td .text-button{font-size:13px}.loading-lines i{display:block;height:83px;border-bottom:1px solid #eee;background:linear-gradient(90deg,#fff,#f4f4f4,#fff)}@media(max-width:760px){.merchant-shell{grid-template-columns:1fr}.sidebar{display:none}.workspace{padding:28px 16px}.metrics{grid-template-columns:repeat(2,1fr);gap:20px}.metrics .primary-button{grid-column:span 2;justify-self:stretch}.product-toolbar{flex-wrap:wrap}.product-toolbar input{max-width:none}.product-toolbar span{width:100%;margin:0}th:nth-child(2),td:nth-child(2){display:none}table{min-width:560px}.table-wrap{overflow:auto}}
 </style>
