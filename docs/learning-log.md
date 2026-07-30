@@ -1250,3 +1250,42 @@ PAID --申请售后--> AFTER_SALE
 ### 明天遇到再补
 
 - 进入步骤 14：实现 `POST /api/orders`，重点关注“购物车项 -> 订单项”的数据复制、后端重新读取价格、库存条件扣减和事务回滚。
+
+## Day 11 加餐：步骤 14 普通下单事务起步
+
+### 今天额外推进到哪里
+
+- 在步骤 13 已完成并提交后，继续开启了步骤 14 的前半段。
+- 已新增订单创建请求 `CreateOrderRequest`，使用 `List<Long> cartItemIds` 表示一次可以结算多个购物车项。
+- 已新增订单创建返回 `CreateOrderVO`，用于返回 `orderId`、`orderNo`、`status`、`totalAmount`、`expireAt`。
+- 已新增订单实体 `CommerceOrder` 和订单明细实体 `CommerceOrderItem`。
+- 已新增 `CommerceOrderMapper` 和 `CommerceOrderItemMapper`，先支持订单主表和订单明细单条插入。
+- 已新增 `OrderSkuSnapshotVO`，用于下单前把购物车项、SKU、SPU 的关键信息合并查询出来。
+- 已扩展 `ProductSkuMapper`：
+  - `selectOrderSkuSnapshots(...)`：根据当前消费者和购物车项列表查询下单快照。
+  - `lockStock(...)`：通过 `available_stock >= quantity` 做条件扣库存，并把库存转入 `locked_stock`。
+- 已新增 `V6__add_auto_increment_to_order_tables.sql`，修复订单表和订单明细表的主键自增策略。
+- 已起草 `OrderService.createOrderVO(...)` 的事务骨架，目前完成消费者身份校验、购物车项快照查询、购物车项存在性校验、同商家校验、上下架校验和库存预校验；完整下单流程明天继续。
+
+### 今天额外遇到的问题
+
+| 问题 | 出现场景 | 最后怎么解决 | 是否已理解 |
+|---|---|---|---|
+| `INSERT` 语句为什么没有 `FROM` | 写 `CommerceOrderMapper.insert` 时对 SQL 结构产生疑问 | 理解为 `INSERT INTO 表名 (...) VALUES (...)` 不需要 `FROM`；`FROM` 常用于 `SELECT` 和 `DELETE` | 是 |
+| Mapper 里提示主键没有默认值 | `@Options(useGeneratedKeys = true)` 和表结构 `id BIGINT PRIMARY KEY` 不匹配 | 新增 V6，把 `commerce_order.id` 和 `commerce_order_item.id` 改成 `AUTO_INCREMENT` | 是 |
+| Flyway V5 checksum mismatch | V5 已执行后，本地文件 checksum 和数据库历史记录不一致 | 在本地开发库中等价执行 repair：更新 `flyway_schema_history` 的 V5 checksum，然后继续执行 V6 | 是 |
+| `CommerceOrderItemMapper` 放错包 | 文件最初建到了 `cart.mapper` | 移动到 `order.mapper`，因为它操作的是订单明细表，不属于购物车模块 | 是 |
+| 注解 SQL 里能不能写 `<script>` / `<foreach>` | 批量按 `cartItemIds` 查询下单快照时 IDEA 有提示 | 确认 MyBatis 注解支持动态 SQL；多参数方法必须配合 `@Param` 使用 | 是 |
+| `CurrentUser` 找不到 Bean | `OrderService` 构造注入了 `CurrentUser` | 理解 `CurrentUser` 是静态工具类，不是 Spring Bean；改为 `CurrentUser.requiredConsumerId()` 静态调用 | 是 |
+
+### 明天继续
+
+- 继续完成 `OrderService.createOrderVO(...)`：
+  - 计算 `totalAmount`
+  - 生成 `orderNo`
+  - 插入 `commerce_order`
+  - 条件扣库存
+  - 插入 `commerce_order_item`
+  - 删除已结算购物车项
+- 新增 `OrderController`，暴露 `POST /api/orders`。
+- 编译并用 Apifox 验证消费者从购物车创建普通订单。
