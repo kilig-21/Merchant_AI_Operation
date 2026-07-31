@@ -1289,3 +1289,90 @@ PAID --申请售后--> AFTER_SALE
   - 删除已结算购物车项
 - 新增 `OrderController`，暴露 `POST /api/orders`。
 - 编译并用 Apifox 验证消费者从购物车创建普通订单。
+
+## Day 12：2026-07-31
+
+### 今天对应任务
+
+- 当前文档：`01-工程与基础业务开发链.md`
+- 当前步骤：步骤 14：实现普通下单事务
+- 今日目标：完成 `POST /api/orders`，从购物车创建待支付订单，并验证库存锁定、订单明细和失败回滚。
+
+### 今天学了什么
+
+- `OrderService` 的职责：
+  - 它解决什么问题：下单不是单表操作，而是要同时读购物车与商品快照、写订单主表、锁库存、写订单明细、删除购物车项。
+  - 我现在会用到哪里：步骤 15 模拟支付、后续超时关单和促销订单都会继续围绕订单状态与库存账展开。
+- `@Transactional`：
+  - 它解决什么问题：让订单主表、库存锁定、订单明细和购物车删除处在同一个事务里，中间任何一步失败都整体回滚。
+  - 我现在会用到哪里：库存不足、订单项写入失败、后续支付状态变更和关单释放库存都需要事务保证数据不留半截。
+- 条件扣库存：
+  - 它解决什么问题：`UPDATE product_sku SET available_stock = available_stock - quantity, locked_stock = locked_stock + quantity WHERE available_stock >= quantity` 让库存不足时更新失败，避免库存扣成负数。
+  - 我现在会用到哪里：普通下单、模拟支付和后续限量促销最终扣减都要用受影响行数判断业务是否成功。
+- 订单明细 `CommerceOrderItem`：
+  - 它解决什么问题：订单主表只记录订单整体，订单明细记录这笔订单里买了哪些 SKU、买几个、下单时叫什么名字、下单时是多少钱。
+  - 我现在会用到哪里：订单详情、商家订单列表、销量统计和 Agent 经营数据分析都会查询订单明细。
+- 订单号生成：
+  - 它解决什么问题：`orderNo` 是给用户、客服和支付流程看的业务编号，临时使用 `ORD + yyyyMMddHHmmss + 6 位随机数`。
+  - 我现在会用到哪里：下单成功响应、模拟支付、订单查询都可以展示或定位业务订单号；正式方案后续再替换。
+
+### 今天遇到的问题
+
+| 问题 | 出现场景 | 最后怎么解决 | 是否已彻底理解 |
+|---|---|---|---|
+| 不理解 `CommerceOrderItem` 的作用 | 看 `OrderService` 里把 `snapshot` 转成 `CommerceOrderItem` 的大段代码时 | 理解为订单明细表负责保存“这笔订单买了哪些 SKU”，并保存商品名和价格快照，避免商品以后改名/改价影响历史订单 | 是 |
+| 不理解 `generateOrderNo()` | 看到 `LocalDateTime.now().format(...)` 和 `ThreadLocalRandom.current()` | 理解为 `DateTimeFormatter.ofPattern(...)` 把当前时间格式化成订单号需要的样子，`ThreadLocalRandom.current()` 生成当前线程使用的 6 位随机数 | 是 |
+| 加入购物车返回 401 | Apifox 中误用 `DELETE /api/cart/items`，并且请求体里混淆了 SKU ID 和购物车项 ID | 改为 `POST /api/cart/items`，Body 使用真正的 `skuId=1784970220075`，成功生成购物车项 | 是 |
+| DataGrip 执行 `UPDATE product_sku SET available_stock = 0` 后查询仍是 49 | 做下单前库存变更的失败验收时 | 发现 DataGrip 当前处于事务模式，更新需要提交；提交后查询可见 `available_stock=0` | 是 |
+| 下单失败后要不要删除购物车项 | 库存不足时 `POST /api/orders` 返回 `商品库存不足` 后继续查购物车 | 理解为失败下单不能吞掉购物车项，用户可以等商家补库存后继续结算或自己删除 | 是 |
+
+### 重要记录
+
+- 成功的接口：
+  - `POST /api/cart/items`，消费者 token，Body 为 `{"skuId":1784970220075,"quantity":1}`，返回购物车项 `id=1785483128179`。
+  - `POST /api/orders`，Body 为 `{"cartItemIds":[1785483128179]}`，返回 `orderId=1`、`orderNo=ORD20260731153359385003`、`status=PENDING_PAYMENT`、`totalAmount=199.00`。
+- 失败和边界接口：
+  - `POST /api/cart/items`，Body 为 `{"skuId":1784970220075,"quantity":999}`，返回 `code=409` 和 `库存不足`。
+  - 手动把 `available_stock` 改为 `0` 后，`POST /api/orders` 使用 `cartItemIds=[1785485017013]` 返回 `code=409` 和 `商品库存不足`。
+- DataGrip 看到的数据：
+  - `commerce_order` 只有一笔成功订单：`id=1`、`status=PENDING_PAYMENT`、`total_amount=199.00`。
+  - `commerce_order_item` 中存在 `order_id=1`、`sku_id=1784970220075`、`sku_name_snapshot=白色 / 标准版`。
+  - 成功下单后 SKU 库存为 `available_stock=49`、`locked_stock=1`。
+  - 成功下单后购物车项 `1785483128179` 已删除。
+  - 库存不足失败后没有新增订单，购物车项 `1785485017013` 仍保留。
+  - 验收结束后已恢复 SKU 库存为 `available_stock=49`、`locked_stock=1`。
+- 关键修改：
+  - 补完 `OrderService.createOrderVO(...)` 的完整事务逻辑。
+  - 新增 `OrderController`，暴露 `POST /api/orders`。
+- 验证记录：
+  - `mvnw -DskipTests compile` 编译通过。
+  - Apifox 与 DataGrip 完成成功下单、库存不足、失败不新增订单、失败保留购物车项的验收。
+- 参考资料：
+  - `01-工程与基础业务开发链.md` 步骤 14。
+  - `02-交易库存限量促销开发链.md` 的库存账说明：`available_stock` 创建待支付订单时减少，`locked_stock` 创建待支付订单时增加。
+
+### 侧边任务/对话补充记录
+
+- 订单主表和订单明细表的关系：
+  - 疑惑点：为什么 `CommerceOrderItem` 要单独创建，看起来像重复保存商品信息。
+  - 最后理解：`commerce_order` 保存订单整体，`commerce_order_item` 保存订单里的商品清单；一笔订单可以有多个 SKU，所以主表一行会对应明细表多行。
+  - 后续会用到哪里：订单详情、商家查看订单、销售统计都要依赖订单明细。
+- `ThreadLocalRandom.current()` 和 `DateTimeFormatter.ofPattern(...)`：
+  - 疑惑点：为什么生成订单号要这两个工具。
+  - 最后理解：`DateTimeFormatter.ofPattern("yyyyMMddHHmmss")` 负责把当前时间变成紧凑字符串；`ThreadLocalRandom.current().nextInt(...)` 负责生成当前线程里的随机数，降低同一秒内订单号重复的概率。
+  - 后续会用到哪里：临时订单号生成方案先服务步骤 14/15，后面再统一替换为正式 ID 或订单号方案。
+- DataGrip 事务提交：
+  - 疑惑点：`UPDATE` 执行后查询结果没有变化。
+  - 最后理解：图形数据库工具可能处于手动事务模式，更新后需要点提交或执行 `COMMIT`，否则修改不会真正提交。
+  - 后续会用到哪里：手动改库存、修测试数据、做账本验收时要注意提交事务。
+
+### 今天还没理解透
+
+- 当前订单号只是临时方案，还没有彻底解决高并发下绝对唯一的问题，后续需要正式 ID/订单号生成方案。
+- 现在只完成下单锁库存，支付成功后如何从 `locked_stock` 移出还没做。
+- 库存不足失败主要靠手工验收，后续可以补 Service 集成测试。
+
+### 明天遇到再补
+
+- 进入步骤 15：实现模拟支付和消费者订单查询。
+- 重点关注：只能支付本人订单；只能支付 `PENDING_PAYMENT` 状态；支付成功后订单变为 `PAID`，并把 `locked_stock` 减少。
