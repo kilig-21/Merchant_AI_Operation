@@ -1347,6 +1347,17 @@ PAID --申请售后--> AFTER_SALE
 - 验证记录：
   - `mvnw -DskipTests compile` 编译通过。
   - Apifox 与 DataGrip 完成成功下单、库存不足、失败不新增订单、失败保留购物车项的验收。
+- 截图记录：
+  - `docs/images/day-12/cart-add-success.png`
+  - `docs/images/day-12/order-create-success.png`
+  - `docs/images/day-12/datagrip-order-created.png`
+  - `docs/images/day-12/datagrip-order-item-created.png`
+  - `docs/images/day-12/datagrip-stock-locked.png`
+  - `docs/images/day-12/cart-overstock-409.png`
+  - `docs/images/day-12/order-stock-insufficient-409.png`
+  - `docs/images/day-12/datagrip-no-extra-order.png`
+  - `docs/images/day-12/datagrip-cart-item-kept-after-failure.png`
+  - `docs/images/day-12/datagrip-stock-restored.png`
 - 参考资料：
   - `01-工程与基础业务开发链.md` 步骤 14。
   - `02-交易库存限量促销开发链.md` 的库存账说明：`available_stock` 创建待支付订单时减少，`locked_stock` 创建待支付订单时增加。
