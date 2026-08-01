@@ -8,6 +8,8 @@ import StoreProductsView from '../views/consumer/StoreProductsView.vue'
 import ProductDetailView from '../views/consumer/ProductDetailView.vue'
 import AuthView from '../views/consumer/AuthView.vue'
 import CartView from '../views/consumer/CartView.vue'
+import OrderListView from '../views/consumer/OrderListView.vue'
+import OrderDetailView from '../views/consumer/OrderDetailView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -35,7 +37,9 @@ const router = createRouter({
     { path: '/products/:spuId', component: ProductDetailView },
     { path: '/consumer/login', component: AuthView, props: { mode: 'login' } },
     { path: '/consumer/register', component: AuthView, props: { mode: 'register' } },
-    { path: '/cart', component: CartView },
+    { path: '/cart', component: CartView, meta: { requiresConsumer: true } },
+    { path: '/orders', component: OrderListView, meta: { requiresConsumer: true } },
+    { path: '/orders/:id', component: OrderDetailView, meta: { requiresConsumer: true } },
   ],
 })
 
@@ -55,6 +59,17 @@ router.beforeEach((to) => {
     return {
       path: '/403',
     }
+  }
+
+  if (to.meta.requiresConsumer && !authStore.token) {
+    return {
+      path: '/consumer/login',
+      query: { redirect: to.fullPath },
+    }
+  }
+
+  if (to.meta.requiresConsumer && authStore.user && authStore.isMerchant) {
+    return { path: '/403' }
   }
 })
 

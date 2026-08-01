@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import ConsumerNav from '../../components/ConsumerNav.vue'
 import ProductMedia from '../../components/ProductMedia.vue'
 import { addCartItem } from '../../api/cart'
+import { apiErrorMessage } from '../../api/http'
 import { getProductDetail, type PublicProductDetail, type PublicSku } from '../../api/product'
 import { currency, findDemoProduct, makeDemoDetail } from '../../data/consumerCatalog'
 
@@ -44,13 +45,8 @@ async function addToBag() {
   try {
     await addCartItem(currentSku.value.id, quantity.value)
     message.value = '已加入购物袋。'
-  } catch {
-    const items = JSON.parse(localStorage.getItem('morrow_demo_bag') ?? '[]')
-    const existing = items.find((item: { skuId: number }) => item.skuId === currentSku.value.id)
-    if (existing) existing.quantity += quantity.value
-    else items.push({ id: Date.now(), skuId: currentSku.value.id, quantity: quantity.value, name: product.value?.name, skuName: currentSku.value.skuName, price: currentSku.value.salePrice })
-    localStorage.setItem('morrow_demo_bag', JSON.stringify(items))
-    message.value = '已加入演示购物袋。'
+  } catch (error) {
+    message.value = apiErrorMessage(error)
   } finally {
     submitting.value = false
   }

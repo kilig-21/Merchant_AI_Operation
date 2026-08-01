@@ -6,6 +6,7 @@ const route = useRoute()
 const open = ref(false)
 const close = () => { open.value = false }
 const isShop = computed(() => route.path.startsWith('/stores') || route.path.startsWith('/products'))
+const isOrders = computed(() => route.path.startsWith('/orders'))
 </script>
 
 <template>
@@ -15,6 +16,7 @@ const isShop = computed(() => route.path.startsWith('/stores') || route.path.sta
       <div class="consumer-nav__links" :class="{ 'is-open': open }">
         <RouterLink to="/" @click="close">首页</RouterLink>
         <RouterLink :class="{ active: isShop }" to="/stores/1/products" @click="close">选购</RouterLink>
+        <RouterLink :class="{ active: isOrders }" to="/orders" @click="close">订单</RouterLink>
         <RouterLink to="/consumer/login" @click="close">账户</RouterLink>
         <RouterLink class="bag-link" to="/cart" @click="close" aria-label="购物袋">
           <span aria-hidden="true">◌</span><b>购物袋</b>
