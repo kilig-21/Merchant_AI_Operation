@@ -1387,3 +1387,99 @@ PAID --申请售后--> AFTER_SALE
 
 - 进入步骤 15：实现模拟支付和消费者订单查询。
 - 重点关注：只能支付本人订单；只能支付 `PENDING_PAYMENT` 状态；支付成功后订单变为 `PAID`，并把 `locked_stock` 减少。
+
+## Day 13：2026-08-01
+
+### 今天对应任务
+
+- 当前文档：`01-工程与基础业务开发链.md`
+- 当前步骤：步骤 15：实现模拟支付和消费者订单查询
+- 今日目标：完成 `POST /api/orders/{id}/mock-pay`，并实现消费者订单列表与订单详情查询。
+
+### 今天学了什么
+
+- 模拟支付的状态条件更新：
+  - 它解决什么问题：只有本人且状态仍为 `PENDING_PAYMENT` 的订单才能被更新为 `PAID`。
+  - 我现在会用到哪里：`CommerceOrderMapper.markPaidByIdAndConsumerId(...)` 使用 `WHERE id = ? AND consumer_id = ? AND status = 'PENDING_PAYMENT'`，第一次支付影响 1 行，第二次重复支付影响 0 行。
+- 支付成功后的库存账：
+  - 它解决什么问题：下单时 `available_stock` 已经减少并转入 `locked_stock`，支付成功只需要把锁定库存移出。
+  - 我现在会用到哪里：`ProductSkuMapper.deductLockedStock(...)` 只减少 `locked_stock`，不回加 `available_stock`。
+- 消费者订单查询的权限边界：
+  - 它解决什么问题：消费者只能查自己的订单，不能靠前端传 `consumerId`。
+  - 我现在会用到哪里：订单详情先用 `selectByOrderIdAndConsumerId(orderId, consumerId)` 查订单主表，确认归属后再查订单明细。
+- 列表接口和详情接口的分工：
+  - 它解决什么问题：订单列表只返回订单主信息，避免每条订单都查明细导致接口变重；订单详情再返回 `items`。
+  - 我现在会用到哪里：`GET /api/orders` 的 `items=[]`，`GET /api/orders/{id}` 才返回 `OrderItemVO` 明细。
+- VO 与查询结果对象：
+  - 它解决什么问题：不是所有放在 `vo` 包里的对象都一定是前端返回对象，早期项目里可能混有 Mapper 查询结果承载对象。
+  - 我现在会用到哪里：`OrderSkuSnapshotVO` 实际是下单前查询结果，用来做业务判断；`OrderItemVO` 和 `OrderDetailVO` 才是这次订单查询接口的返回 VO。
+
+### 今天遇到的问题
+
+| 问题 | 出现场景 | 最后怎么解决 | 是否已彻底理解 |
+|---|---|---|---|
+| 误以为两次模拟支付都成功 | Apifox 两次请求 HTTP 状态都显示 200 | 区分 HTTP 状态和业务状态：第一次响应体 `code=0` 是成功；第二次响应体 `code=409` 是重复支付失败，HTTP 200 只是说明后端正常返回了统一 JSON | 是 |
+| 不清楚为什么 `OrderSkuSnapshotVO` 不能复用为订单详情返回 | 设计消费者订单详情 VO 时，发现已有下单快照对象字段也包含 SKU 名、价格和数量 | 理解为 `OrderSkuSnapshotVO` 来源于购物车、SKU、SPU 的下单前查询，包含库存和上下架状态；订单详情应来源于 `commerce_order` 和 `commerce_order_item`，展示历史订单快照 | 是 |
+| 疑惑“下单前快照为什么叫 VO” | 追问 `OrderSkuSnapshotVO` 既然不是前端展示对象，为什么命名为 VO | 理解为这是早期命名不严谨，它更像 Mapper 查询结果承载对象；今天先不重命名，避免牵扯已有代码，后续重构可改为 `OrderSkuSnapshotRow` 一类名称 | 是 |
+| 不清楚几个 Mapper 查询的区别 | 新增 `selectByOrderId`、`selectItemVOByOrderId`、`selectByConsumerId`、`selectByOrderIdAndConsumerId` 后容易混 | 按用途区分：主表 Mapper 查列表和详情归属；明细 Mapper 一个给支付扣锁定库存用，一个给订单详情展示用 | 是 |
+
+### 重要记录
+
+- 成功的接口：
+  - `POST /api/orders/1/mock-pay`，消费者 token，第一次返回 `code=0`。
+  - `GET /api/orders`，消费者 token，返回订单列表，包含 `id=1`、`status=PAID`、`totalAmount=199.00`，列表 `items=[]`。
+  - `GET /api/orders/1`，消费者 token，返回订单详情，`items` 中包含 SKU `1784970220075`、`skuNameSnapshot=白色 / 标准版`、`salePrice=199.00`、`quantity=1`。
+- 失败和边界接口：
+  - `POST /api/orders/1/mock-pay` 第二次重复支付返回 `code=409` 和 `订单不存在或状态不允许支付`。
+  - `GET /api/orders/1` 使用商家 token 返回 `code=403` 和 `不是消费者账号`。
+- DataGrip 看到的数据：
+  - `commerce_order.id=1` 的 `status=PAID`、`total_amount=199.00`。
+  - `product_sku.id=1784970220075` 的 `available_stock=49`、`locked_stock=0`。
+- 关键修改：
+  - `CommerceOrderMapper` 新增订单状态条件更新、我的订单列表查询、我的订单详情主表查询。
+  - `CommerceOrderItemMapper` 新增订单详情明细 VO 查询。
+  - `ProductSkuMapper` 新增支付成功后扣减 `locked_stock` 的方法。
+  - `OrderService` 新增 `mockPay(...)`、`listMyOrders()`、`getMyOrderDetail(...)`。
+  - `OrderController` 新增 `POST /api/orders/{id}/mock-pay`、`GET /api/orders`、`GET /api/orders/{id}`。
+  - 新增 `OrderItemVO` 和 `OrderDetailVO`。
+- 验证记录：
+  - `mvnw -DskipTests compile` 编译通过。
+  - Apifox 完成模拟支付、重复支付、消费者订单列表、消费者订单详情、商家越权访问失败验收。
+  - DataGrip 完成订单状态和库存账验收。
+- 截图记录：
+  - `docs/images/day-13/mock-pay-success.png`
+  - `docs/images/day-13/mock-pay-repeat-409.png`
+  - `docs/images/day-13/datagrip-order-paid.png`
+  - `docs/images/day-13/datagrip-stock-paid.png`
+  - `docs/images/day-13/order-list-success.png`
+  - `docs/images/day-13/order-detail-success.png`
+  - `docs/images/day-13/merchant-order-detail-403.png`
+- 参考资料：
+  - `01-工程与基础业务开发链.md` 步骤 15。
+  - `02-交易库存限量促销开发链.md` 的库存账说明：支付成功后 `locked_stock` 减少，`available_stock` 不回加。
+
+### 侧边任务/对话补充记录
+
+- HTTP 200 与业务 `code` 的区别：
+  - 疑惑点：Apifox 两次请求都显示 HTTP 200，看起来像两次支付都成功。
+  - 最后理解：本项目当前统一返回 JSON，HTTP 200 表示后端正常返回；业务是否成功看响应体里的 `code`。第一次 `code=0`，第二次 `code=409`，所以重复支付已经被拦住。
+  - 后续会用到哪里：所有接口验收都要同时看 HTTP 状态和业务 `code/message`，特别是权限、库存不足、重复操作等业务失败。
+- `OrderSkuSnapshotVO` 的命名边界：
+  - 疑惑点：既然是下单前判断能不能生成订单，为什么叫 VO。
+  - 最后理解：它现在更准确地说是 Mapper 查询结果承载对象，名字有历史遗留；真正返回给前端的订单查询对象是 `OrderDetailVO` 和 `OrderItemVO`。
+  - 后续会用到哪里：后面如果整理包结构，可以把这类对象移到 `query` 或改名为 `OrderSkuSnapshotRow`，减少概念混淆。
+- 多个 Mapper 查询方法的分工：
+  - 疑惑点：`selectByOrderId`、`selectItemVOByOrderId`、`selectByConsumerId`、`selectByOrderIdAndConsumerId` 看起来都在查订单，容易混。
+  - 最后理解：主表 Mapper 负责订单归属和整体信息；明细 Mapper 负责订单里的 SKU。Entity 查询服务内部业务，VO 查询服务接口返回。
+  - 后续会用到哪里：商家订单列表、售后、统计分析和 Agent 经营数据查询都会继续用“主表确认边界，明细提供内容”的思路。
+
+### 今天还没理解透
+
+- 订单查询还没有分页，后续前端订单页面或订单数量变多时需要补分页参数。
+- 当前模拟支付没有真实支付流水表，后续接真实支付或支付回调时需要增加支付单、回调幂等和审计记录。
+- 订单超时关闭和库存释放还没做，后续进入步骤 17/18/20 时继续验证库存账和幂等。
+
+### 明天遇到再补
+
+- 优先进入步骤 16：补齐第一个完整页面闭环，让消费者能在页面完成浏览商品、购物车、提交订单、模拟支付和订单查询。
+- 如果继续后端，则进入步骤 17：手工验证库存账，覆盖下单未支付、模拟支付、后续超时关闭三种路径。

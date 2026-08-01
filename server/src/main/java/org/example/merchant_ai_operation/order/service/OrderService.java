@@ -9,6 +9,8 @@ import org.example.merchant_ai_operation.order.entity.CommerceOrderItem;
 import org.example.merchant_ai_operation.order.mapper.CommerceOrderItemMapper;
 import org.example.merchant_ai_operation.order.mapper.CommerceOrderMapper;
 import org.example.merchant_ai_operation.order.vo.CreateOrderVO;
+import org.example.merchant_ai_operation.order.vo.OrderDetailVO;
+import org.example.merchant_ai_operation.order.vo.OrderItemVO;
 import org.example.merchant_ai_operation.order.vo.OrderSkuSnapshotVO;
 import org.example.merchant_ai_operation.security.CurrentUser;
 import org.springframework.stereotype.Service;
@@ -39,6 +41,7 @@ public class OrderService {
     }
 
 
+    //创建订单的service方法
     @Transactional
     public CreateOrderVO createOrderVO(CreateOrderRequest request) {
         Long consumerId = CurrentUser.requiredConsumerId();
@@ -118,6 +121,83 @@ public class OrderService {
         );
     }
 
+
+    @Transactional
+    public void mockPay(Long orderId){
+        Long consumerId = CurrentUser.requiredConsumerId();
+
+        int paid = commerceOrderMapper.markPaidByIdAndConsumerId(orderId, consumerId);
+
+        if(paid != 1){
+            throw new BizException("订单不存在或状态不允许支付");
+        }
+
+        //创建订单明细表
+        List<CommerceOrderItem> items = commerceOrderItemMapper.selectByOrderId(orderId);
+        if (items.isEmpty()) {
+            throw new BizException("订单明细不存在");
+        }
+
+        for (CommerceOrderItem item : items) {
+            //依次遍历订单从锁定库存中移出
+            int deducted = productSkuMapper.deductLockedStock(
+                    item.getSkuId(),
+                    item.getQuantity()
+            );
+            //一般一次就释放一个订单,所以这里如果不等于1就失败;通过@Transactional直接全部退回;
+            if (deducted != 1) {
+                throw new BizException("订单锁定库存异常");
+            }
+        }
+    }
+
+    //列出订单列表
+    public List<OrderDetailVO> listMyOrders(){
+        Long  consumerId = CurrentUser.requiredConsumerId();
+
+        return commerceOrderMapper.selectByConsumerId(consumerId)
+                .stream()
+                .map(order -> new OrderDetailVO(
+                        order.getId(),
+                        order.getOrderNo(),
+                        order.getTenantId(),
+                        order.getStatus(),
+                        order.getTotalAmount(),
+                        order.getExpireAt(),
+                        order.getCreatedAt(),
+
+                        List.of()           //表示的是OrderDetailVO里的items
+                        //这个是列表版。为什么 items 用 List.of()？
+                        //订单列表通常只展示订单主信息，不把每笔订单的所有明细都查出来，避免以后订单多了以后列表接口很重。详情页再查明细
+                ))
+                .toList();
+    }
+
+    //展示某个订单的详情信息
+    public OrderDetailVO getMyOrderDetail(Long orderId){
+        Long consumerId = CurrentUser.requiredConsumerId();
+
+        CommerceOrder order = commerceOrderMapper.selectByOrderIdAndConsumerId(orderId,consumerId);
+
+        if (order == null){
+            throw new BizException("订单不存在");
+        }
+
+        List<OrderItemVO> items = commerceOrderItemMapper.selectItemVOByOrderId(orderId);
+
+        return new OrderDetailVO(
+                order.getId(),
+                order.getOrderNo(),
+                order.getTenantId(),
+                order.getStatus(),
+                order.getTotalAmount(),
+                order.getExpireAt(),
+                order.getCreatedAt(),
+                items
+        );
+    }
+
+    //从快照里获得商家id
     private Long getTenantId(List<OrderSkuSnapshotVO> snapshots) {
         Long tenantId = snapshots.getFirst().tenantId();
 

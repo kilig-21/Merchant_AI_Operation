@@ -7,24 +7,24 @@
 
 | 项目 | 进度 |
 |---|---|
-| 总步骤 | `██████████████░` 14 / 36 |
+| 总步骤 | `███████████████░` 15 / 36 |
 | 当前阶段 | 第 1 阶段：工程与基础业务 |
 | 本周任务 | `███████` 7 / 7 |
 | 周验收 | 已通过 |
-| 最近提交 | `feat(cart): add consumer cart APIs` |
+| 最近提交 | `feat(order): add mock payment and queries` |
 
 ## 进度看板
 | 项目     | 当前状态                         |
 | ------ | ---------------------------- |
 | 当前阶段   | 第 1 阶段：工程与基础业务               |
 | 当前文档   | `01-工程与基础业务开发链.md`           |
-| 当前步骤   | 步骤 14 已完成：`POST /api/orders` 普通下单事务已跑通 |
+| 当前步骤   | 步骤 15 已完成：模拟支付和消费者订单查询已跑通 |
 | 本周目标   | 完成购物车、普通订单建表、普通下单事务和模拟支付的后端基础闭环 |
-| 今日目标   | 完成步骤 14：从购物车创建待支付订单，验证库存锁定、订单明细和失败回滚 |
-| 昨日完成   | 步骤 13 订单状态机和订单建表已完成；步骤 14 已起步但未收尾 |
+| 今日目标   | 完成步骤 15：实现模拟支付、消费者订单列表和订单详情查询 |
+| 昨日完成   | 步骤 14 普通下单事务已完成，订单主表、订单明细、库存锁定和购物车删除形成事务闭环 |
 | 当前卡点   | 暂无主线卡点；正式 ID 方案后续再替换 |
-| 最近一次提交 | `feat(order): add order schema migration`                           |
-| 明日优先   | 进入步骤 15：实现模拟支付和消费者订单查询 |
+| 最近一次提交 | `feat(order): add mock payment and queries`                           |
+| 明日优先   | 进入步骤 16：补齐第一个完整页面闭环；若继续后端，则进入步骤 17 手工验证库存账 |
 
 ## 每日任务
 ## Day 1：2026-07-19
@@ -618,3 +618,46 @@
 - 没完成：还没有实现模拟支付、订单列表和订单详情；失败路径留下的购物车项 `1785485017013` 暂时保留为验收证据。
 - 卡住点：一开始加入购物车误用 `DELETE /api/cart/items` 导致 401，改为 `POST /api/cart/items` 后成功；下单失败验收时 DataGrip `UPDATE` 后未立即可见，原因是事务未提交，提交后可见 `available_stock=0`。
 - 明天优先做：进入步骤 15，实现 `POST /api/orders/{id}/mock-pay` 和消费者订单查询，重点验证只能支付本人 `PENDING_PAYMENT` 订单，并把 `locked_stock` 正确减少。
+
+## Day 13：2026-08-01
+
+### 今日阶段
+
+- 当前文档：`01-工程与基础业务开发链.md`
+- 当前步骤：步骤 15：实现模拟支付和消费者订单查询
+- 今日目标：完成 `POST /api/orders/{id}/mock-pay`、`GET /api/orders` 和 `GET /api/orders/{id}`，验证重复支付、库存账和消费者权限边界。
+
+### 今天要学
+
+- 知识点 1：资源归属校验：订单支付和查询必须使用当前登录消费者，不能相信前端传 `consumerId`。
+- 知识点 2：状态转换校验：只有 `PENDING_PAYMENT` 订单可以支付成功变成 `PAID`。
+- 知识点 3：条件更新：`UPDATE ... WHERE status = 'PENDING_PAYMENT'` 可以让重复支付自然失败。
+- 知识点 4：库存账：支付成功后只减少 `locked_stock`，不回加 `available_stock`。
+- 知识点 5：接口返回 VO 和内部查询对象的区别：订单详情返回 `OrderDetailVO/OrderItemVO`，下单前快照 `OrderSkuSnapshotVO` 只是 Mapper 查询结果承载对象。
+- 学到什么程度算够：能说清楚为什么第一次支付成功、第二次支付返回 `code=409`；能解释支付成功后 `available_stock` 不变、`locked_stock` 变成 0；能说明为什么订单详情必须先用 `orderId + consumerId` 查主表，再查订单明细。
+
+### 今天要做
+
+- [x] 任务 1：实现模拟支付接口 `POST /api/orders/{id}/mock-pay`。
+- [x] 任务 2：实现消费者订单列表和详情接口：`GET /api/orders`、`GET /api/orders/{id}`。
+- [x] 任务 3：用 Apifox 和 DataGrip 验收重复支付、库存账、订单查询和商家越权访问失败。
+
+### 今天验收
+
+- [x] `mvnw -DskipTests compile` 编译通过。
+- [x] `POST /api/orders/1/mock-pay` 第一次使用消费者 token 返回 `code: 0`。
+- [x] `POST /api/orders/1/mock-pay` 第二次重复支付返回 `code: 409` 和 `订单不存在或状态不允许支付`。
+- [x] DataGrip 中 `commerce_order.id=1` 的 `status` 已变为 `PAID`，`total_amount=199.00`。
+- [x] DataGrip 中 SKU `1784970220075` 的 `available_stock=49`、`locked_stock=0`。
+- [x] `GET /api/orders` 使用消费者 token 返回订单列表，包含 `id=1`、`status=PAID`、`totalAmount=199.00`，列表中的 `items=[]`。
+- [x] `GET /api/orders/1` 使用消费者 token 返回订单详情，`items` 中包含 SKU `1784970220075`、`skuNameSnapshot=白色 / 标准版`、`salePrice=199.00`、`quantity=1`。
+- [x] `GET /api/orders/1` 使用商家 token 返回 `code: 403` 和 `不是消费者账号`。
+- [x] 截图/请求记录已写入 `docs/learning-log.md`，截图放在 `docs/images/day-13/`。
+- [x] 已提交 Git，提交信息：`feat(order): add mock payment and queries`
+
+### 今天完成
+
+- 完成了：步骤 15 已跑通。普通订单可以从 `PENDING_PAYMENT` 模拟支付为 `PAID`；重复支付被状态条件更新拦住；支付成功后锁定库存正确减少；消费者订单列表和订单详情查询完成；商家 token 访问消费者订单返回 403。
+- 没完成：还没有做消费者端订单页面；订单查询暂时未分页；商家订单查询还没做；超时关单和库存释放放到后续步骤。
+- 卡住点：一开始把 HTTP 200 误认为两次业务都成功，后来确认第二次响应体是 `code=409`，说明重复支付已被正确拦截；`OrderSkuSnapshotVO` 名字容易误导，它实际是下单前 Mapper 查询结果承载对象，不是严格前端 VO。
+- 明天优先做：进入步骤 16，补齐第一个完整页面闭环；如果想继续后端，则进入步骤 17 手工验证库存账。

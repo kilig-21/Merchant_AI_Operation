@@ -6,9 +6,11 @@ import org.example.merchant_ai_operation.common.ApiResponse;
 import org.example.merchant_ai_operation.order.dto.CreateOrderRequest;
 import org.example.merchant_ai_operation.order.service.OrderService;
 import org.example.merchant_ai_operation.order.vo.CreateOrderVO;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.example.merchant_ai_operation.order.vo.OrderDetailVO;
+import org.example.merchant_ai_operation.security.CurrentUser;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 public class OrderController {
@@ -22,6 +24,23 @@ public class OrderController {
         return ApiResponse.ok(orderService.createOrderVO(request));
     }
 
+    @PostMapping("/api/orders/{id}/mock-pay")
+    public ApiResponse<Void> mockPay(@PathVariable("id") Long id) {
+        orderService.mockPay(id);
+        return ApiResponse.ok(null);
+    }
+
+    //展示出所有订单的列表
+    @GetMapping("/api/orders")
+    public ApiResponse<List<OrderDetailVO>> listMyOrders(){
+        return  ApiResponse.ok(orderService.listMyOrders());
+    }
+
+    //列出订单的详情
+    @GetMapping("/api/orders/{id}")
+    public ApiResponse<OrderDetailVO>  getOrderDetail(@PathVariable("id") Long id){
+        return ApiResponse.ok(orderService.getMyOrderDetail(id));
+    }
 
 
 

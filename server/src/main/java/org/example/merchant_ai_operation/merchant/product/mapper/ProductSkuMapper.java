@@ -97,4 +97,18 @@ public interface ProductSkuMapper {
             @Param("quantity") Integer quantity
     );
 
+    @Update("""
+            UPDATE product_sku
+            SET locked_stock = locked_stock - #{quantity},
+            version = version + 1
+            WHERE id = #{skuId}
+            AND locked_stock >= #{quantity}
+            """)
+    //这里支付成功后只减 locked_stock，不改 available_stock。
+    //因为下单时可售库存已经扣过了，支付只是把“待支付占用”变成“已成交”。
+    int deductLockedStock(
+            @Param("skuId") Long skuId,
+            @Param("quantity") Integer quantity
+    );
+
 }
