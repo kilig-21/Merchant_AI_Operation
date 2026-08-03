@@ -111,4 +111,29 @@ public interface ProductSkuMapper {
             @Param("quantity") Integer quantity
     );
 
+    @Select("""
+        SELECT
+            id,
+            tenant_id AS tenantId,
+            spu_id AS spuId,
+            sku_name AS skuName,
+            sale_price AS salePrice,
+            available_stock AS availableStock,
+            locked_stock AS lockedStock,
+            version,
+            status
+        FROM product_sku
+        WHERE id = #{skuId}
+          AND tenant_id = #{tenantId}
+        """)
+    //按 skuId + tenantId 查询 SKU 的方法，查出扣完后的库存。
+    //它不是扣库存，它只是扣完库存之后，再查一次当前 SKU 的库存余额。
+        // 我们后面写库存流水时，需要把这两个值写进去skuId 和 tenantId
+    ProductSku selectByIdAndTenantId(
+            @Param("skuId") Long skuId,
+            @Param("tenantId") Long tenantId
+    );
+
+
+
 }

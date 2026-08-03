@@ -1483,3 +1483,109 @@ PAID --申请售后--> AFTER_SALE
 
 - 优先进入步骤 16：补齐第一个完整页面闭环，让消费者能在页面完成浏览商品、购物车、提交订单、模拟支付和订单查询。
 - 如果继续后端，则进入步骤 17：手工验证库存账，覆盖下单未支付、模拟支付、后续超时关闭三种路径。
+
+## Day 14：2026-08-03
+
+### 今天对应任务
+
+- 当前文档：`02-交易库存限量促销开发链.md`
+- 当前步骤：步骤 17 起步：建立库存账本与并发基线。
+- 今日目标：先完成库存账本的最小闭环，让普通下单和模拟支付都有库存流水记录。
+- 说明：今天只完成步骤 17 的“库存流水账本”部分，并发基线测试尚未开始。
+
+### 今天学了什么
+
+- 库存流水：
+  - 它解决什么问题：`product_sku.available_stock/locked_stock` 只表示当前库存余额，不能解释库存为什么变成这样；`inventory_movement` 记录每一次库存变化的原因、业务单号、变化量和变化后的余额。
+  - 我现在会用到哪里：普通下单写 `ORDER_LOCK`，模拟支付写 `ORDER_PAID`。后续取消订单、超时关单、促销扣库存也要继续写流水。
+- `ORDER_LOCK` 与 `ORDER_PAID`：
+  - 它解决什么问题：把不同库存动作分清楚，便于后续对账。
+  - 我现在会用到哪里：下单时 `available_change=-quantity`、`locked_change=quantity`；支付时 `available_change=0`、`locked_change=-quantity`。
+- 库存流水唯一约束：
+  - 它解决什么问题：避免同一业务动作重复记账。
+  - 我现在会用到哪里：`UNIQUE KEY uk_inventory_business (business_type, business_no, sku_id)` 保证同一种业务动作、同一订单号、同一 SKU 只能有一条流水。例如同一订单同一 SKU 的 `ORDER_PAID` 不能写两次。
+- 主表和明细表在支付里的分工：
+  - 它解决什么问题：订单主表提供订单号、租户、状态等整体信息；订单明细提供买了哪些 SKU、每个 SKU 买几个。
+  - 我现在会用到哪里：`mockPay(...)` 先查 `CommerceOrder` 拿 `orderNo/tenantId` 给流水用，再查 `CommerceOrderItem` 拿 `skuId/quantity` 扣锁定库存。
+- 请求方法要匹配 Controller 注解：
+  - 它解决什么问题：`@PostMapping("/api/orders/{id}/mock-pay")` 只接受 POST，不接受 GET。
+  - 我现在会用到哪里：Apifox 调模拟支付时必须选 `POST`，否则不会进入目标接口逻辑。
+
+### 今天遇到的问题
+
+| 问题 | 出现场景 | 最后怎么解决 | 是否已彻底理解 |
+|---|---|---|---|
+| 不清楚“库存记录”是什么 | 刚进入步骤 17，看到要新增 `inventory_movement` 表 | 理解为库存变化账本：`product_sku` 看当前余额，`inventory_movement` 看每一笔库存为什么变化 | 是 |
+| 不理解为什么支付时查了订单主表后还要查订单明细 | `mockPay(...)` 里先查 `CommerceOrder`，又查 `CommerceOrderItem` | 理解为主表拿订单号和租户，明细拿 SKU 和数量；两者服务不同业务目的 | 是 |
+| 注释“创建订单明细表”误导 | 看到 `commerceOrderItemMapper.selectByOrderId(orderId)` 前的注释 | 修正理解为“查询订单明细”，不是创建表也不是新增明细；支付需要通过明细知道扣哪个 SKU、扣几个 | 是 |
+| 不理解唯一约束的作用 | 看到 `UNIQUE KEY uk_inventory_business (business_type, business_no, sku_id)` | 理解为数据库保险：同一业务类型、同一业务单号、同一 SKU 不能重复记账，防止重复支付或代码 bug 造成重复流水 | 是 |
+| 模拟支付接口返回 `code=500` | Apifox 使用 `GET /api/orders/4/mock-pay` | 改成 `POST /api/orders/4/mock-pay` 后成功；后续可补 `HttpRequestMethodNotSupportedException` 让方法错误返回更清楚 | 是 |
+| DataGrip 一开始只看到旧订单流水 | 支付 `orderId=4` 后仍用旧订单号查询库存流水 | 先查 `commerce_order` 找到当前订单的 `order_no`，再按正确 `business_no` 查询，看到 `ORDER_LOCK` 和 `ORDER_PAID` 两条 | 是 |
+
+### 重要记录
+
+- 成功的数据库迁移：
+  - Flyway 从版本 6 迁移到版本 7。
+  - `V7__add_inventory_movement.sql` 执行成功。
+- 成功的接口：
+  - `POST /api/cart/items`，消费者 token，Body 为 `{"skuId":1784970220075,"quantity":1}`，返回购物车项 `id=1785740389959`。
+  - `POST /api/orders`，消费者 token，使用购物车项创建订单成功，示例订单 `orderId=3`、`orderNo=ORD20260803150038282245`、`status=PENDING_PAYMENT`。
+  - `POST /api/orders/4/mock-pay`，消费者 token，返回 `code=0`。
+- 失败和边界接口：
+  - `GET /api/orders/4/mock-pay` 返回兜底 `code=500`，原因是请求方法错误，正确方法应为 POST。
+  - 第二次 `POST /api/orders/4/mock-pay` 返回 `code=409` 和 `订单不存在或状态不允许支付`。
+- DataGrip 看到的数据：
+  - `SHOW TABLES LIKE 'inventory_movement'` 能看到库存流水表。
+  - `DESC inventory_movement` 能看到库存流水字段、主键、索引和自增主键。
+  - 某订单号下有两条库存流水：`ORDER_LOCK` 和 `ORDER_PAID`。
+  - `ORDER_LOCK` 的 `available_change=-1`、`locked_change=1`。
+  - `ORDER_PAID` 的 `available_change=0`、`locked_change=-1`。
+  - 重复支付后同一订单号仍只有两条流水，没有第三条。
+- 关键修改：
+  - 新增 `server/src/main/resources/db/migration/V7__add_inventory_movement.sql`。
+  - 新增 `InventoryMovement` 实体。
+  - 新增 `InventoryMovementMapper.insert(...)`。
+  - `ProductSkuMapper` 新增 `selectByIdAndTenantId(...)`，用于查询库存变化后的余额。
+  - `OrderService.createOrderVO(...)` 在下单锁库成功后写入 `ORDER_LOCK` 流水。
+  - `OrderService.mockPay(...)` 在支付扣锁定库存成功后写入 `ORDER_PAID` 流水。
+  - 库存流水创建方法命名为 `createOrderLockMovement(...)` 和 `createOrderPaidMovement(...)`，避免 `Before/After` 概念模糊。
+- 验证记录：
+  - `mvnw -DskipTests compile` 编译通过。
+  - Apifox 完成加购物车、创建订单、模拟支付、重复支付失败验收。
+  - DataGrip 完成库存流水表结构、下单锁库流水、支付流水和重复支付不新增流水验收。
+- 截图记录：
+  - `docs/images/day-14/flyway-v7-migration-success.png`
+  - `docs/images/day-14/inventory-table-exists.png`
+  - `docs/images/day-14/inventory-table-desc.png`
+  - `docs/images/day-14/cart-add-for-inventory-success.png`
+  - `docs/images/day-14/order-create-with-lock-movement-success.png`
+  - `docs/images/day-14/inventory-order-lock-movement.png`
+  - `docs/images/day-14/mock-pay-order-paid-success.png`
+  - `docs/images/day-14/inventory-order-lock-and-paid-movements.png`
+  - `docs/images/day-14/mock-pay-repeat-409.png`
+  - `docs/images/day-14/inventory-two-movements-confirmed.png`
+- 参考资料：
+  - `02-交易库存限量促销开发链.md` 步骤 17。
+  - `01-工程与基础业务开发链.md` 步骤 14/15 的普通下单和模拟支付库存语义。
+
+### 侧边任务/对话补充记录
+
+- 提炼方法什么时候适合：
+  - 疑惑点：库存流水对象可以提炼成方法，为什么订单明细对象的那段代码 IDEA 没主动提示。
+  - 最后理解：IDEA 的灯泡不会对所有可提炼代码主动提示；可以手动选中后使用 `Ctrl + Alt + M`。库存流水构造是一组更集中的“创建对象并设置字段”，更容易被识别；订单明细那段混有创建对象、插入明细、删除购物车等多个动作，IDEA 不一定知道要提炼哪一部分。
+  - 后续会用到哪里：只在能明显提高主流程可读性时提炼方法，避免过度拆分导致来回跳。
+- `@Transactional` 和库存流水：
+  - 疑惑点：库存流水插入失败时会不会留下订单或库存半截变化。
+  - 最后理解：下单和支付方法都在 `@Transactional` 中，订单、库存变化、库存流水在同一个事务里；后续任一步抛异常都会整体回滚。
+  - 后续会用到哪里：取消订单、超时关单、促销扣库存也要保持库存更新和流水写入同事务。
+
+### 今天还没理解透
+
+- 步骤 17 的并发基线还没做，当前只完成手工接口验收，还没有自动并发测试证明库存不会变成负数。
+- 当前库存流水只有 `available` 和 `locked` 两类变化，没有单独 `sold_stock` 字段；支付后的“已售出”目前体现为从 `locked_stock` 移出，后续如果要做更完整账本可以再扩展。
+- 请求方法错误现在被全局异常兜底为 `code=500`，后续可以补专门异常处理，让 `GET` 调 `POST` 接口时返回更清楚的 `405/请求方法不支持`。
+
+### 明天遇到再补
+
+- 继续步骤 17：补并发基线测试，验证多个请求同时下单时 `available_stock` 和 `locked_stock` 不为负，库存流水数量和订单数量一致。
+- 可补小优化：请求方法错误的全局异常处理。

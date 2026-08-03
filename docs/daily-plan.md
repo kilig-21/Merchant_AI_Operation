@@ -17,14 +17,14 @@
 | 项目     | 当前状态                         |
 | ------ | ---------------------------- |
 | 当前阶段   | 第 1 阶段：工程与基础业务               |
-| 当前文档   | `01-工程与基础业务开发链.md`           |
-| 当前步骤   | 步骤 15 已完成：模拟支付和消费者订单查询已跑通 |
-| 本周目标   | 完成购物车、普通订单建表、普通下单事务和模拟支付的后端基础闭环 |
-| 今日目标   | 完成步骤 15：实现模拟支付、消费者订单列表和订单详情查询 |
-| 昨日完成   | 步骤 14 普通下单事务已完成，订单主表、订单明细、库存锁定和购物车删除形成事务闭环 |
+| 当前文档   | `02-交易库存限量促销开发链.md`           |
+| 当前步骤   | 步骤 17 起步：库存流水表与普通订单库存流水已跑通；并发基线尚未开始 |
+| 本周目标   | 后端继续推进可靠交易基础：库存账本、重复操作和并发基线 |
+| 今日目标   | 完成步骤 17 起步：建立库存流水表，并让普通下单与模拟支付写入库存流水 |
+| 昨日完成   | 步骤 15 模拟支付和消费者订单查询已完成；前端步骤 16 由用户单独推进 |
 | 当前卡点   | 暂无主线卡点；正式 ID 方案后续再替换 |
 | 最近一次提交 | `feat(order): add mock payment and queries`                           |
-| 明日优先   | 进入步骤 16：补齐第一个完整页面闭环；若继续后端，则进入步骤 17 手工验证库存账 |
+| 明日优先   | 继续步骤 17：补并发基线测试，验证库存不会变成负数且流水数量正确 |
 
 ## 每日任务
 ## Day 1：2026-07-19
@@ -661,3 +661,49 @@
 - 没完成：还没有做消费者端订单页面；订单查询暂时未分页；商家订单查询还没做；超时关单和库存释放放到后续步骤。
 - 卡住点：一开始把 HTTP 200 误认为两次业务都成功，后来确认第二次响应体是 `code=409`，说明重复支付已被正确拦截；`OrderSkuSnapshotVO` 名字容易误导，它实际是下单前 Mapper 查询结果承载对象，不是严格前端 VO。
 - 明天优先做：进入步骤 16，补齐第一个完整页面闭环；如果想继续后端，则进入步骤 17 手工验证库存账。
+
+## Day 14：2026-08-03
+
+### 今日阶段
+
+- 当前文档：`02-交易库存限量促销开发链.md`
+- 当前步骤：步骤 17 起步：建立库存账本与普通订单库存流水。
+- 今日目标：创建 `inventory_movement` 库存流水表，并让普通下单、模拟支付都写入可追踪的库存流水。
+- 说明：前端步骤 16 由用户单独推进；今天后端主线先进入步骤 17 的库存账本起步，不把步骤 17 的并发基线虚报完成。
+
+### 今天要学
+
+- 知识点 1：库存流水是库存变化账本，`product_sku` 看当前余额，`inventory_movement` 看每一笔变化原因。
+- 知识点 2：下单锁库时 `available_stock - quantity`、`locked_stock + quantity`；支付成功时 `available_stock` 不变、`locked_stock - quantity`。
+- 知识点 3：`UNIQUE KEY (business_type, business_no, sku_id)` 用于防止同一业务动作、同一订单、同一 SKU 重复记账。
+- 知识点 4：库存流水必须和订单、库存更新处于同一个 `@Transactional` 事务，避免留下半截账。
+- 学到什么程度算够：能说明 `ORDER_LOCK` 和 `ORDER_PAID` 两条流水分别代表什么，以及为什么重复支付不能产生第三条库存流水。
+
+### 今天要做
+
+- [x] 任务 1：新增 Flyway `V7__add_inventory_movement.sql`，创建 `inventory_movement` 表、唯一约束和查询索引。
+- [x] 任务 2：新增 `InventoryMovement` 实体和 `InventoryMovementMapper`，支持插入库存流水。
+- [x] 任务 3：在普通下单锁库存成功后写入 `ORDER_LOCK` 流水。
+- [x] 任务 4：在模拟支付扣锁定库存成功后写入 `ORDER_PAID` 流水，并验证重复支付不会重复记账。
+
+### 今天验收
+
+- [x] 后端启动时 Flyway 从版本 6 迁移到版本 7，日志显示 `Successfully applied 1 migration`。
+- [x] DataGrip 中 `SHOW TABLES LIKE 'inventory_movement'` 能看到 `inventory_movement` 表。
+- [x] `DESC inventory_movement` 可见 `tenant_id`、`sku_id`、`business_type`、`business_no`、`available_change`、`locked_change`、`available_after`、`locked_after`。
+- [x] `mvnw -DskipTests compile` 编译通过。
+- [x] 消费者 token 调用 `POST /api/cart/items` 成功生成购物车项。
+- [x] 消费者 token 调用 `POST /api/orders` 成功生成 `PENDING_PAYMENT` 订单，并写入 `ORDER_LOCK` 流水。
+- [x] `ORDER_LOCK` 流水中 `available_change=-1`、`locked_change=1`。
+- [x] 消费者 token 调用 `POST /api/orders/{id}/mock-pay` 成功返回 `code=0`，并写入 `ORDER_PAID` 流水。
+- [x] `ORDER_PAID` 流水中 `available_change=0`、`locked_change=-1`。
+- [x] 重复调用同一订单的模拟支付返回 `code=409` 和 `订单不存在或状态不允许支付`。
+- [x] 同一订单号下库存流水仍只有 `ORDER_LOCK` 和 `ORDER_PAID` 两条，没有新增第三条。
+
+### 今天完成
+
+- 完成了：步骤 17 的库存账本起步已跑通。普通下单和模拟支付都能写入库存流水，重复支付不会重复记账。
+- 没完成：步骤 17 的并发基线测试还没开始；库存流水目前覆盖普通下单和支付，取消/超时关闭释放库存还未实现。
+- 卡住点：第一次验收支付接口时误用 `GET /api/orders/{id}/mock-pay`，后端返回兜底 `code=500`；改为 `POST` 后支付成功。另一次 DataGrip 查询用错旧订单号，导致一开始只看到旧流水。
+- 明天优先做：继续步骤 17，补并发基线测试或至少先补重复下单/库存不变式的后端测试。
+- 截图记录：截图已放入 `docs/images/day-14/`。
