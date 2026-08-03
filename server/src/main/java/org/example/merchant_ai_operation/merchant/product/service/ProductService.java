@@ -10,6 +10,7 @@ import org.example.merchant_ai_operation.merchant.product.mapper.ProductSkuMappe
 import org.example.merchant_ai_operation.merchant.product.mapper.ProductSpuMapper;
 import org.example.merchant_ai_operation.merchant.product.vo.MerchantProductVO;
 import org.example.merchant_ai_operation.security.CurrentUser;
+import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -37,18 +38,7 @@ public class ProductService {
 
         //创建用户对象;
         ProductSpu spu = new ProductSpu();
-
-        //在只是临时 ID 方案，和昨天注册用户 ID 一样。
-        // 后面我们可以换成雪花 ID 或数据库自增，但今天先把闭环跑通。
-        spu.setId(System.currentTimeMillis());
-        spu.setTenantId(tenantId);
-        spu.setName(request.name());
-        spu.setDescription(request.description());
-
-        //新商品先是草稿。为什么不默认上架？
-        // 因为真实电商里商品通常要先补 SKU、库存、图片、价格，再上架。不然消费者可能看到半成品商品。
-        spu.setStatus("DRAFT");//状态 : DRAFT
-
+        assembleSpu(request, spu, tenantId);
 
         int inserted = productSpuMapper.insert(spu);
         if (inserted != 1) {
@@ -56,7 +46,6 @@ public class ProductService {
         }
         return spu.getId();
     }
-
 
     //创建具体商品SKU
     public Long createSku(Long spuId, CreateSkuRequest request){
@@ -73,18 +62,8 @@ public class ProductService {
             throw new BizException(404, "商品不存在");
         }
 
-
-        //通过了就直接赋值初始值
-        ProductSku sku = new ProductSku();
-        sku.setId(System.currentTimeMillis());
-        sku.setTenantId(tenantId);
-        sku.setSpuId(spuId);
-        sku.setSkuName(request.skuName());
-        sku.setSalePrice(request.salePrice());
-        sku.setAvailableStock(request.availableStock());
-        sku.setLockedStock(0);
-        sku.setVersion(0);
-        sku.setStatus("ON_SALE");
+        //
+        ProductSku sku = assembleSku(spuId, request, tenantId);
 
         //再判断是否插入成功
         int inserted = productSkuMapper.insert(sku);
@@ -93,6 +72,7 @@ public class ProductService {
         }
         return  sku.getId();
     }
+
 
 
     //列出所有的商品的列表;
@@ -137,7 +117,6 @@ public class ProductService {
 
     }
 
-
     //下架商品:
     public void unpublishProduct(Long spuId){
         Long  tenantId = CurrentUser.requiredMerchantTenantId();
@@ -154,6 +133,36 @@ public class ProductService {
     }
 
 
+
+    //赋值Spu的属性:
+    private static void assembleSpu(CreateProductRequest request, ProductSpu spu, Long tenantId) {
+        //在只是临时 ID 方案，和昨天注册用户 ID 一样。
+        // 后面我们可以换成雪花 ID 或数据库自增，但今天先把闭环跑通。
+        spu.setId(System.currentTimeMillis());
+        spu.setTenantId(tenantId);
+        spu.setName(request.name());
+        spu.setDescription(request.description());
+
+        //新商品先是草稿。为什么不默认上架？
+        // 因为真实电商里商品通常要先补 SKU、库存、图片、价格，再上架。不然消费者可能看到半成品商品。
+        spu.setStatus("DRAFT");//状态 : DRAFT
+    }
+
+    //赋值Sku属性
+    private static @NonNull ProductSku assembleSku(Long spuId, CreateSkuRequest request, Long tenantId) {
+        //通过了就直接赋值初始值
+        ProductSku sku = new ProductSku();
+        sku.setId(System.currentTimeMillis());
+        sku.setTenantId(tenantId);
+        sku.setSpuId(spuId);
+        sku.setSkuName(request.skuName());
+        sku.setSalePrice(request.salePrice());
+        sku.setAvailableStock(request.availableStock());
+        sku.setLockedStock(0);
+        sku.setVersion(0);
+        sku.setStatus("ON_SALE");
+        return sku;
+    }
 
 }
 

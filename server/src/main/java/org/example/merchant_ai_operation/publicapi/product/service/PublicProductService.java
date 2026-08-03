@@ -4,6 +4,7 @@ package org.example.merchant_ai_operation.publicapi.product.service;
 import org.example.merchant_ai_operation.common.BizException;
 import org.example.merchant_ai_operation.publicapi.product.vo.*;
 import org.example.merchant_ai_operation.publicapi.product.mapper.PublicProductMapper;
+import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -36,13 +37,8 @@ public class PublicProductService {
         }
 
         List<PublicSkuVO> skus=publicProductMapper.selectPublicSkusBySpuId(spuId);
-        return new PublicProductDetailVO(
-                product.id(),
-                product.name(),
-                product.description(),
-                product.updatedAt(),
-                skus
-        );
+        //调用下方的方法
+        return getPublicProductDetailVO(product, skus);
     }
 
     //
@@ -62,5 +58,15 @@ public class PublicProductService {
 
 
 
+    //获取商品的详细信息方法
+    private static @NonNull PublicProductDetailVO getPublicProductDetailVO(PublicProductBaseVO product, List<PublicSkuVO> skus) {
+        return new PublicProductDetailVO(
+                product.id(),
+                product.name(),
+                product.description(),
+                product.updatedAt(),
+                skus
+        );
+    }
 
 }
