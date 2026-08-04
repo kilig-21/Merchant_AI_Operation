@@ -1589,3 +1589,96 @@ PAID --申请售后--> AFTER_SALE
 
 - 继续步骤 17：补并发基线测试，验证多个请求同时下单时 `available_stock` 和 `locked_stock` 不为负，库存流水数量和订单数量一致。
 - 可补小优化：请求方法错误的全局异常处理。
+
+## Day 15：2026-08-04
+
+### 今天对应任务
+
+- 当前文档：`02-交易库存限量促销开发链.md`
+- 当前步骤：步骤 17 继续：建立并发基线。
+- 今日目标：新增库存并发自动化测试，验证 `ProductSkuMapper.lockStock(...)` 的条件扣库存不会让可售库存变成负数。
+
+### 今天学了什么
+
+- JUnit 测试：
+  - 它解决什么问题：不用每次手动用 Apifox 或 DataGrip 验证，测试代码可以自动执行动作并判断结果是否符合预期。
+  - 我现在会用到哪里：`@Test` 标记一条测试用例，`assertNotNull(...)`、`assertEquals(...)` 用来表达“预期结果必须是什么”。
+- `@SpringBootTest`：
+  - 它解决什么问题：启动 Spring Boot 测试环境，让测试里可以注入真实 Mapper、读取配置并连接数据库。
+  - 我现在会用到哪里：`InventoryConcurrencyTest` 需要真实调用 `ProductSkuMapper.lockStock(...)`，所以使用 `@SpringBootTest`。
+- `JdbcTemplate.update(...)`：
+  - 它解决什么问题：测试中可以直接执行准备数据和清理数据的 SQL，不必为了测试专门给业务 Mapper 增加重置库存方法。
+  - 我现在会用到哪里：测试开始前把 SKU 重置为 `available_stock=10`、`locked_stock=0`；测试结束后也恢复成同样状态。
+- `ExecutorService`、`Future` 与 `CountDownLatch`：
+  - 它解决什么问题：把普通循环变成可重复的并发测试，尽量让多个线程同时执行扣库存。
+  - 我现在会用到哪里：20 个任务先提交到线程池，每个任务等待在 `startLatch.await()`；主线程执行 `startLatch.countDown()` 后，线程一起继续调用 `lockStock(...)`。
+- `@AfterEach`：
+  - 它解决什么问题：每个 `@Test` 执行结束后自动做清理，避免测试污染开发数据库或影响后面的测试。
+  - 我现在会用到哪里：`cleanUpStock()` 在测试结束后调用 `resetStock()`，把测试 SKU 恢复到 `10/0`。
+
+### 今天遇到的问题
+
+| 问题 | 出现场景 | 最后怎么解决 | 是否已彻底理解 |
+|---|---|---|---|
+| 不理解测试骨架和 `@Test` 的关系 | 刚创建 `InventoryConcurrencyTest` 时 | 理解为测试骨架是测试类外壳；`@Test` 标记的方法才会被 JUnit 自动执行 | 是 |
+| `assertThat(...)` 冒红 | 使用 AssertJ 写断言时 IDEA 没有自动导入静态方法 | 改用 JUnit 自带的 `assertNotNull(...)` 和 `assertEquals(...)`，减少额外概念 | 是 |
+| 不理解 `JdbcTemplate.update(...)` 后面为什么有两个参数 | SQL 中有两个 `?` 占位符 | 理解为参数按顺序填入 `?`：第一个是 `skuId`，第二个是 `tenantId`；同时用 `id + tenant_id` 能避免误改其他商家的 SKU | 是 |
+| 不理解 `await()` 明明写在 `for` 里，为什么不是循环卡住 | 写并发任务时看到 `startLatch.await()` 在 `for` 循环代码块里 | 理解为 `for` 只是提交 20 个任务；`submit(() -> {...})` 内部代码由线程池线程执行，所以等待的是任务线程，不是主线程循环 | 是 |
+| 测试第一次运行失败 | Maven/IDEA 启动 `@SpringBootTest` 时连接 MySQL 失败 | 在测试运行配置中补齐正确的 `MYSQL_ROOT_PASSWORD` 和 `JWT_SECRET` 后解决 | 是 |
+| 测试通过但控制台有红色 Mockito/Byte Buddy 警告 | 测试结束前看到 JVM 动态 agent 加载提示 | 理解为这是测试库在新版 Java 下的警告，不是测试失败；退出码为 0 且左侧绿色表示通过 | 是 |
+| 请求方法错误不应该走兜底 500 | 用 `GET /api/orders/4/mock-pay` 调用只支持 POST 的模拟支付接口 | 新增 `HttpRequestMethodNotSupportedException` 全局异常处理，返回 `code=405` 和清晰提示 | 是 |
+
+### 重要记录
+
+- 新增测试文件：
+  - `server/src/test/java/org/example/merchant_ai_operation/inventory/InventoryConcurrencyTest.java`
+- 新增异常处理：
+  - `GlobalExceptionHandler` 增加 `handleHttpRequestMethodNotSupportedException(...)`。
+  - 当接口只支持 `POST`，客户端误用 `GET` 时，返回 `code=405` 和 `请求方法不支持，请检查 GET/POST/PUT/DELETE 是否正确`。
+- 测试逻辑：
+  - 测试开始前将 SKU `1784970220075`、租户 `1001` 的库存重置为 `available_stock=10`、`locked_stock=0`。
+  - 使用 20 个线程同时调用 `productSkuMapper.lockStock(TEST_SKU_ID, TEST_TENANT_ID, 1)`。
+  - 断言成功扣库存次数为 10。
+  - 断言并发后库存为 `available_stock=0`、`locked_stock=10`。
+  - 使用 `@AfterEach` 在测试结束后恢复库存为 `available_stock=10`、`locked_stock=0`。
+- 验证结果：
+  - IDEA 中 `InventoryConcurrencyTest` 运行通过，1 个测试通过。
+  - DataGrip 查询 `product_sku`，确认测试结束后 SKU `1784970220075` 恢复为 `available_stock=10`、`locked_stock=0`。
+  - `mvnw -DskipTests compile` 编译通过。
+  - Apifox 使用 `GET /api/orders/4/mock-pay` 验证返回 `code=405`，不再返回兜底 `code=500`。
+- 截图记录：
+  - `docs/images/day-15/inventory-concurrency-test-success.png`
+  - `docs/images/day-15/mockito-agent-warning-not-failure.png`
+  - `docs/images/day-15/datagrip-stock-restored-after-test.png`
+  - `docs/images/day-15/mock-pay-get-method-405.png`
+- 参考资料：
+  - `02-交易库存限量促销开发链.md` 步骤 17：并发普通下单不会让可售库存变成负数。
+
+### 侧边任务/对话补充记录
+
+- `CountDownLatch` 的“放行”到底放行什么：
+  - 疑惑点：`await()` 写在 `for` 循环内部，看起来像 `countDown()` 会让循环继续执行。
+  - 最后理解：`for` 循环属于主线程，负责把 20 个任务交给线程池；`await()` 在任务内部，由线程池线程执行。`countDown()` 放行的是已经停在 `await()` 的 20 个任务线程，不是让 `for` 循环重新执行。
+  - 后续会用到哪里：支付和超时关单竞争、重复下单、促销抢购等并发测试，都需要这种“先到起跑线，再统一放行”的方式。
+- 测试数据准备和清理的区别：
+  - 疑惑点：既然测试开头已经重置库存，为什么测试结束后还要 `@AfterEach` 再重置一次。
+  - 最后理解：测试开头的 SQL 是准备数据，保证测试从固定起点开始；`@AfterEach` 是清理数据，保证测试结束后不污染开发环境和后续测试。
+  - 后续会用到哪里：所有会写数据库的自动化测试，都要考虑准备数据、执行动作、断言结果、清理数据四段。
+- `@SpringBootTest(webEnvironment = ...)`：
+  - 疑惑点：文档里提到 `MOCK`、`RANDOM_PORT`、`DEFINED_PORT`、`NONE`，这是基础内容还是企业级进阶内容。
+  - 最后理解：这是 Spring Boot 测试的进阶配置，企业项目会常用。今天的 Mapper 并发测试不需要真实 HTTP 服务，默认 `MOCK` 就够；只有像 Apifox 一样发真实 HTTP 请求时，才考虑 `RANDOM_PORT`。
+  - 后续会用到哪里：完整下单接口并发测试、端到端接口测试时，可能会用 `RANDOM_PORT` 和 `TestRestTemplate`。
+- 请求方法错误为什么是 405：
+  - 疑惑点：之前 `GET /api/orders/{id}/mock-pay` 返回 `code=500`，看起来像系统异常。
+  - 最后理解：URL 存在但 HTTP 方法不匹配时，属于客户端调用方式错误，语义上是 Method Not Allowed，所以用 `code=405` 更准确；它必须在兜底 `Exception.class` 前单独处理。
+  - 后续会用到哪里：所有接口验收时，除了看业务规则，也要确认请求方法是否和 Controller 注解一致，例如 `@PostMapping`、`@GetMapping`、`@PutMapping`、`@DeleteMapping`。
+
+### 今天还没理解透
+
+- 当前测试只覆盖 Mapper 层条件扣库存，还没有覆盖完整下单事务中的订单主表、订单明细、购物车删除和库存流水数量一致性。
+- `ExecutorService`、线程池生命周期、`Future.get()` 的更多细节先不展开，后续做支付/关单竞争测试时再逐步加深。
+
+### 明天遇到再补
+
+- 继续步骤 17 时，可把并发基线从 Mapper 层升级到完整下单链路，核对成功订单数、失败数、库存流水数和最终库存。
+- 如果进入步骤 18，要重点学习幂等键、重复提交、同 key 同参数返回同一结果、同 key 不同参数返回冲突。

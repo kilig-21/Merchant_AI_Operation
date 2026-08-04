@@ -11,20 +11,20 @@
 | 当前阶段 | 第 1 阶段：工程与基础业务 |
 | 本周任务 | `███████` 7 / 7 |
 | 周验收 | 已通过 |
-| 最近提交 | `feat(order): add mock payment and queries` |
+| 最近提交 | `test(inventory): cover concurrent stock locking` |
 
 ## 进度看板
 | 项目     | 当前状态                         |
 | ------ | ---------------------------- |
 | 当前阶段   | 第 1 阶段：工程与基础业务               |
 | 当前文档   | `02-交易库存限量促销开发链.md`           |
-| 当前步骤   | 步骤 17 起步：库存流水表与普通订单库存流水已跑通；并发基线尚未开始 |
+| 当前步骤   | 步骤 17 继续：库存流水账本已跑通；Mapper 层并发扣库存基线测试已通过 |
 | 本周目标   | 后端继续推进可靠交易基础：库存账本、重复操作和并发基线 |
-| 今日目标   | 完成步骤 17 起步：建立库存流水表，并让普通下单与模拟支付写入库存流水 |
-| 昨日完成   | 步骤 15 模拟支付和消费者订单查询已完成；前端步骤 16 由用户单独推进 |
+| 今日目标   | 补步骤 17 并发基线测试，验证条件扣库存不会让可售库存变成负数 |
+| 昨日完成   | 步骤 17 库存流水账本起步已完成；普通下单和模拟支付已写入库存流水 |
 | 当前卡点   | 暂无主线卡点；正式 ID 方案后续再替换 |
-| 最近一次提交 | `feat(order): add mock payment and queries`                           |
-| 明日优先   | 继续步骤 17：补并发基线测试，验证库存不会变成负数且流水数量正确 |
+| 最近一次提交 | `test(inventory): cover concurrent stock locking`                           |
+| 明日优先   | 继续步骤 17 收口：可把并发基线升级到完整下单链路，或进入步骤 18 幂等下单 |
 
 ## 每日任务
 ## Day 1：2026-07-19
@@ -707,3 +707,47 @@
 - 卡住点：第一次验收支付接口时误用 `GET /api/orders/{id}/mock-pay`，后端返回兜底 `code=500`；改为 `POST` 后支付成功。另一次 DataGrip 查询用错旧订单号，导致一开始只看到旧流水。
 - 明天优先做：继续步骤 17，补并发基线测试或至少先补重复下单/库存不变式的后端测试。
 - 截图记录：截图已放入 `docs/images/day-14/`。
+
+## Day 15：2026-08-04
+
+### 今日阶段
+
+- 当前文档：`02-交易库存限量促销开发链.md`
+- 当前步骤：步骤 17 继续：补并发基线测试。
+- 今日目标：新增一条可重复运行的库存并发自动化测试，验证 `ProductSkuMapper.lockStock(...)` 的数据库条件更新不会让库存扣成负数。
+
+### 今天要学
+
+- 知识点 1：JUnit 的 `@Test`、断言方法与自动化测试运行方式。
+- 知识点 2：`@SpringBootTest` 会启动 Spring 测试环境，测试运行前需要能连接 MySQL。
+- 知识点 3：`JdbcTemplate.update(...)` 可在测试中直接执行准备/清理数据的 SQL，并通过返回行数判断是否改到目标数据。
+- 知识点 4：`ExecutorService`、`Future` 与 `CountDownLatch` 可以制造可重复的并发起跑线。
+- 知识点 5：`@AfterEach` 用于每个测试结束后的清理，避免测试污染开发数据库。
+- 学到什么程度算够：能说明 `for` 循环只是提交 20 个任务，`submit(() -> {...})` 里的代码由线程池执行；`startLatch.countDown()` 不是让循环重新执行，而是放行已经等待在 `await()` 的线程。
+
+### 今天要做
+
+- [x] 任务 1：创建 `InventoryConcurrencyTest`，注入 `ProductSkuMapper` 和 `JdbcTemplate`。
+- [x] 任务 2：测试开始前把指定 SKU 重置为 `available_stock=10`、`locked_stock=0`。
+- [x] 任务 3：使用 20 个并发任务同时调用 `lockStock(..., 1)`，断言成功次数为 10，最终库存为 `available_stock=0`、`locked_stock=10`。
+- [x] 任务 4：新增 `@AfterEach` 清理方法，测试结束后恢复库存为 `available_stock=10`、`locked_stock=0`。
+- [x] 加餐：补 `HttpRequestMethodNotSupportedException` 全局异常处理，让请求方法错误返回 `code=405`。
+
+### 今天验收
+
+- [x] IDEA 中 `InventoryConcurrencyTest` 运行通过，1 个测试通过。
+- [x] 20 个并发扣库存请求中成功次数为 10。
+- [x] 并发扣库存后断言 `available_stock=0`、`locked_stock=10`。
+- [x] `@AfterEach` 执行后，DataGrip 查询 SKU `1784970220075` 显示 `available_stock=10`、`locked_stock=0`。
+- [x] 测试启动时曾因 `MYSQL_ROOT_PASSWORD` 环境变量/密码不匹配导致 MySQL 连接失败；补齐测试运行配置后解决。
+- [x] `GET /api/orders/4/mock-pay` 返回 `code=405` 和 `请求方法不支持，请检查 GET/POST/PUT/DELETE 是否正确`，不再返回兜底 `code=500`。
+- [x] 截图已归档到 `docs/images/day-15/`。
+- [x] 已提交 Git，提交信息：`test(inventory): cover concurrent stock locking`
+
+### 今天完成
+
+- 完成了：步骤 17 的第一条并发基线自动化测试已完成，证明 Mapper 层数据库条件更新可以防止可售库存扣成负数；测试清理也已通过 DataGrip 验证。
+- 没完成：这条测试仍是 Mapper 层基线，尚未覆盖完整下单链路中的订单数、库存流水数与购物车删除一致性。
+- 卡住点：第一次运行测试时 Spring 测试环境无法连接 MySQL，根因是测试运行配置没有拿到正确的 `MYSQL_ROOT_PASSWORD`；补环境变量后测试通过。Mockito/Byte Buddy 的 JVM 红色提示是测试库动态加载 agent 的警告，不影响本次测试。
+- 明天优先做：继续步骤 17 做完整下单链路并发测试，或进入步骤 18 幂等下单。
+- 截图记录：截图已放入 `docs/images/day-15/`。
