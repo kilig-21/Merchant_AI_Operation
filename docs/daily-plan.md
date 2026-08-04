@@ -732,22 +732,26 @@
 - [x] 任务 3：使用 20 个并发任务同时调用 `lockStock(..., 1)`，断言成功次数为 10，最终库存为 `available_stock=0`、`locked_stock=10`。
 - [x] 任务 4：新增 `@AfterEach` 清理方法，测试结束后恢复库存为 `available_stock=10`、`locked_stock=0`。
 - [x] 加餐：补 `HttpRequestMethodNotSupportedException` 全局异常处理，让请求方法错误返回 `code=405`。
+- [x] 加餐：补完整下单链路并发测试，验证 20 个消费者同时下单同一 SKU、库存只有 10 时，只成功 10 单，订单数、`ORDER_LOCK` 流水数、最终库存和剩余购物车项数量一致。
 
 ### 今天验收
 
-- [x] IDEA 中 `InventoryConcurrencyTest` 运行通过，1 个测试通过。
+- [x] IDEA 中 `InventoryConcurrencyTest` 运行通过，2 个测试通过。
 - [x] 20 个并发扣库存请求中成功次数为 10。
 - [x] 并发扣库存后断言 `available_stock=0`、`locked_stock=10`。
+- [x] 20 个消费者并发下单同一 SKU 时，成功订单数为 10，失败请求数为 10。
+- [x] 完整下单链路并发测试中，`commerce_order` 新增 10 条测试订单，`ORDER_LOCK` 库存流水新增 10 条。
+- [x] 完整下单链路并发测试后，最终库存为 `available_stock=0`、`locked_stock=10`，失败的 10 个购物车项仍保留。
 - [x] `@AfterEach` 执行后，DataGrip 查询 SKU `1784970220075` 显示 `available_stock=10`、`locked_stock=0`。
 - [x] 测试启动时曾因 `MYSQL_ROOT_PASSWORD` 环境变量/密码不匹配导致 MySQL 连接失败；补齐测试运行配置后解决。
 - [x] `GET /api/orders/4/mock-pay` 返回 `code=405` 和 `请求方法不支持，请检查 GET/POST/PUT/DELETE 是否正确`，不再返回兜底 `code=500`。
-- [x] 截图已归档到 `docs/images/day-15/`。
+- [x] 截图已归档到 `docs/images/day-15/`，本次加餐截图为 `order-flow-concurrency-test-success.png`。
 - [x] 已提交 Git，提交信息：`test(inventory): cover concurrent stock locking`
 
 ### 今天完成
 
-- 完成了：步骤 17 的第一条并发基线自动化测试已完成，证明 Mapper 层数据库条件更新可以防止可售库存扣成负数；测试清理也已通过 DataGrip 验证。
-- 没完成：这条测试仍是 Mapper 层基线，尚未覆盖完整下单链路中的订单数、库存流水数与购物车删除一致性。
+- 完成了：步骤 17 的 Mapper 层并发基线和完整下单链路并发测试都已完成。完整链路测试证明 20 个消费者同时下单、库存只有 10 时，只成功 10 单；订单数、`ORDER_LOCK` 流水数、最终库存和失败购物车项保留都一致。
+- 没完成：还没有进入步骤 18 幂等下单；当前完整链路并发测试覆盖普通下单锁库，还未覆盖支付与超时关单竞争。
 - 卡住点：第一次运行测试时 Spring 测试环境无法连接 MySQL，根因是测试运行配置没有拿到正确的 `MYSQL_ROOT_PASSWORD`；补环境变量后测试通过。Mockito/Byte Buddy 的 JVM 红色提示是测试库动态加载 agent 的警告，不影响本次测试。
-- 明天优先做：继续步骤 17 做完整下单链路并发测试，或进入步骤 18 幂等下单。
-- 截图记录：截图已放入 `docs/images/day-15/`。
+- 明天优先做：可以进入步骤 18 幂等下单，重点学习幂等键、重复提交、同 key 同参数返回同一结果、同 key 不同参数返回冲突。
+- 截图记录：截图已放入 `docs/images/day-15/`，包含完整下单链路并发测试通过截图。

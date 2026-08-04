@@ -1615,6 +1615,12 @@ PAID --申请售后--> AFTER_SALE
 - `@AfterEach`：
   - 它解决什么问题：每个 `@Test` 执行结束后自动做清理，避免测试污染开发数据库或影响后面的测试。
   - 我现在会用到哪里：`cleanUpStock()` 在测试结束后调用 `resetStock()`，把测试 SKU 恢复到 `10/0`。
+- 完整下单链路并发测试：
+  - 它解决什么问题：Mapper 层测试只能证明单条条件扣库存 SQL 不会超扣，完整链路测试要证明订单主表、库存流水、最终库存和购物车删除在并发下也能对齐。
+  - 我现在会用到哪里：`concurrentCreateOrderShouldKeepOrderInventoryAndMovementConsistent()` 让 20 个消费者同时调用 `OrderService.createOrderVO(...)`，库存只有 10 时只允许 10 单成功。
+- `Future<Boolean>`：
+  - 它解决什么问题：线程池提交任务后不会立刻拿到业务结果，而是先拿到一张“未来结果小票”；等 `future.get()` 时再取出任务内部 `return true/false` 的结果。
+  - 我现在会用到哪里：完整下单并发测试用 `List<Future<Boolean>>` 收集 20 个下单任务结果，再统计成功订单数。
 
 ### 今天遇到的问题
 
@@ -1627,6 +1633,8 @@ PAID --申请售后--> AFTER_SALE
 | 测试第一次运行失败 | Maven/IDEA 启动 `@SpringBootTest` 时连接 MySQL 失败 | 在测试运行配置中补齐正确的 `MYSQL_ROOT_PASSWORD` 和 `JWT_SECRET` 后解决 | 是 |
 | 测试通过但控制台有红色 Mockito/Byte Buddy 警告 | 测试结束前看到 JVM 动态 agent 加载提示 | 理解为这是测试库在新版 Java 下的警告，不是测试失败；退出码为 0 且左侧绿色表示通过 | 是 |
 | 请求方法错误不应该走兜底 500 | 用 `GET /api/orders/4/mock-pay` 调用只支持 POST 的模拟支付接口 | 新增 `HttpRequestMethodNotSupportedException` 全局异常处理，返回 `code=405` 和清晰提示 | 是 |
+| 完整链路并发测试第一次只成功 1 单 | `startLatch.countDown()` 和统计断言误写在 `for` 循环内部 | 理解为 `for` 循环应先提交 20 个任务，循环结束后再统一 `countDown()` 放行；不能每提交 1 个任务就开闸统计 | 是 |
+| 不理解为什么还要查订单数和流水数 | `successCount` 已经等于 10 后，继续加数据库查询断言 | 理解为 `successCount` 只代表线程内方法返回成功；数据库查询能证明真实落库结果。完整链路要同时验证订单、流水、库存和购物车状态 | 是 |
 
 ### 重要记录
 
@@ -1641,8 +1649,10 @@ PAID --申请售后--> AFTER_SALE
   - 断言成功扣库存次数为 10。
   - 断言并发后库存为 `available_stock=0`、`locked_stock=10`。
   - 使用 `@AfterEach` 在测试结束后恢复库存为 `available_stock=10`、`locked_stock=0`。
+  - 加餐补充完整下单链路并发测试：准备 20 个测试消费者和 20 条购物车项，每个线程模拟一个消费者登录，并调用 `orderService.createOrderVO(new CreateOrderRequest(List.of(cartItemId)))`。
+  - 完整链路测试断言：成功下单数为 10、测试订单数为 10、`ORDER_LOCK` 流水数为 10、最终库存为 `available_stock=0` 和 `locked_stock=10`、剩余购物车项为 10。
 - 验证结果：
-  - IDEA 中 `InventoryConcurrencyTest` 运行通过，1 个测试通过。
+  - IDEA 中 `InventoryConcurrencyTest` 运行通过，2 个测试通过。
   - DataGrip 查询 `product_sku`，确认测试结束后 SKU `1784970220075` 恢复为 `available_stock=10`、`locked_stock=0`。
   - `mvnw -DskipTests compile` 编译通过。
   - Apifox 使用 `GET /api/orders/4/mock-pay` 验证返回 `code=405`，不再返回兜底 `code=500`。
@@ -1651,6 +1661,7 @@ PAID --申请售后--> AFTER_SALE
   - `docs/images/day-15/mockito-agent-warning-not-failure.png`
   - `docs/images/day-15/datagrip-stock-restored-after-test.png`
   - `docs/images/day-15/mock-pay-get-method-405.png`
+  - `docs/images/day-15/order-flow-concurrency-test-success.png`
 - 参考资料：
   - `02-交易库存限量促销开发链.md` 步骤 17：并发普通下单不会让可售库存变成负数。
 
@@ -1672,13 +1683,21 @@ PAID --申请售后--> AFTER_SALE
   - 疑惑点：之前 `GET /api/orders/{id}/mock-pay` 返回 `code=500`，看起来像系统异常。
   - 最后理解：URL 存在但 HTTP 方法不匹配时，属于客户端调用方式错误，语义上是 Method Not Allowed，所以用 `code=405` 更准确；它必须在兜底 `Exception.class` 前单独处理。
   - 后续会用到哪里：所有接口验收时，除了看业务规则，也要确认请求方法是否和 Controller 注解一致，例如 `@PostMapping`、`@GetMapping`、`@PutMapping`、`@DeleteMapping`。
+- 完整下单链路为什么还要查数据库：
+  - 疑惑点：并发任务里已经统计出 `successCount=10`，为什么还要查询 `commerce_order`、`inventory_movement` 和 `cart_item`。
+  - 最后理解：线程返回成功只说明方法没有抛异常；数据库最终状态才能证明真实落库结果。完整链路并发测试要验证程序返回和数据库账本一致，避免出现“方法看似成功但订单、流水、库存或购物车状态不一致”的问题。
+  - 后续会用到哪里：步骤 18 幂等下单、支付与关单竞争、限量促销抢购都要同时看接口结果和数据库最终状态。
+- `Future<Boolean>` 和线程结果：
+  - 疑惑点：`executorService.submit(...)` 返回的是 `Future`，为什么最后能统计 `Boolean`。
+  - 最后理解：任务内部 `return true/false` 决定了未来结果类型是 `Boolean`；`submit(...)` 先返回 `Future<Boolean>` 小票，后面通过 `future.get()` 取出真正的 `Boolean`。
+  - 后续会用到哪里：所有并发测试都可以用 `Future` 收集每个线程的业务结果，再统一统计成功、失败和异常。
 
 ### 今天还没理解透
 
-- 当前测试只覆盖 Mapper 层条件扣库存，还没有覆盖完整下单事务中的订单主表、订单明细、购物车删除和库存流水数量一致性。
-- `ExecutorService`、线程池生命周期、`Future.get()` 的更多细节先不展开，后续做支付/关单竞争测试时再逐步加深。
+- 当前完整链路测试已经覆盖普通下单事务中的订单主表、库存流水、购物车删除和最终库存一致性；还没有覆盖支付与超时关单竞争。
+- `ExecutorService`、线程池生命周期、`Future.get()` 的更多细节已经理解到能用，后续做支付/关单竞争测试时再继续加深。
 
 ### 明天遇到再补
 
-- 继续步骤 17 时，可把并发基线从 Mapper 层升级到完整下单链路，核对成功订单数、失败数、库存流水数和最终库存。
-- 如果进入步骤 18，要重点学习幂等键、重复提交、同 key 同参数返回同一结果、同 key 不同参数返回冲突。
+- 可以进入步骤 18：重点学习幂等键、重复提交、同 key 同参数返回同一结果、同 key 不同参数返回冲突。
+- 后续做支付/关单竞争时，继续沿用“程序返回 + 数据库最终状态”的双重验证方式。
