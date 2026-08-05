@@ -1701,3 +1701,68 @@ PAID --申请售后--> AFTER_SALE
 
 - 可以进入步骤 18：重点学习幂等键、重复提交、同 key 同参数返回同一结果、同 key 不同参数返回冲突。
 - 后续做支付/关单竞争时，继续沿用“程序返回 + 数据库最终状态”的双重验证方式。
+
+## Day 16：2026-08-05
+
+### 今天对应任务
+
+- 当前文档：`02-交易库存限量促销开发链.md`
+- 当前步骤：步骤 18：请求幂等与防重复下单
+- 今日目标：理解并实现 `Idempotency-Key`，让重复提交不会重复创建订单。
+
+### 今天学了什么
+
+- 请求头不是只有一个值：一次 HTTP 请求可以同时携带 `Authorization`、`Content-Type` 和 `Idempotency-Key`。`@RequestHeader("Idempotency-Key")` 的含义是按名称取出这一项请求头。
+- 幂等键的作用：它代表一次下单意图。服务端按“消费者 ID + 幂等键”查找历史请求，同 key 同参数可以安全返回旧结果。
+- 幂等参数指纹：当前先把购物车项 ID 排序后拼成字符串，例如 `1,2,3`。它能判断参数是否变化，但严格说这还不是 SHA-256 等密码学哈希，后续可以再升级真正的摘要算法。
+- `KEY` 和 `INDEX`：在 MySQL 建表语句中，`KEY idx_xxx (...)` 就是普通索引写法，`INDEX idx_xxx (...)` 也可以；`UNIQUE KEY` 表示唯一索引，同时承担防重复约束。
+- 自增 ID 回填：插入 `idempotent_request` 后，MyBatis 通过 `useGeneratedKeys` 把数据库生成的 `id` 写回 Java 对象，后面用它精准更新 `SUCCESS` 和 `order_id`。
+- Stream 和 reduce：`stream()` 是 Java 集合的处理流水线；`sorted()` 排序，`map()` 转换元素，`reduce()` 把多个字符串合并成一个结果，`orElse("")` 处理空集合。
+- `assertThrows(...)`：第一个参数是预期异常类型，第二个参数 `() -> ...` 是暂时不执行的测试动作。动作抛出 `BizException` 时断言通过，并返回异常对象用于检查错误码和消息。
+- 并发断言：不能把“成功响应次数”直接当成“创建订单数”。并发请求中，多个请求可能都成功返回同一个订单；应该检查成功订单 ID 只有一个，并查询数据库确认订单和幂等记录各只有一条。
+
+### 今天遇到的问题
+
+| 问题 | 原因与解决 | 是否已理解 |
+|---|---|---|
+| `order_id` 看起来没有和订单表连接 | 当前用逻辑关联保存订单 ID，并建立普通索引；它不是数据库外键。订单创建成功后由 `markSuccess(...)` 写入。 | 是 |
+| 同 key 同参数测试为什么要调用两次 | 第二次调用模拟用户双击或网络重试，用来证明服务端返回第一次创建的同一订单。 | 是 |
+| 并发测试第一次断言成功数为 1 失败 | 后续请求可能已经看到 `SUCCESS` 并复用旧订单，所以成功响应数可能大于 1；改为断言不同订单 ID 数量为 1，并查询数据库。 | 是 |
+| 并发测试出现 Duplicate entry | 多个线程同时查不到记录后一起插入；业务查询无法单独解决竞态，数据库唯一键负责最终裁决，代码捕获 `DuplicateKeyException` 返回处理中冲突。 | 是 |
+| 测试启动出现很多 `Caused by` | 最初是测试环境连接 MySQL 的 root 密码不匹配，修正运行配置后恢复；Mockito/Byte Buddy 动态 agent 是警告，不是失败原因。 | 是 |
+| IDEA 出现黄色波浪线 | 属于静态检查提示，不等于编译错误；最终以测试运行结果和编译结果为准。 | 是 |
+
+### 重要修改
+
+- 新增 `server/src/main/resources/db/migration/V8__add_idempotent_request.sql`。
+- 新增 `idempotency/entity/IdempotentRequest.java` 和 `idempotency/mapper/IdempotentRequestMapper.java`。
+- `OrderController` 接收可选的 `Idempotency-Key` 请求头，`OrderService` 完成查询、插入、冲突判断、订单绑定和成功复用。
+- `InventoryConcurrencyTest` 为不同消费者生成不同幂等键，避免把真实的不同下单意图误判成同一次请求重试。
+- `OrderIdempotencyTest` 新增 3 个场景：同 key 同参数、同 key 不同参数、同 key 并发请求。
+
+### 侧边任务/对话补充记录
+
+- 用户追问请求头：从 Apifox 的 `Authorization` 看到，理解到请求头是一个键值集合，不是只有一个“请求头”；`Idempotency-Key` 与 `Authorization` 是两项不同的键。
+- 用户追问 `KEY` 是否就是索引：理解到 MySQL 中 `KEY` 是 `INDEX` 的同义写法，索引名只是便于管理和排查的名字。
+- 用户追问 Stream 属于什么：理解到它是 Java SE 集合框架相关能力，列表通过 `stream()` 进入处理流水线；它不会自动修改原列表。
+- 用户追问为什么新建幂等测试类：理解到生产代码负责业务规则，测试类负责准备数据、调用业务、断言结果和清理数据，两者职责不同；旧的库存并发测试也要适配新方法签名，但不应承担幂等语义测试。
+- 用户追问为什么测试前后都执行清理：理解到测试开始清理是固定起点，测试结束清理是防止污染数据库；两者目的不同。
+- 用户追问测试通过但日志中有异常：理解到 `assertThrows` 预期捕获的业务异常会出现在测试执行路径中，不代表测试失败；真正失败要看 JUnit 是否显示测试失败以及异常是否超出断言范围。
+
+### 截图记录
+
+- `docs/images/day-16/flyway-v8-migration-success.png`
+- `docs/images/day-16/order-create-idempotency-success.png`
+- `docs/images/day-16/order-repeat-same-result.png`
+- `docs/images/day-16/order-idempotency-conflict-409.png`
+- `docs/images/day-16/idempotent-request-datagrip-success.png`
+- `docs/images/day-16/order-idempotency-tests-passed.png`
+
+### 今天还没理解透
+
+- 当前请求参数指纹仍是排序后的字符串，不是严格意义上的加密哈希；后续如果请求参数变复杂，可以使用稳定 JSON 序列化后再做 SHA-256。
+- 幂等记录目前用 `PROCESSING/SUCCESS`，后续可继续讨论失败状态、超时恢复、查询接口和清理策略。
+
+### 明天遇到再补
+
+- 进入步骤 19 前先理解商品缓存为什么能减少数据库查询，以及缓存失效、更新顺序和库存实时性之间的取舍。

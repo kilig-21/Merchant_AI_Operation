@@ -7,24 +7,24 @@
 
 | 项目 | 进度 |
 |---|---|
-| 总步骤 | `███████████████░` 15 / 36 |
+| 总步骤 | `████████████████░` 16 / 36 |
 | 当前阶段 | 第 1 阶段：工程与基础业务 |
 | 本周任务 | `███████` 7 / 7 |
 | 周验收 | 已通过 |
-| 最近提交 | `test(inventory): cover concurrent stock locking` |
+| 最近提交 | 待提交：`feat(order): add idempotent order creation` |
 
 ## 进度看板
 | 项目     | 当前状态                         |
 | ------ | ---------------------------- |
 | 当前阶段   | 第 1 阶段：工程与基础业务               |
 | 当前文档   | `02-交易库存限量促销开发链.md`           |
-| 当前步骤   | 步骤 17 继续：库存流水账本已跑通；Mapper 层并发扣库存基线测试已通过 |
+| 当前步骤   | 步骤 18：请求幂等与防重复下单已完成，3 个自动化测试通过 |
 | 本周目标   | 后端继续推进可靠交易基础：库存账本、重复操作和并发基线 |
-| 今日目标   | 补步骤 17 并发基线测试，验证条件扣库存不会让可售库存变成负数 |
-| 昨日完成   | 步骤 17 库存流水账本起步已完成；普通下单和模拟支付已写入库存流水 |
+| 今日目标   | 完成步骤 18：幂等键、重复提交、参数冲突和并发防重复下单 |
+| 昨日完成   | 步骤 17 并发基线和完整下单链路并发测试已通过 |
 | 当前卡点   | 暂无主线卡点；正式 ID 方案后续再替换 |
-| 最近一次提交 | `test(inventory): cover concurrent stock locking`                           |
-| 明日优先   | 继续步骤 17 收口：可把并发基线升级到完整下单链路，或进入步骤 18 幂等下单 |
+| 最近一次提交 | 待提交：`feat(order): add idempotent order creation`                           |
+| 明日优先   | 进入步骤 19：评估商品查询缓存，先确认缓存边界和一致性要求 |
 
 ## 每日任务
 ## Day 1：2026-07-19
@@ -755,3 +755,40 @@
 - 卡住点：第一次运行测试时 Spring 测试环境无法连接 MySQL，根因是测试运行配置没有拿到正确的 `MYSQL_ROOT_PASSWORD`；补环境变量后测试通过。Mockito/Byte Buddy 的 JVM 红色提示是测试库动态加载 agent 的警告，不影响本次测试。
 - 明天优先做：可以进入步骤 18 幂等下单，重点学习幂等键、重复提交、同 key 同参数返回同一结果、同 key 不同参数返回冲突。
 - 截图记录：截图已放入 `docs/images/day-15/`，包含完整下单链路并发测试通过截图。
+
+## Day 16：2026-08-05
+
+### 今天对应任务
+
+- 当前文档：`02-交易库存限量促销开发链.md`
+- 当前步骤：步骤 18：请求幂等与防重复下单
+- 今日目标：为创建订单增加 `Idempotency-Key`，防止重复下单，并用自动化测试验证同 key 的重试、参数冲突和并发场景。
+
+### 今天验收
+
+- [x] Flyway `V8__add_idempotent_request.sql` 执行成功，新增 `idempotent_request` 表。
+- [x] 新增幂等请求实体和 Mapper，记录 `PROCESSING/SUCCESS` 状态，并在成功后绑定 `order_id`。
+- [x] 下单接口读取 `Idempotency-Key` 请求头，缺失时返回 `400`。
+- [x] 同一个消费者、同一个 key、同一组参数重复提交时返回同一个订单。
+- [x] 同一个 key 搭配不同参数时返回 `409`，不会继续创建订单。
+- [x] 20 个并发请求使用同一个 key 时，数据库最终只有 1 条订单和 1 条成功幂等记录。
+- [x] `OrderIdempotencyTest` 的 3 个测试全部通过。
+- [x] Apifox 验证新 key 下单成功、重复请求返回同一订单、不同参数冲突、不传 key 返回 `400`。
+- [x] DataGrip 验证 `idempotent_request` 的请求指纹、`SUCCESS` 状态和 `order_id=45`。
+- [x] 截图已归档到 `docs/images/day-16/`。
+
+### 今天完成
+
+- 完成了：步骤 18 请求幂等与防重复下单，覆盖数据库迁移、请求头、参数指纹、唯一约束、并发冲突处理和自动化测试。
+- 关键设计：幂等范围是“消费者 + Idempotency-Key”；同 key 同参数返回旧订单，同 key 不同参数返回冲突；数据库唯一键负责兜住并发竞态。
+- 测试结论：并发请求的成功响应数可以大于 1，因为后续请求会复用同一个已成功订单；真正的唯一性由不同 `orderId` 数量和数据库订单数共同证明。
+- 明日优先：进入步骤 19 前，先确认商品查询缓存的读写边界、失效时机和与数据库的一致性要求。
+
+### 截图记录
+
+- `docs/images/day-16/flyway-v8-migration-success.png`
+- `docs/images/day-16/order-create-idempotency-success.png`
+- `docs/images/day-16/order-repeat-same-result.png`
+- `docs/images/day-16/order-idempotency-conflict-409.png`
+- `docs/images/day-16/idempotent-request-datagrip-success.png`
+- `docs/images/day-16/order-idempotency-tests-passed.png`

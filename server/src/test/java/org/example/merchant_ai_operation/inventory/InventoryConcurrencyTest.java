@@ -126,7 +126,8 @@ class InventoryConcurrencyTest {
                 startLatch.await();
 
                 try {
-                    orderService.createOrderVO(new CreateOrderRequest(List.of(cartItemId)));
+                    String idempotencyKey = "inventory-concurrency-" + consumerId;
+                    orderService.createOrderVO(idempotencyKey,new CreateOrderRequest(List.of(cartItemId)));
                     return true;
                 } catch (Exception ex) {
                     return false;

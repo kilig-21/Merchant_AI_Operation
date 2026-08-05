@@ -2,6 +2,8 @@ package org.example.merchant_ai_operation.order.service;
 
 import org.example.merchant_ai_operation.cart.mapper.CartItemMapper;
 import org.example.merchant_ai_operation.common.BizException;
+import org.example.merchant_ai_operation.idempotency.entity.IdempotentRequest;
+import org.example.merchant_ai_operation.idempotency.mapper.IdempotentRequestMapper;
 import org.example.merchant_ai_operation.inventory.entity.InventoryMovement;
 import org.example.merchant_ai_operation.inventory.mapper.InventoryMovementMapper;
 import org.example.merchant_ai_operation.merchant.product.entity.ProductSku;
@@ -17,14 +19,17 @@ import org.example.merchant_ai_operation.order.vo.OrderItemVO;
 import org.example.merchant_ai_operation.order.vo.OrderSkuSnapshotVO;
 import org.example.merchant_ai_operation.security.CurrentUser;
 import org.jspecify.annotations.NonNull;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
+
+
+
 
 @Service
 public class OrderService {
@@ -33,25 +38,82 @@ public class OrderService {
     private final CommerceOrderItemMapper commerceOrderItemMapper;
     private final CartItemMapper cartItemMapper;
     private final InventoryMovementMapper  inventoryMovementMapper;
+    private final IdempotentRequestMapper idempotentRequestMapper;
 
     public OrderService(ProductSkuMapper productSkuMapper,
                         CommerceOrderMapper commerceOrderMapper,
                         CommerceOrderItemMapper commerceOrderItemMapper,
                         CartItemMapper cartItemMapper,
-                        InventoryMovementMapper inventoryMovementMapper
+                        InventoryMovementMapper inventoryMovementMapper,
+                        IdempotentRequestMapper idempotentRequestMapper
     ) {
         this.productSkuMapper = productSkuMapper;
         this.commerceOrderMapper = commerceOrderMapper;
         this.commerceOrderItemMapper = commerceOrderItemMapper;
         this.cartItemMapper = cartItemMapper;
         this.inventoryMovementMapper = inventoryMovementMapper;
+        this.idempotentRequestMapper = idempotentRequestMapper;
     }
 
 
     //创建订单的service方法
     @Transactional
-    public CreateOrderVO createOrderVO(CreateOrderRequest request) {
+    public CreateOrderVO createOrderVO(String idempotencyKey, CreateOrderRequest request) {
         Long consumerId = CurrentUser.requiredConsumerId();
+
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new BizException(400, "Idempotency-Key 不能为空");
+        }
+        //创建请求的哈希值;
+        //方法在下方
+        String requestHash = buildCreateOrderRequestHash(request);
+
+        //先验证订单是否有重复的
+        IdempotentRequest idempotentRequest =
+                idempotentRequestMapper.selectByConsumerIdAndRequestKey(consumerId, idempotencyKey);
+
+        if (idempotentRequest != null) {
+            if (!requestHash.equals(idempotentRequest.getRequestHash())) {
+                throw new BizException("同一个 Idempotency-Key 不能用于不同下单参数");
+            }
+
+            if ("SUCCESS".equals(idempotentRequest.getStatus())) {
+                CommerceOrder existingOrder = commerceOrderMapper.selectByOrderIdAndConsumerId(
+                        idempotentRequest.getOrderId(),
+                        consumerId
+                );
+
+                if (existingOrder == null) {
+                    throw new BizException("幂等记录对应的订单不存在");
+                }
+
+                return new CreateOrderVO(
+                        existingOrder.getId(),
+                        existingOrder.getOrderNo(),
+                        existingOrder.getStatus(),
+                        existingOrder.getTotalAmount(),
+                        existingOrder.getExpireAt()
+                );
+            }
+
+            throw new BizException(409, "请求正在处理中，请稍后查询订单结果");
+        }
+
+        idempotentRequest = new IdempotentRequest();
+        idempotentRequest.setConsumerId(consumerId);
+        idempotentRequest.setRequestKey(idempotencyKey);
+        idempotentRequest.setRequestHash(requestHash);
+        idempotentRequest.setStatus("PROCESSING");
+        /*
+         * 要给 insert 包一层 try/catch，否则并发时会因为数据库唯一约束抛异常
+         * */
+        // 原来的 : idempotentRequestMapper.insert(idempotentRequest);
+        try {
+            idempotentRequestMapper.insert(idempotentRequest);
+        } catch (DuplicateKeyException ex) {
+            throw new BizException(409, "请求正在处理中，请稍后查询订单结果");
+        }
+
 
         List<OrderSkuSnapshotVO> snapshots = productSkuMapper.selectOrderSkuSnapshots(
                 consumerId,
@@ -81,9 +143,8 @@ public class OrderService {
         commerceOrderMapper.insert(order);
 
 
-
         //把每个购物车项变成订单项，同时锁定库存，并把已结算的购物车项删掉。
-        for (OrderSkuSnapshotVO snapshot : snapshots){
+        for (OrderSkuSnapshotVO snapshot : snapshots) {
             int locked = productSkuMapper.lockStock(
                     snapshot.skuId(),
                     snapshot.tenantId(),
@@ -91,7 +152,7 @@ public class OrderService {
             );
 
             //判断锁库存是否成功
-            if(locked != 1){
+            if (locked != 1) {
                 throw new BizException("商品库存不足");
             }
 
@@ -102,7 +163,7 @@ public class OrderService {
                     snapshot.skuId(),
                     snapshot.tenantId()
             );
-            if (latestSku == null){
+            if (latestSku == null) {
                 throw new BizException("商品不存在");
             }
 
@@ -121,6 +182,9 @@ public class OrderService {
             cartItemMapper.deleteByIdAndConsumerId(snapshot.cartItemId(), consumerId);
 
         }
+
+        //订单好了后再return之前把订单成功的记录传过去;->把订单id给写回idempotent_request.order_id
+        idempotentRequestMapper.markSuccess(idempotentRequest.getId(), order.getId());
 
         return new CreateOrderVO(
                 order.getId(),
@@ -308,6 +372,16 @@ public class OrderService {
         String datePart = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
         int randomPart = ThreadLocalRandom.current().nextInt(100000, 1000000);
         return "ORD" + datePart + randomPart;
+    }
+
+    // 创建下单请求的参数指纹：同一批购物车项会得到同一个字符串
+    private String buildCreateOrderRequestHash(CreateOrderRequest request) {
+        return request.cartItemIds()
+                .stream()
+                .sorted()
+                .map(String :: valueOf)
+                .reduce((left, right) -> left + "," + right)
+                .orElse("");
     }
 }
 
