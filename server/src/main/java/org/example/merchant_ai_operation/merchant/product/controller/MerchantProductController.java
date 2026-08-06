@@ -5,6 +5,7 @@ import jakarta.validation.Valid;
 import org.example.merchant_ai_operation.common.ApiResponse;
 import org.example.merchant_ai_operation.merchant.product.dto.CreateProductRequest;
 import org.example.merchant_ai_operation.merchant.product.dto.CreateSkuRequest;
+import org.example.merchant_ai_operation.merchant.product.dto.UpdateSkuPriceRequest;
 import org.example.merchant_ai_operation.merchant.product.service.ProductService;
 import org.example.merchant_ai_operation.merchant.product.vo.MerchantProductVO;
 import org.springframework.web.bind.annotation.*;
@@ -44,8 +45,6 @@ public class MerchantProductController {
         Long skuId = productService.createSku(id, request);
         return ApiResponse.ok(Map.of("id", skuId));
     }
-
-
     //上架商品
     @PostMapping("/{id}/publish")
     public ApiResponse<Void> publish(@PathVariable Long id) {
@@ -70,6 +69,18 @@ public class MerchantProductController {
     ) {
         return ApiResponse.ok(productService.listMerchantProducts(page, size, keyword));
     }
+
+    //更改商品价格
+    @PutMapping("/skus/{skuId}/price")
+    public ApiResponse<String> updateSalePrice(
+            @PathVariable Long skuId,
+            @Valid @RequestBody UpdateSkuPriceRequest request
+    ){
+        productService.updateSkuPrice(skuId, request);
+        return ApiResponse.ok("更改价格成功");
+    }
+
+
 
 
 

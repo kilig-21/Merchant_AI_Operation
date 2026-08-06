@@ -1766,3 +1766,81 @@ PAID --申请售后--> AFTER_SALE
 ### 明天遇到再补
 
 - 进入步骤 19 前先理解商品缓存为什么能减少数据库查询，以及缓存失效、更新顺序和库存实时性之间的取舍。
+
+## Day 17：2026-08-06
+
+### 今天对应任务
+
+- 当前文档：`02-交易库存限量促销开发链.md`
+- 当前步骤：步骤 19：Redis 商品缓存与一致性策略。
+- 今日目标：为公开商品详情建立 Cache Aside 缓存，验证缓存命中、失效、空值、租户隔离和 Redis 故障回源。
+
+### 今天学了什么
+
+- `StringRedisTemplate`：Spring 提供的 Redis 操作工具；`opsForValue().get(key)` 读取字符串 Value，`set(key, value, ttl)` 写入带过期时间的缓存。
+- `ObjectMapper`：负责 Java 对象和 JSON 字符串互相转换；`writeValueAsString` 用于写入 Redis，`readValue` 用于缓存命中时恢复 `PublicProductDetailVO`。
+- Cache Aside：先读缓存；未命中查数据库；查到后写缓存；商品更新成功后删除缓存。
+- 缓存降级：Redis 读取或写入失败时，不影响商品查询主流程，读取回源 MySQL，写入失败仍返回数据库结果。
+- 空值缓存：用 `__EMPTY_PRODUCT_DETAIL__` 短暂表示“已经查过且商品不存在”，TTL 为 30 秒，避免恶意 ID 持续穿透数据库。
+- 租户隔离：缓存 Key 使用 `mall:v1:tenant:{tenantId}:product:{spuId}`，不同商家不会共用同一个商品详情缓存。
+- 日志级别：缓存故障属于可恢复异常，使用 `log.warn`；正式日志比 `System.out.println` 更容易按级别、线程、类名和异常堆栈管理。
+
+### 今天完成
+
+- [x] 新增 `ProductCacheKey`，统一商品详情 Key 和空值标记。
+- [x] `PublicProductService` 接入 Redis 读取、JSON 反序列化、数据库回源和 JSON 回填。
+- [x] 商品详情缓存设置 10 分钟 TTL；不存在商品的空值缓存设置 30 秒 TTL。
+- [x] Redis 停止时，商品详情仍能回源数据库并返回成功结果。
+- [x] 上架、下架成功后删除商品详情缓存。
+- [x] 新增 SKU 改价接口，改价成功后删除所属 SPU 的详情缓存。
+- [x] 使用 Apifox 和 Redis CLI 验证改价后价格从 `199.00` 更新为 `188.00`，缓存内容同步更新。
+- [x] 验证不同租户：租户 `1001` 返回真实商品 JSON，租户 `1002` 返回空值标记，不发生缓存串数据。
+- [x] 正式日志替换商品缓存相关的 `System.out.println`，并完成编译验证。
+
+### 今天遇到的问题
+
+| 问题 | 原因与解决 | 是否已理解 |
+|---|---|---|
+| Redis 停止后 Apifox 一直加载 | Redis 客户端等待连接超时；增加 `spring.data.redis.connect-timeout=1s` 和 `spring.data.redis.timeout=1s` 后，超时即可回源数据库 | 是 |
+| Redis 连接失败日志是否代表接口失败 | `Connection refused` 是 Redis 不可用的底层原因；最终 Apifox 返回 `200` 且商品查询成功，说明降级逻辑生效 | 是 |
+| `TTL` 为什么返回 `-2` | `-2` 表示 Key 已不存在；30 秒空值缓存已经自动过期 | 是 |
+| 改价接口第一次返回系统异常 | Apifox 请求方法/请求配置有误；改为 `PUT` 并传入 JSON 请求体后返回 `code=0` | 是 |
+| `GET` 调用只支持 `POST` 的接口 | HTTP 方法不匹配，返回 `code=405` 是正确的请求错误，不是系统异常 | 是 |
+
+### 重要修改
+
+- 新增 `server/src/main/java/org/example/merchant_ai_operation/publicapi/product/cache/ProductCacheKey.java`。
+- `PublicProductService` 增加 Redis 商品详情读取、JSON 转换、TTL、空值缓存和 Redis 故障降级。
+- `ProductService` 在商品上架、下架和 SKU 改价成功后删除详情缓存。
+- 新增 `UpdateSkuPriceRequest`，新增 `ProductSkuMapper.updateSalePrice(...)` 和商家改价接口：
+  - `PUT /api/merchant/products/skus/{skuId}/price`
+- `PublicProductController` 的商品详情接口使用 `storeId + spuId`，数据库查询和缓存 Key 均按租户隔离。
+- `application.properties` 增加 Redis 连接和命令超时配置。
+
+### 截图记录
+
+- `docs/images/day-17/redis-server-ready.png`
+- `docs/images/day-17/redis-product-cache-and-ttl.png`
+- `docs/images/day-17/redis-fallback-request-success.png`
+- `docs/images/day-17/redis-restored-product-query-success.png`
+- `docs/images/day-17/empty-cache-marker.png`
+- `docs/images/day-17/tenant-cache-isolation.png`
+- `docs/images/day-17/tenant-1001-cache-json.png`
+- `docs/images/day-17/price-update-cache-refreshed.png`
+
+### 侧边任务/对话补充记录
+
+- `storeId` 与 `tenant_id`：当前项目没有独立的店铺表，对外接口使用 `storeId` 表示消费者访问的店铺，对内数据库使用 `tenant_id` 表示商家租户；当前二者值一一对应，但命名分别服务于接口层和数据隔离层。
+- `StringRedisTemplate` 与 `JdbcTemplate`：二者都是 Spring 的数据访问工具；前者按 Redis Key-Value 操作，后者通常执行关系型数据库 SQL。
+- 第一次查询为什么仍返回 `result`：第一次结果来自 MySQL 组装的 Java 对象，Redis 只是保存 JSON 副本；后续命中缓存时才由 Redis JSON 转回 Java 对象并直接返回。
+- `ObjectMapper` 的作用：`writeValueAsString` 把 Java 对象转 JSON，`readValue` 把 JSON 转回指定 Java 类型；解析失败时回源数据库。
+- `System.out.println` 与 `log.warn`：前者只是临时标准输出，后者带日志级别、上下文和异常堆栈，适合正式项目运行。
+
+### 今天还没理解透
+
+- 当前缓存删除是在数据库更新方法成功返回后执行；更复杂的事务提交后失效、消息通知和缓存重建策略，后续继续学习。
+- 当前 TTL 使用固定值，随机过期、热点互斥重建和逻辑过期尚未实现，按步骤 19 的基础目标暂不提前扩展。
+
+### 明天优先
+
+- 步骤 20：学习 RabbitMQ、可靠发布与订单关闭消息；继续沿用“程序返回 + 数据库/消息最终状态”的双重验收方式。

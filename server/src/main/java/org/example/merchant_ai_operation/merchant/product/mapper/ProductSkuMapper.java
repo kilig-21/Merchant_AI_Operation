@@ -4,6 +4,7 @@ import org.apache.ibatis.annotations.*;
 import org.example.merchant_ai_operation.merchant.product.entity.ProductSku;
 import org.example.merchant_ai_operation.order.vo.OrderSkuSnapshotVO;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Mapper
@@ -132,6 +133,21 @@ public interface ProductSkuMapper {
     ProductSku selectByIdAndTenantId(
             @Param("skuId") Long skuId,
             @Param("tenantId") Long tenantId
+    );
+
+
+    @Update("""
+            UPDATE product_sku
+            SET sale_price = #{salePrice},
+                version = version + 1
+            WHERE id = #{skuId}
+              AND tenant_id = #{tenantId}
+            """)
+    //只更新价格
+    int updateSalePrice(
+            @Param("skuId") Long skuId,
+            @Param("tenantId") Long tenantId,
+            @Param("salePrice") BigDecimal salePrice
     );
 
 

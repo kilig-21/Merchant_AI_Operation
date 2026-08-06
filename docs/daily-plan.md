@@ -7,7 +7,7 @@
 
 | 项目 | 进度 |
 |---|---|
-| 总步骤 | `████████████████░` 16 / 36 |
+| 总步骤 | `█████████████████░` 17 / 36 |
 | 当前阶段 | 第 1 阶段：工程与基础业务 |
 | 本周任务 | `███████` 7 / 7 |
 | 周验收 | 已通过 |
@@ -18,13 +18,13 @@
 | ------ | ---------------------------- |
 | 当前阶段   | 第 1 阶段：工程与基础业务               |
 | 当前文档   | `02-交易库存限量促销开发链.md`           |
-| 当前步骤   | 步骤 18：请求幂等与防重复下单已完成，3 个自动化测试通过 |
-| 本周目标   | 后端继续推进可靠交易基础：库存账本、重复操作和并发基线 |
-| 今日目标   | 完成步骤 18：幂等键、重复提交、参数冲突和并发防重复下单 |
-| 昨日完成   | 步骤 17 并发基线和完整下单链路并发测试已通过 |
+| 当前步骤   | 步骤 19：Redis 商品缓存与一致性策略已完成，核心链路和故障验收通过 |
+| 本周目标   | 后端继续推进可靠交易基础：缓存一致性、消息可靠性和订单关闭 |
+| 今日目标   | 完成步骤 19：商品详情缓存、缓存失效、故障降级和多租户隔离 |
+| 昨日完成   | 步骤 18 幂等下单已完成，3 个自动化测试通过 |
 | 当前卡点   | 暂无主线卡点；正式 ID 方案后续再替换 |
-| 最近一次提交 | 待提交：`feat(order): add idempotent order creation`                           |
-| 明日优先   | 进入步骤 19：评估商品查询缓存，先确认缓存边界和一致性要求 |
+| 最近一次提交 | 待提交：`feat(cache): add product detail cache and consistency handling` |
+| 明日优先   | 进入步骤 20：RabbitMQ、可靠发布与订单关闭消息 |
 
 ## 每日任务
 ## Day 1：2026-07-19
@@ -792,3 +792,50 @@
 - `docs/images/day-16/order-idempotency-conflict-409.png`
 - `docs/images/day-16/idempotent-request-datagrip-success.png`
 - `docs/images/day-16/order-idempotency-tests-passed.png`
+
+## Day 17：2026-08-06
+
+### 今日阶段
+
+- 当前文档：`02-交易库存限量促销开发链.md`
+- 当前步骤：步骤 19：Redis 商品缓存与一致性策略。
+- 今日目标：完成公开商品详情缓存、缓存失效、空值缓存、租户隔离和 Redis 故障回源验收。
+
+### 今日任务
+
+- [x] 商品详情使用 Cache Aside：先读 Redis，未命中查 MySQL，成功后回填 Redis。
+- [x] 商品详情 JSON 使用 `ObjectMapper` 转换，缓存 TTL 为 10 分钟。
+- [x] Redis 停止时商品查询能够超时回源数据库，接口仍返回成功结果。
+- [x] 商品不存在写入空值标记 `__EMPTY_PRODUCT_DETAIL__`，TTL 为 30 秒。
+- [x] 商品上架、下架和 SKU 改价成功后删除商品详情缓存。
+- [x] 验证租户 `1001` 与 `1002` 使用不同缓存 Key，不发生数据串读。
+- [x] 将商品缓存相关临时输出替换为 `log.warn`，并完成编译验证。
+
+### 今日验收
+
+- [x] Apifox 首次和重复查询商品详情均返回成功，重复查询明显更快。
+- [x] Redis CLI 查询到商品 JSON，TTL 正常倒计时。
+- [x] Redis 停止后 Apifox 仍返回商品详情，控制台记录回源数据库。
+- [x] 商品下架后公开查询返回业务 `code=404`，重新上架后恢复 `code=0`。
+- [x] SKU 价格从 `199.00` 改为 `188.00` 后，Apifox 和 Redis 中均为 `188.00`。
+- [x] 不存在商品第二次查询命中空值缓存，Redis 中可见空值标记，TTL 约 30 秒。
+- [x] 租户 `1001` 返回真实商品 JSON，租户 `1002` 返回空值标记。
+- [x] `mvnw -DskipTests compile` 编译通过。
+- [x] 成功截图已归档到 `docs/images/day-17/`。
+
+### 今日完成
+
+- 完成了：步骤 19 的核心缓存链路和一致性验收，包括商品详情缓存、TTL、空值缓存、缓存失效、改价同步、租户隔离和 Redis 故障降级。
+- 未提前扩展：随机 TTL、热点互斥重建、逻辑过期和正式指标暂未实现，保留到后续需要时再补。
+- 明日优先：进入步骤 20，学习 RabbitMQ、可靠发布与订单关闭消息。
+
+### 今日截图记录
+
+- `docs/images/day-17/redis-server-ready.png`
+- `docs/images/day-17/redis-product-cache-and-ttl.png`
+- `docs/images/day-17/redis-fallback-request-success.png`
+- `docs/images/day-17/redis-restored-product-query-success.png`
+- `docs/images/day-17/empty-cache-marker.png`
+- `docs/images/day-17/tenant-cache-isolation.png`
+- `docs/images/day-17/tenant-1001-cache-json.png`
+- `docs/images/day-17/price-update-cache-refreshed.png`

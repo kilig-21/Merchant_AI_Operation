@@ -21,12 +21,14 @@ public class PublicProductController {
     }
 
 
+    //ping测试
     @GetMapping("/api/public/products/ping")
     public ApiResponse<String> ping() {
         return ApiResponse.ok("public-product-pong");
     }
 
 
+    //列出公共商品列表
     @GetMapping("/api/public/stores/{storeId}/products")
     public ApiResponse<List<PublicProductListItemVO>> listStoreProducts(
             //从 URL 里拿店铺 ID，例如 /stores/1001/products，这里的 1001 就会进入 storeId。
@@ -39,11 +41,14 @@ public class PublicProductController {
     }
 
     //用户查询具体商品:
-    @GetMapping("/api/public/products/{spuId}")
-    public ApiResponse<PublicProductDetailVO> getProductDetail(@PathVariable Long spuId){
-        return ApiResponse.ok(publicProductService.getProductDetail(spuId));
+    @GetMapping("/api/public/stores/{storeId}/products/{spuId}")
+    public ApiResponse<PublicProductDetailVO> getProductDetail(
+            @PathVariable Long storeId,
+            @PathVariable Long spuId){
+        return ApiResponse.ok(publicProductService.getProductDetail(storeId, spuId));
     }
 
+    //查询Sku库存数
     @GetMapping("/api/public/skus/{skuId}/availability")
     public ApiResponse<PublicSkuAvailabilityVO> getSkuAvailability(@PathVariable Long skuId){
         return ApiResponse.ok(publicProductService.getSkuAvailability(skuId));

@@ -47,17 +47,20 @@ public interface PublicProductMapper {
         //第一个查 SPU：商品本体信息，比如名称、描述、更新时间。
         //这个方法只查已上架 SPU。下架商品会查不到，后面 Service 里就返回“商品不存在”。
         @Select("""
-            SELECT
-                p.id,
-                p.name,
-                p.description,
-                p.updated_at AS updatedAt
-            FROM product_spu p
-            WHERE p.id = #{spuId}
-              AND p.status = 'ON_SALE'
-            """)
+               SELECT
+                   p.id,
+                   p.name,
+                   p.description,
+                   p.updated_at AS updatedAt
+               FROM product_spu p
+               WHERE p.id = #{spuId}
+               AND p.status = 'ON_SALE'
+               AND p.tenant_id = #{storeId}
+               """)
         //查 SPU 基础详情
-        PublicProductBaseVO selectPublicProductDetail(@Param("spuId") Long spuId);
+        PublicProductBaseVO selectPublicProductDetail(
+                @Param("storeId") Long storeId,
+                @Param("spuId") Long spuId);
 
 
 
@@ -65,22 +68,26 @@ public interface PublicProductMapper {
         //第二个查 SKU：这个商品下面有哪些可售规格、价格、库存。
         //查询具体的sku商品型号
         @Select("""
-        SELECT
-            s.id,
-            s.sku_name AS skuName,
-            s.sale_price AS salePrice,
-            s.available_stock AS availableStock
-        FROM product_sku s
-        JOIN product_spu p
-          ON p.id = s.spu_id
-         AND p.tenant_id = s.tenant_id
-        WHERE s.spu_id = #{spuId}
-          AND s.status = 'ON_SALE'
-          AND p.status = 'ON_SALE'
-        ORDER BY s.sale_price ASC 
-        """)                    //sql里默认的是升序,所以ASC有点冗余
+                SELECT
+                    s.id,
+                    s.sku_name AS skuName,
+                    s.sale_price AS salePrice,
+                    s.available_stock AS availableStock
+                FROM product_sku s
+                JOIN product_spu p
+                  ON p.id = s.spu_id
+                 AND p.tenant_id = s.tenant_id
+                WHERE s.spu_id = #{spuId}
+                  AND p.tenant_id = #{storeId}
+                  AND s.status = 'ON_SALE'
+                  AND p.status = 'ON_SALE'
+                ORDER BY s.sale_price ASC
+                """)
+        //sql里默认的是升序,所以ASC有点冗余
         //查这个 SPU 下的可售 SKU
-        List<PublicSkuVO> selectPublicSkusBySpuId(@Param("spuId") Long spuId);
+        List<PublicSkuVO> selectPublicSkusBySpuId(
+                @Param("storeId") Long storeId,
+                @Param("spuId") Long spuId);
 
         @Select("""
         SELECT

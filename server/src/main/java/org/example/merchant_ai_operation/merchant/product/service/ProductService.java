@@ -4,13 +4,16 @@ package org.example.merchant_ai_operation.merchant.product.service;
 import org.example.merchant_ai_operation.common.BizException;
 import org.example.merchant_ai_operation.merchant.product.dto.CreateProductRequest;
 import org.example.merchant_ai_operation.merchant.product.dto.CreateSkuRequest;
+import org.example.merchant_ai_operation.merchant.product.dto.UpdateSkuPriceRequest;
 import org.example.merchant_ai_operation.merchant.product.entity.ProductSku;
 import org.example.merchant_ai_operation.merchant.product.entity.ProductSpu;
 import org.example.merchant_ai_operation.merchant.product.mapper.ProductSkuMapper;
 import org.example.merchant_ai_operation.merchant.product.mapper.ProductSpuMapper;
 import org.example.merchant_ai_operation.merchant.product.vo.MerchantProductVO;
+import org.example.merchant_ai_operation.publicapi.product.cache.ProductCacheKey;
 import org.example.merchant_ai_operation.security.CurrentUser;
 import org.jspecify.annotations.NonNull;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -21,10 +24,12 @@ public class ProductService {
 
     private final ProductSpuMapper productSpuMapper;
     private final ProductSkuMapper productSkuMapper;
+    private final StringRedisTemplate stringRedisTemplate;
 
-    public ProductService(ProductSpuMapper productSpuMapper, ProductSkuMapper productSkuMapper) {
+    public ProductService(ProductSpuMapper productSpuMapper, ProductSkuMapper productSkuMapper, StringRedisTemplate stringRedisTemplate) {
         this.productSpuMapper = productSpuMapper;
         this.productSkuMapper = productSkuMapper;
+        this.stringRedisTemplate = stringRedisTemplate;
 
     }
 
@@ -73,8 +78,6 @@ public class ProductService {
         return  sku.getId();
     }
 
-
-
     //列出所有的商品的列表;
     public List<MerchantProductVO>  listMerchantProducts(Integer page,Integer size,String keyword){
         Long tenantId=CurrentUser.requiredMerchantTenantId();
@@ -92,12 +95,13 @@ public class ProductService {
 
     }
 
-    //上架商品:
-    //链路:
-        //拿当前商家 tenantId
-        //-> 确认这个商品属于当前商家
-        //-> 确认商品至少有 1 个 SKU
-        //-> 把 SPU 状态改成 ON_SALE
+/*    上架商品:
+    链路:
+        拿当前商家 tenantId
+        -> 确认这个商品属于当前商家
+        -> 确认商品至少有 1 个 SKU
+        -> 把 SPU 状态改成 ON_SALE
+*/
     public void publishProduct(Long spuId){
         Long  tenantId = CurrentUser.requiredMerchantTenantId();
         int spuCount=productSpuMapper.countByIdAndTenantId(spuId, tenantId);
@@ -115,6 +119,11 @@ public class ProductService {
             throw new BizException(500, "商品上架失败");
         }
 
+        //更新好后将缓存删去,防止看到旧商品
+        stringRedisTemplate.delete(
+                ProductCacheKey.detail(tenantId, spuId)
+        );
+
     }
 
     //下架商品:
@@ -128,9 +137,41 @@ public class ProductService {
         if (updated != 1) {
             throw new BizException(404, "商品不存在");
         }
+        //下架后后也将缓存删去,防止看到旧商品
+        stringRedisTemplate.delete(
+                ProductCacheKey.detail(tenantId, spuId)
+        );
 
 
     }
+
+    //更新价格
+    public void updateSkuPrice(Long skuId, UpdateSkuPriceRequest request){
+        Long tenantId = CurrentUser.requiredMerchantTenantId();
+
+        //先查询商品
+        ProductSku sku = productSkuMapper.selectByIdAndTenantId(skuId, tenantId);
+        if (sku == null) {
+            throw new BizException(404, "SKU 不存在");
+        }
+
+        int updated = productSkuMapper.updateSalePrice(
+                skuId,
+                tenantId,
+                request.salePrice()
+        );
+        if (updated != 1) {
+            throw new BizException(500, "SKU 改价失败");
+        }
+
+        //改完后把缓存删了,防止旧数据污染
+        stringRedisTemplate.delete(
+                ProductCacheKey.detail(tenantId, sku.getSpuId())
+        );
+
+
+    }
+
 
 
 
