@@ -289,6 +289,43 @@ public class OrderService {
         );
     }
 
+    //取消订单
+    @Transactional
+    public void cancelOrder(Long  orderId){
+        Long consumerId = CurrentUser.requiredConsumerId();
+
+        //标记取消订单
+        int cancelled = commerceOrderMapper.markCancelledByIdAndConsumerId(orderId, consumerId);
+        //只要没有成功更新，就停止后续库存操作，避免错误释放库存。
+        if (cancelled != 1){
+            throw new BizException("订单不存在或状态不允许取消");
+        }
+
+        //重新查一次,获得最新的数据库的信息
+        CommerceOrder order = commerceOrderMapper.selectByOrderIdAndConsumerId(orderId, consumerId);
+        //查询完后列出
+        List<CommerceOrderItem> items = commerceOrderItemMapper.selectByOrderId(orderId);
+
+        for (CommerceOrderItem item : items) {
+            int released =  productSkuMapper.releaseLockedStock(
+                    item.getSkuId(),
+                    order.getTenantId(),
+                    item.getQuantity()
+            );
+            if(released != 1){
+                throw new BizException("订单锁定库存释放失败");
+            }
+            //释放完后重新
+            ProductSku latestSku = productSkuMapper.selectByIdAndTenantId(
+                    item.getSkuId(),
+                    order.getTenantId()
+            );
+            //写入流水
+            InventoryMovement movement = createOrderCancelMovement(item, order, latestSku);
+            inventoryMovementMapper.insert(movement);
+        }
+    }
+
 
 
     //创建订单:
@@ -336,6 +373,20 @@ public class OrderService {
         movement.setBusinessType("ORDER_PAID");
         movement.setBusinessNo(order.getOrderNo());
         movement.setAvailableChange(0);
+        movement.setLockedChange(-item.getQuantity());
+        movement.setAvailableAfter(latestSku.getAvailableStock());
+        movement.setLockedAfter(latestSku.getLockedStock());
+        return movement;
+    }
+
+    //创建取消后的流水记录
+    private InventoryMovement createOrderCancelMovement(CommerceOrderItem item, CommerceOrder order, ProductSku latestSku) {
+        InventoryMovement movement = new InventoryMovement();
+        movement.setTenantId(order.getTenantId());
+        movement.setSkuId(item.getSkuId());
+        movement.setBusinessType("ORDER_CANCEL");
+        movement.setBusinessNo(order.getOrderNo());
+        movement.setAvailableChange(item.getQuantity());
         movement.setLockedChange(-item.getQuantity());
         movement.setAvailableAfter(latestSku.getAvailableStock());
         movement.setLockedAfter(latestSku.getLockedStock());

@@ -92,6 +92,7 @@ public interface ProductSkuMapper {
               AND available_stock >= #{quantity}
             """)
     //条件扣库存
+    //可售 → 锁定
     int lockStock(
             @Param("skuId") Long skuId,
             @Param("tenantId") Long tenantId,
@@ -107,6 +108,7 @@ public interface ProductSkuMapper {
             """)
     //这里支付成功后只减 locked_stock，不改 available_stock。
     //因为下单时可售库存已经扣过了，支付只是把“待支付占用”变成“已成交”。
+    //锁定 → 已售
     int deductLockedStock(
             @Param("skuId") Long skuId,
             @Param("quantity") Integer quantity
@@ -148,6 +150,24 @@ public interface ProductSkuMapper {
             @Param("skuId") Long skuId,
             @Param("tenantId") Long tenantId,
             @Param("salePrice") BigDecimal salePrice
+    );
+
+
+    @Update("""
+            UPDATE product_sku
+            SET available_stock = available_stock + #{quantity},
+                locked_stock = locked_stock - #{quantity},
+                version = version + 1
+            WHERE id = #{skuId}
+              AND tenant_id = #{tenantId}
+              AND locked_stock >= #{quantity}
+            """)
+    //取消订单释放库存
+    //锁定 → 可售
+    int releaseLockedStock(
+            @Param("skuId") Long skuId,
+            @Param("tenantId") Long tenantId,
+            @Param("quantity") Integer quantity
     );
 
 

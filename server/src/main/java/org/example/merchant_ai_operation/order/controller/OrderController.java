@@ -44,6 +44,12 @@ public class OrderController {
         return ApiResponse.ok(orderService.getMyOrderDetail(id));
     }
 
+    //取消订单
+    @PostMapping("/api/orders/{id}/cancel")
+    public ApiResponse<Void> cancelOrder(@PathVariable("id") Long id) {
+        orderService.cancelOrder(id);
+        return ApiResponse.ok(null);
+    }
 
 
 

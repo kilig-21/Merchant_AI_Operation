@@ -28,7 +28,7 @@ public interface CommerceOrderMapper {
             )
             """)
     @Options(useGeneratedKeys = true, keyProperty = "id")
-
+    //增加订单
     int insert(CommerceOrder order);
 
 
@@ -86,5 +86,19 @@ public interface CommerceOrderMapper {
     CommerceOrder selectByOrderIdAndConsumerId(
             @Param("orderId")  Long orderId,
             @Param("consumerId")   Long consumerId
+    );
+
+
+    @Update("""
+            UPDATE commerce_order
+            SET status = 'CANCELLED'
+            WHERE id = #{orderId}
+              AND consumer_id = #{consumerId}
+              AND status = 'PENDING_PAYMENT'
+            """)
+    //通过订单号和消费者id标记取消订单
+    int markCancelledByIdAndConsumerId(
+            @Param("orderId") Long orderId,
+            @Param("consumerId") Long consumerId
     );
 }
