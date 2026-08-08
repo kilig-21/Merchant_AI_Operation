@@ -1,5 +1,7 @@
 package org.example.merchant_ai_operation.order.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.merchant_ai_operation.cart.mapper.CartItemMapper;
 import org.example.merchant_ai_operation.common.BizException;
 import org.example.merchant_ai_operation.idempotency.entity.IdempotentRequest;
@@ -17,6 +19,8 @@ import org.example.merchant_ai_operation.order.vo.CreateOrderVO;
 import org.example.merchant_ai_operation.order.vo.OrderDetailVO;
 import org.example.merchant_ai_operation.order.vo.OrderItemVO;
 import org.example.merchant_ai_operation.order.vo.OrderSkuSnapshotVO;
+import org.example.merchant_ai_operation.outbox.entity.OutboxEvent;
+import org.example.merchant_ai_operation.outbox.mapper.OutboxEventMapper;
 import org.example.merchant_ai_operation.security.CurrentUser;
 import org.jspecify.annotations.NonNull;
 import org.springframework.dao.DuplicateKeyException;
@@ -26,6 +30,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 
@@ -39,13 +45,18 @@ public class OrderService {
     private final CartItemMapper cartItemMapper;
     private final InventoryMovementMapper  inventoryMovementMapper;
     private final IdempotentRequestMapper idempotentRequestMapper;
+    private final OutboxEventMapper outboxEventMapper;
+    private final ObjectMapper objectMapper;
 
     public OrderService(ProductSkuMapper productSkuMapper,
                         CommerceOrderMapper commerceOrderMapper,
                         CommerceOrderItemMapper commerceOrderItemMapper,
                         CartItemMapper cartItemMapper,
                         InventoryMovementMapper inventoryMovementMapper,
-                        IdempotentRequestMapper idempotentRequestMapper
+                        IdempotentRequestMapper idempotentRequestMapper,
+                        OutboxEventMapper outboxEventMapper,
+                        ObjectMapper objectMapper
+
     ) {
         this.productSkuMapper = productSkuMapper;
         this.commerceOrderMapper = commerceOrderMapper;
@@ -53,6 +64,8 @@ public class OrderService {
         this.cartItemMapper = cartItemMapper;
         this.inventoryMovementMapper = inventoryMovementMapper;
         this.idempotentRequestMapper = idempotentRequestMapper;
+        this.outboxEventMapper = outboxEventMapper;
+        this.objectMapper = objectMapper;
     }
 
 
@@ -182,6 +195,10 @@ public class OrderService {
             cartItemMapper.deleteByIdAndConsumerId(snapshot.cartItemId(), consumerId);
 
         }
+
+        //写入RabbitMQ消息
+        OutboxEvent event = createOrderCreatedEvent(order);
+        outboxEventMapper.insert(event);
 
         //订单好了后再return之前把订单成功的记录传过去;->把订单id给写回idempotent_request.order_id
         idempotentRequestMapper.markSuccess(idempotentRequest.getId(), order.getId());
@@ -433,6 +450,33 @@ public class OrderService {
                 .map(String :: valueOf)
                 .reduce((left, right) -> left + "," + right)
                 .orElse("");
+    }
+
+    //写入订单时间消息
+    private OutboxEvent createOrderCreatedEvent(CommerceOrder order) {
+        OutboxEvent event = new OutboxEvent();
+
+        //赋值
+        event.setEventId(UUID.randomUUID().toString());
+        event.setAggregateType("ORDER");
+        event.setAggregateId(order.getId());
+        event.setEventType("ORDER_CREATED");
+
+        try {
+            event.setPayload(objectMapper.writeValueAsString(Map.of(
+                    "orderId", order.getId(),
+                    "orderNo", order.getOrderNo(),
+                    "expireAt", order.getExpireAt()
+            )));
+        } catch (JsonProcessingException e) {
+            throw new BizException("订单事件生成失败");
+        }
+
+        event.setStatus("PENDING");
+        event.setRetryCount(0);
+        event.setNextRetryAt(LocalDateTime.now());
+
+        return event;
     }
 }
 

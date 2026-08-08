@@ -7,24 +7,24 @@
 
 | 项目 | 进度 |
 |---|---|
-| 总步骤 | `█████████████████░` 17 / 36 |
+| 总步骤 | `█████████████████░` 17 / 36（步骤 20 进行中） |
 | 当前阶段 | 第 1 阶段：工程与基础业务 |
 | 本周任务 | `███████` 7 / 7 |
 | 周验收 | 已通过 |
-| 最近提交 | 待提交：`feat(order): add idempotent order creation` |
+| 最近提交 | `2535c3b feat(order): complete consumer order cancellation` |
 
 ## 进度看板
 | 项目     | 当前状态                         |
 | ------ | ---------------------------- |
 | 当前阶段   | 第 1 阶段：工程与基础业务               |
 | 当前文档   | `02-交易库存限量促销开发链.md`           |
-| 当前步骤   | 步骤 19：Redis 商品缓存与一致性策略已完成，核心链路和故障验收通过 |
+| 当前步骤   | 步骤 20：RabbitMQ、可靠发布与订单关闭消息（基础发布链路已完成，订单关闭消费者待做） |
 | 本周目标   | 后端继续推进可靠交易基础：缓存一致性、消息可靠性和订单关闭 |
-| 今日目标   | 完成步骤 19：商品详情缓存、缓存失效、故障降级和多租户隔离 |
-| 昨日完成   | 步骤 18 幂等下单已完成，3 个自动化测试通过 |
-| 当前卡点   | 暂无主线卡点；正式 ID 方案后续再替换 |
-| 最近一次提交 | 待提交：`feat(cache): add product detail cache and consistency handling` |
-| 明日优先   | 进入步骤 20：RabbitMQ、可靠发布与订单关闭消息 |
+| 今日目标   | 完成步骤 20 基础：RabbitMQ 拓扑、Outbox 事件落库、发布确认和时区问题定位 |
+| 昨日完成   | 步骤 19 Redis 商品缓存与一致性策略已完成 |
+| 当前卡点   | 步骤 21 的订单关闭消费者、支付竞争和超时释放尚未实现 |
+| 最近一次提交 | `2535c3b feat(order): complete consumer order cancellation`；步骤 20 当前改动待统一提交 |
+| 明日优先   | 继续步骤 21：条件关闭订单、释放锁定库存、写关闭流水并接入消费者 |
 
 ## 每日任务
 ## Day 1：2026-07-19
@@ -839,3 +839,43 @@
 - `docs/images/day-17/tenant-cache-isolation.png`
 - `docs/images/day-17/tenant-1001-cache-json.png`
 - `docs/images/day-17/price-update-cache-refreshed.png`
+
+## Day 18：2026-08-08
+
+### 今日阶段
+
+- 当前文档：`02-交易库存限量促销开发链.md`
+- 当前步骤：步骤 20：RabbitMQ、可靠发布与订单关闭消息；基础发布链路完成，订单关闭消费者待做。
+- 今日目标：启动 RabbitMQ，建立 Outbox 本地消息表，让订单创建事件可靠发布到延迟队列。
+
+### 今日任务
+
+- [x] Compose 加入 RabbitMQ 管理版服务，并通过管理页面看到业务 Exchange 和 3 个队列。
+- [x] Flyway 新增 `V9__add_outbox_events.sql`，创建 Outbox 本地消息表。
+- [x] 创建订单与写入 `ORDER_CREATED` Outbox 事件放在同一事务。
+- [x] 增加 Publisher Confirm，定时发布 `PENDING` 事件并在确认后标记 `PUBLISHED`。
+- [x] 定位并修复 MySQL UTC 与 Java 东八区导致的 `next_retry_at` 查询误判。
+
+### 今日验收
+
+- [x] RabbitMQ 容器启动，管理页面可访问，连接数和队列数量符合预期。
+- [x] 订单 `60` 创建成功，Outbox 事件初始为 `PENDING`。
+- [x] 发布器日志显示查询到 1 条事件，发布成功后更新行数为 `1`。
+- [x] DataGrip 验证该事件状态已变为 `PUBLISHED`，`published_at` 已写入。
+- [x] Maven 编译通过，最终编译 67 个 Java 源文件。
+- [ ] 订单关闭消费者、TTL 到期后的 `CLOSED` 状态和库存释放尚未验收。
+
+### 今日完成
+
+- 完成了：步骤 20 的 RabbitMQ 基础设施、Outbox 可靠落库和发布确认链路。
+- 未提前扩展：步骤 21 的超时关闭、支付竞争、手动 ack、退避重试和失败队列消费留到下一阶段。
+- 明日优先：新增 `PENDING_PAYMENT → CLOSED` 条件更新，只有成功关闭订单的线程才释放锁定库存并写关闭流水。
+
+### 今日截图记录
+
+- `docs/images/day-18/rabbitmq-management-topology.png`
+- `docs/images/day-18/order-create-success.png`
+- `docs/images/day-18/outbox-event-pending.png`
+- `docs/images/day-18/outbox-timezone-diagnosis.png`
+- `docs/images/day-18/outbox-publisher-success-log.png`
+- `docs/images/day-18/outbox-published.png`

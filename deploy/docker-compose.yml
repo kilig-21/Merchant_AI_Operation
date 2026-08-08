@@ -20,7 +20,20 @@ services:
     command: redis-server --appendonly yes #让 Redis 开启追加日志持久化，重启后数据更不容易丢
     volumes:
       - redis-data:/data
+  
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: ai-commerce-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
 
 volumes:
   mysql-data:
   redis-data:
+  rabbitmq-data:

@@ -1844,3 +1844,81 @@ PAID --申请售后--> AFTER_SALE
 ### 明天优先
 
 - 步骤 20：学习 RabbitMQ、可靠发布与订单关闭消息；继续沿用“程序返回 + 数据库/消息最终状态”的双重验收方式。
+
+## Day 18：2026-08-08
+
+### 今天对应任务
+
+- 当前文档：`02-交易库存限量促销开发链.md`
+- 当前步骤：步骤 20：RabbitMQ、可靠发布与订单关闭消息；基础发布链路已完成，步骤 21 的关闭消费者待继续。
+- 今日目标：启动 RabbitMQ，建立 Outbox 本地消息表，让创建订单事件可靠发布到延迟队列。
+
+### 今天学了什么
+
+- RabbitMQ 是消息中间件：HTTP 下单请求仍然同步返回，RabbitMQ 保存的是后续要处理的内部事件。
+- “创建订单”和“30 分钟后关闭订单”不是两个用户请求，而是同步下单路径与异步消息处理路径。
+- `expire_at` 只记录过期时间，不会自动执行 Java 代码；需要定时任务或消息队列触发后续处理。
+- Exchange、Queue、Routing Key、生产者确认和消费者确认的职责不同；发布确认成功后才能把 Outbox 状态改为 `PUBLISHED`。
+- Outbox 本地消息表把“订单事务”和“消息发布”解耦：RabbitMQ 暂停时，事件仍保存在 MySQL 中，可以稍后重试。
+- TTL + 死信路由让订单创建事件先进入延迟队列，过期后进入订单关闭队列。
+
+### 今天完成
+
+- [x] 在 `deploy/docker-compose.yml` 中加入 RabbitMQ 管理版服务、端口和持久化卷。
+- [x] 启动 `ai-commerce-rabbitmq`，管理页面可访问，容器诊断 `Ping succeeded`。
+- [x] 配置 Spring Boot AMQP 依赖、连接信息和 Publisher Confirm/Returns。
+- [x] 新增 `RabbitMqConfig`，创建业务 Exchange、订单延迟队列、订单关闭队列和失败队列。
+- [x] 新增 Flyway `V9__add_outbox_events.sql`，`outbox_events` 表迁移成功。
+- [x] 新增 `OutboxEvent`、`OutboxEventMapper`，创建订单与写入 `ORDER_CREATED` 事件处于同一事务。
+- [x] 新增 `OutboxPublisher`，每 5 秒查询待发布事件，收到 RabbitMQ 确认后更新为 `PUBLISHED`。
+- [x] 用订单 `orderId=60` 验证订单创建成功，Outbox 事件先为 `PENDING`，随后成功变为 `PUBLISHED`。
+- [x] 编译验证通过，最终编译了 67 个 Java 源文件。
+
+### 今天遇到的问题
+
+| 问题 | 原因与解决 | 是否已理解 |
+|---|---|---|
+| Outbox 一直是 `PENDING` | 定时任务实际运行，但查询数量为 0；DataGrip 显示 MySQL `NOW()` 为 UTC，而 Java 写入 `next_retry_at` 使用东八区，时间条件被错误过滤 | 是 |
+| 为什么不是 RabbitMQ 连接失败 | 日志显示发布器正常执行，RabbitMQ 管理页面有连接和队列；真正问题发生在 Outbox 查询条件 | 是 |
+| 如何修复时区比较 | Mapper 不再使用数据库 `NOW()`，改为接收 Java 的 `LocalDateTime.now()` 参数，与写入时间使用同一时区 | 是 |
+| 为什么暂时保留 `System.out.println` | 发布器排障阶段需要直接看到事件数量、事件 ID 和确认结果；后续收口时再换成正式日志 | 部分理解 |
+
+### 重要修改
+
+- 新增 `server/src/main/resources/db/migration/V9__add_outbox_events.sql`。
+- 新增 `server/src/main/java/org/example/merchant_ai_operation/outbox/entity/OutboxEvent.java`。
+- 新增 `server/src/main/java/org/example/merchant_ai_operation/outbox/mapper/OutboxEventMapper.java`。
+- 新增 `server/src/main/java/org/example/merchant_ai_operation/outbox/service/OutboxPublisher.java`。
+- 新增 `server/src/main/java/org/example/merchant_ai_operation/config/RabbitMqConfig.java`。
+- `OrderService` 在创建订单事务中写入 `ORDER_CREATED` Outbox 事件。
+- `OutboxEventMapper.selectPendingEvents(...)` 使用 Java 当前时间参数解决 MySQL/Java 时区不一致问题。
+- `server/pom.xml` 增加 `spring-boot-starter-amqp`，`application.properties` 增加 RabbitMQ 连接和发布确认配置。
+
+### 截图记录
+
+- `docs/images/day-18/rabbitmq-management-topology.png`：RabbitMQ 管理页面显示 1 个业务 Exchange、3 个队列和 1 个应用连接。
+- `docs/images/day-18/order-create-success.png`：订单 `60` 创建成功，状态为 `PENDING_PAYMENT`。
+- `docs/images/day-18/outbox-event-pending.png`：Outbox 事件写入数据库，初始状态为 `PENDING`。
+- `docs/images/day-18/outbox-timezone-diagnosis.png`：DataGrip 证明 MySQL `NOW()` 与 Java 时间存在时区差异。
+- `docs/images/day-18/outbox-publisher-success-log.png`：发布器查询到 1 条事件并显示更新行数为 1。
+- `docs/images/day-18/outbox-published.png`：DataGrip 验证事件状态已变为 `PUBLISHED`。
+
+### 侧边任务/对话补充记录
+
+- 用户追问“RabbitMQ 为什么要异步”：形成了“用户请求同步返回，内部订单事件异步处理”的理解。
+- 用户追问“过期时间到了为什么不能自动执行”：理解了数据库字段只是数据，必须由定时任务或消息消费者触发代码。
+- 用户追问“为什么不是两个用户消息”：理解了 HTTP 请求和 RabbitMQ 内部事件是两种不同层次的消息。
+- 用户追问 `releaseLockedStock` 为什么还要单独写：理解了锁定库存、释放库存、支付扣减锁定库存分别对应不同业务状态和库存变化目的。
+- 用户要求今天先收口：步骤 20 只完成基础可靠发布，未把步骤 21 的订单关闭消费者虚报为完成。
+
+### 今天还没完成
+
+- 订单关闭消费者尚未实现，延迟消息还不能把订单状态改为 `CLOSED`。
+- 尚未完成 `PENDING_PAYMENT → CLOSED` 的条件更新、库存释放和 `ORDER_CLOSE` 流水。
+- 尚未完成支付与关闭并发竞争测试、消费者手动 ack、退避重试和失败队列验收。
+- 当前步骤 20 改动尚未统一提交 Git，等待步骤 20/21 主链路继续完成后再提交。
+
+### 明天优先
+
+- 进入步骤 21：新增内部订单查询和 `PENDING_PAYMENT → CLOSED` 条件更新。
+- 只有成功关闭订单的线程才释放锁定库存并写 `ORDER_CLOSE` 流水；重复消息直接幂等返回。
