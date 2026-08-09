@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import ConsumerNav from '../../components/ConsumerNav.vue'
 import ProductMedia from '../../components/ProductMedia.vue'
 import { getStoreProducts } from '../../api/product'
 import { currency, demoProducts, enrichProducts, type ConsumerProduct } from '../../data/consumerCatalog'
 
 const products = ref<ConsumerProduct[]>([])
+const route = useRoute()
+const storeId = computed(() => Number(route.params.storeId) || 1001)
 const loading = ref(true)
 const usingDemo = ref(false)
 const keyword = ref('')
@@ -22,7 +25,7 @@ async function load() {
   loading.value = true
   usingDemo.value = false
   try {
-    const remote = await getStoreProducts(1)
+    const remote = await getStoreProducts(storeId.value)
     if (remote.length) products.value = enrichProducts(remote)
     else {
       products.value = demoProducts
@@ -67,7 +70,7 @@ onMounted(load)
         <div v-for="item in 6" :key="item" />
       </section>
       <section v-else-if="visibleProducts.length" class="catalog-grid">
-        <RouterLink v-for="item in visibleProducts" :key="item.id" :to="`/products/${item.id}`" class="catalog-card">
+        <RouterLink v-for="item in visibleProducts" :key="item.id" :to="`/stores/${storeId}/products/${item.id}`" class="catalog-card">
           <ProductMedia :src="item.image" :alt="item.imageAlt" :tone="item.tone">
             <span v-if="item.isNew" class="new-badge">新品</span>
           </ProductMedia>

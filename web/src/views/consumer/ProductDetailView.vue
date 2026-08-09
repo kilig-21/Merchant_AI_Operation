@@ -5,12 +5,13 @@ import ConsumerNav from '../../components/ConsumerNav.vue'
 import ProductMedia from '../../components/ProductMedia.vue'
 import { addCartItem } from '../../api/cart'
 import { apiErrorMessage } from '../../api/http'
-import { getProductDetail, type PublicProductDetail, type PublicSku } from '../../api/product'
+import { getProductDetail, getSkuAvailability, type PublicProductDetail, type PublicSku } from '../../api/product'
 import { currency, findDemoProduct, makeDemoDetail } from '../../data/consumerCatalog'
 
 const route = useRoute()
 const router = useRouter()
 const productId = computed(() => Number(route.params.spuId))
+const storeId = computed(() => Number(route.params.storeId) || 1001)
 const product = ref<PublicProductDetail | null>(null)
 const selected = ref<PublicSku | null>(null)
 const quantity = ref(1)
@@ -26,7 +27,7 @@ async function load() {
   loading.value = true
   usingDemo.value = false
   try {
-    const remote = await getProductDetail(productId.value)
+    const remote = await getProductDetail(storeId.value, productId.value)
     if (!remote.skus.length) throw new Error('empty product')
     product.value = remote
   } catch {
@@ -43,6 +44,11 @@ async function addToBag() {
   message.value = ''
   submitting.value = true
   try {
+    const availability = await getSkuAvailability(currentSku.value.id)
+    if (!availability.purchasable || availability.availableStock < quantity.value) {
+      message.value = availability.message || '当前库存不足，请调整数量。'
+      return
+    }
     await addCartItem(currentSku.value.id, quantity.value)
     message.value = '已加入购物袋。'
   } catch (error) {
@@ -62,7 +68,7 @@ onMounted(load)
     <main v-else class="detail-layout">
       <section class="detail-media"><ProductMedia :src="visual.detailImage" :alt="visual.imageAlt" :tone="visual.tone" eager /></section>
       <section class="detail-content">
-        <RouterLink to="/stores/1/products" class="back-link">← 返回选购</RouterLink>
+        <RouterLink :to="`/stores/${storeId}/products`" class="back-link">← 返回选购</RouterLink>
         <p v-if="usingDemo" class="demo-mark">演示商品</p>
         <p class="product-category">{{ visual.category }}</p>
         <h1>{{ product?.name }}</h1>

@@ -30,7 +30,13 @@ export interface OrderDetail {
 }
 
 export async function createOrder(cartItemIds: number[]) {
-  const response = await http.post<ApiResponse<CreateOrderResult>>('/orders', { cartItemIds })
+  const storageKey = `morrow_checkout_key_${[...cartItemIds].sort((a, b) => a - b).join('_')}`
+  const idempotencyKey = sessionStorage.getItem(storageKey) ?? crypto.randomUUID()
+  sessionStorage.setItem(storageKey, idempotencyKey)
+  const response = await http.post<ApiResponse<CreateOrderResult>>('/orders', { cartItemIds }, {
+    headers: { 'Idempotency-Key': idempotencyKey },
+  })
+  sessionStorage.removeItem(storageKey)
   return response.data.data
 }
 
@@ -46,6 +52,11 @@ export async function getOrderDetail(id: number) {
 
 export async function mockPayOrder(id: number) {
   const response = await http.post<ApiResponse<null>>(`/orders/${id}/mock-pay`)
+  return response.data.data
+}
+
+export async function cancelOrder(id: number) {
+  const response = await http.post<ApiResponse<null>>(`/orders/${id}/cancel`)
   return response.data.data
 }
 

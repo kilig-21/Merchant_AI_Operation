@@ -41,7 +41,7 @@ onMounted(load)
           <span class="order-row__arrow" aria-hidden="true">→</span>
         </RouterLink>
       </section>
-      <section v-else class="orders-empty"><p class="kicker">NOTHING HERE YET</p><h2>还没有留下订单。</h2><p>从一件适合今天的物品开始。</p><RouterLink to="/stores/1/products">去选购 →</RouterLink></section>
+      <section v-else class="orders-empty"><p class="kicker">NOTHING HERE YET</p><h2>还没有留下订单。</h2><p>从一件适合今天的物品开始。</p><RouterLink to="/stores/1001/products">去选购 →</RouterLink></section>
     </main>
   </div>
 </template>

@@ -22,7 +22,7 @@ async function submit() {
   try {
     if (isLogin.value) await auth.signIn({ username: username.value, password: password.value })
     else { await register({ username: username.value, password: password.value }); await auth.signIn({ username: username.value, password: password.value }) }
-    router.push(typeof route.query.redirect === 'string' ? route.query.redirect : '/stores/1/products')
+    router.push(typeof route.query.redirect === 'string' ? route.query.redirect : '/stores/1001/products')
   } catch { error.value = isLogin.value ? '登录失败，请检查账号和密码。' : '注册失败，请确认账号为 3-64 位、密码为 6-32 位。' } finally { loading.value = false }
 }
 </script>
