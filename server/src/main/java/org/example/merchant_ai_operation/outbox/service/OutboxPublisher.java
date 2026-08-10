@@ -1,6 +1,9 @@
 package org.example.merchant_ai_operation.outbox.service;
 
 
+import lombok.extern.log4j.Log4j;
+import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.example.merchant_ai_operation.config.RabbitMqConfig;
 import org.example.merchant_ai_operation.outbox.entity.OutboxEvent;
 import org.example.merchant_ai_operation.outbox.mapper.OutboxEventMapper;
@@ -22,6 +25,7 @@ import java.util.concurrent.TimeUnit;
 * */
 
 @Component
+@Slf4j
 public class OutboxPublisher {
 
     private final OutboxEventMapper outboxEventMapper;
@@ -42,19 +46,18 @@ public class OutboxPublisher {
     @Scheduled(fixedDelay = 5000)
     public void publishPendingEvents() {
         try {
-            System.out.println("OutboxPublisher 开始执行");
+            log.info("OutboxPublisher 开始执行");
 
             List<OutboxEvent> events =
                     outboxEventMapper.selectPendingEvents(100);
 
-            System.out.println("待发布事件数量：" + events.size());
+            log.info("待发布事件数量：{}", events.size());
 
             for (OutboxEvent event : events) {
                 publishOne(event);
             }
         } catch (Exception e) {
-            System.out.println("查询 Outbox 事件失败");
-            e.printStackTrace();
+            log.error("查询 Outbox 事件失败", e);
         }
     }
 
@@ -67,9 +70,7 @@ public class OutboxPublisher {
      */
     private void publishOne(OutboxEvent event) {
         try {
-            System.out.println(
-                    "开始发布事件：" + event.getEventId()
-            );
+            log.info("开始发布事件，eventId={}", event.getEventId());
 
             CorrelationData correlationData =
                     new CorrelationData(event.getEventId());
@@ -101,21 +102,13 @@ public class OutboxPublisher {
                         event.getId(),
                         event.getEventId()
                 );
-
-                System.out.println(
-                        "Outbox 发布成功，更新行数：" + updated
-                );
+                log.info( "Outbox 发布成功，更新行数：{}", updated);
             } else {
-                System.out.println(
-                        "RabbitMQ 确认失败：" + confirm.getReason()
-                );
+                log.info( "RabbitMQ 确认失败：{}", confirm.getReason());
             }
 
         } catch (Exception e) {
-            System.out.println(
-                    "发布事件失败：" + event.getEventId()
-            );
-            e.printStackTrace();
+            log.error("发布事件失败，eventId={}", event.getEventId(), e);
         }
     }
 }

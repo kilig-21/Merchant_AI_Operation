@@ -217,7 +217,11 @@ public class OrderService {
     public void mockPay(Long orderId){
         Long consumerId = CurrentUser.requiredConsumerId();
 
-        int paid = commerceOrderMapper.markPaidByIdAndConsumerId(orderId, consumerId);
+        int paid = commerceOrderMapper.markPaidByIdAndConsumerId(
+                orderId,
+                consumerId,
+                LocalDateTime.now()
+        );
 
         if(paid != 1){
             throw new BizException("订单不存在或状态不允许支付");
@@ -344,6 +348,7 @@ public class OrderService {
     }
 
 
+    // ==================== 方法抽取 ==================== //
 
     //创建订单:
     private @NonNull CommerceOrder createOrder(Long tenantId, Long consumerId, BigDecimal totalAmount) {
