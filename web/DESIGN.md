@@ -1,81 +1,45 @@
-# MORROW / Quiet Commerce
+# MORROW / Magic Commerce
 
-## 1. Visual Theme & Atmosphere
+## 设计方向
 
-Morrow is a practical editorial storefront: calm enough to browse slowly, clear enough to buy without hesitation. Consumer pages feel like a contemporary object magazine; merchant pages feel like a focused operating desk.
+Morrow 是一个“能慢慢看，也能顺手买”的编辑型电商。消费者端吸收 Once UI / Magic Portfolio 的浮动胶囊导航、半透明表面、点阵背景、柔和阴影、Reveal 动效和主题切换；商家端复用令牌，但压缩留白并优先展示表格、筛选器和表单。
 
-- Utility / expression ratio: 75 / 25.
-- Use asymmetry, typography and image rhythm for character—not decorative cards.
-- Motion explains hierarchy and direction. It must never delay a transaction.
-- Preserve the existing homepage `heroMedia` and `BoomerangVideoBg` mechanism.
+- 实用 / 表达：75 / 25。
+- 视觉性格：安静、克制、带少量未来感。
+- 交互原则：动效说明层级与方向，不延迟交易。
+- 禁止滚动劫持、全局 WebGL、自动播放声音和伪造后端业务状态。
 
-## 2. Color Palette & Roles
+## 视觉令牌
 
-| Token | Value | Role |
-|---|---|---|
-| Paper | `#f7f5ef` | Primary consumer canvas |
-| Paper raised | `#eeebe2` | Secondary editorial surface |
-| Ink | `#171815` | Primary type and dark actions |
-| Ink soft | `rgba(23,24,21,.58)` | Supporting copy |
-| Hairline | `rgba(23,24,21,.14)` | Dividers and controls |
-| Signal | `#c6f04d` | Rare interaction accent, max ~3% |
-| Merchant dark | `#181b19` | Merchant navigation |
-| Error | `#9e3e2c` | Errors and destructive state |
-| Success | `#2f6b4f` | Paid / available / success |
+| Token | Light | Dark | 用途 |
+|---|---|---|---|
+| Paper | `#f6f5f1` | `#111310` | 页面背景 |
+| Surface | `rgba(255,255,255,.72)` | `rgba(28,31,27,.74)` | 半透明浮层 |
+| Ink | `#181916` | `#f4f5ef` | 主文字 |
+| Signal | `#c6f04d` | `#c6f04d` | 主行动强调，面积不超过约 3% |
+| Hairline | Ink 14% | Ink 14% | 分隔与控件边界 |
 
-## 3. Typography
+UI 使用 Geist；编辑型中文标题使用 Noto Serif SC / 宋体回退；元数据使用 Geist Mono。正文保持清晰紧凑，标题通过衬线字体和负字距建立杂志感。
 
-- Display: `Arial Narrow`, `Aptos Display`, `PingFang SC`, sans-serif.
-- Body: `Inter`, `PingFang SC`, `Microsoft YaHei`, system UI.
-- Metadata: `IBM Plex Mono`, `SFMono-Regular`, `Consolas`, monospace.
-- Consumer display headings may reach `clamp(3rem, 7vw, 7.5rem)`.
-- Merchant headings stay between 28px and 44px.
-- Uppercase English eyebrows use 0.12–0.18em tracking.
+## 布局与组件
 
-## 4. Layout Principles
+- 消费者桌面导航：顶部居中浮动胶囊；移动端：底部任务导航。
+- 首页：保留 Boomerang 视频首屏和左右构图，商品策选、近期上新、选物志按编辑节奏排列。
+- 商品卡：图像为主、单层边界、极轻阴影，不堆叠装饰卡片。
+- 商家端：240px 工作台侧栏、紧凑数据表、粘性发布面板；移动端允许表格原生横向滚动。
+- 控件最小高度 44px；键盘焦点始终可见。
 
-- Desktop: 12-column grid, max width 1440px, 24–32px gutters.
-- Consumer content max width: 1320px.
-- Merchant shell: 248px navigation + fluid workspace.
-- Prefer thin dividers, full-width bands, and image-led composition over repeated boxes.
-- Mobile reorders content by task priority rather than shrinking desktop geometry.
+## 动效与响应式
 
-## 5. Components
+- UI 反馈约 160–240ms；编辑内容 Reveal 约 650–900ms。
+- 图像悬停缩放不超过 1.025。
+- 水平内容轨道使用原生 overflow 与 scroll snap。
+- `prefers-reduced-motion` 时关闭装饰动效。
+- 断点以 960px 和 680px 为主；移动端按任务优先级重排，而不是机械缩小桌面布局。
 
-- Buttons: square-to-soft corners (0–8px), minimum height 44px. Pills are reserved for filters and compact status.
-- Cards: no shadow by default. Use image, whitespace and a single border to establish grouping.
-- Inputs: paper surface, one-pixel border, visible focus ring.
-- Status: small monospaced pill with semantic color.
-- Demo data: always marked with a visible `DEMO / 演示` notice.
+## 数据状态
 
-## 6. Motion
-
-- UI feedback: 160–240ms.
-- Editorial reveal: 650–900ms, translateY no more than 42px.
-- Image hover: scale <= 1.025; pointer shift <= 6px; tilt <= 1.2deg.
-- Homepage pointer glow is local, soft and non-interactive.
-- Disable decorative motion for `prefers-reduced-motion`, coarse pointers and transactional surfaces.
-
-## 7. Responsive Behavior
-
-- Breakpoints: 1080px, 820px, 640px.
-- Touch targets are at least 44px.
-- Horizontal editorial rails use native overflow and scroll snap.
-- Navigation collapses into a readable full-width drawer.
-- Merchant tables may scroll horizontally; primary actions remain visible.
-
-## 8. Do / Don't
-
-Do:
-- Keep the main shopping path obvious.
-- Label static data honestly.
-- Use real source photography and existing assets.
-- Preserve visible keyboard focus and native scrolling on forms and operations pages.
-
-Don't:
-- Add global WebGL, autoplay sound or scroll hijacking.
-- Use acid green as a large background.
-- Turn every section into a rounded card.
-- Fake backend-supported states or controls.
-- Modify anything outside `web/`.
-
+- 公共页面离线时显示 `DEMO / 服务未连接`，演示数据不可混同真实库存。
+- 受保护页面离线时显示服务状态页。
+- 暂无后端接口的商家订单和设置页仅提供明确标识的静态结构，不提供虚假的可执行操作。
+- 赞助选物志必须显示“推广 / 品牌合作”标签；第一版不放真实广告。

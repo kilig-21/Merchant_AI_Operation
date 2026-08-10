@@ -1,0 +1,7 @@
+.spark-field {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at 50% 44%, rgba(198, 240, 77, 0.045), transparent 38%), #070806;
+}

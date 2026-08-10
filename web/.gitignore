@@ -9,6 +9,9 @@ lerna-debug.log*
 
 node_modules
 .npm-cache
+.next
+*.tsbuildinfo
+out
 dist
 dist-ssr
 *.local
