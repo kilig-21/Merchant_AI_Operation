@@ -2,11 +2,11 @@ import { AuthForm } from "@/components/AuthForm";
 import { AuthSpotlightShell } from "@/components/auth/AuthSpotlightShell";
 import { Suspense } from "react";
 
-export default function RegisterPage() {
+export default function MerchantRegisterPage() {
   return (
-    <AuthSpotlightShell audience="consumer" mode="register">
+    <AuthSpotlightShell audience="merchant" mode="register">
       <Suspense>
-        <AuthForm audience="consumer" mode="register" />
+        <AuthForm audience="merchant" mode="register" submission="demo" />
       </Suspense>
     </AuthSpotlightShell>
   );
