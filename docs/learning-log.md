@@ -2029,6 +2029,12 @@ PAID --申请售后--> AFTER_SALE
    - 将重复的并发执行代码提取为 `runPaymentAndClose(boolean expired)`，用 `PaymentCloseResult` record 保存两个线程的结果。
    - 掌握等级：K2 会用，理解测试辅助方法为什么要返回结构化结果。
 
+4. 可控时间与真实临界点竞态
+   - 使用 `Clock` Bean 统一生产代码中的当前时间入口，`OrderService`、`OrderCloseService` 和 `OrderCloseRecoveryJob` 都通过 `LocalDateTime.now(applicationClock)` 获取时间。
+   - 使用测试专用的 `MutableTestClock`，支持共享时间推进和线程级时间覆盖。
+   - 支付线程观察过期前 1 秒，关单线程观察过期后 1 秒；3 个测试方法各重复 10 次，总计 30 次全部通过。
+   - 掌握等级：K2 会用，能够解释为什么测试环境需要可控时间，以及为什么最终仍由数据库条件更新裁决唯一胜者。
+
 ### 今天遇到的问题
 
 #### Q-020：IDEA 测试通过但终端运行失败
@@ -2042,7 +2048,7 @@ PAID --申请售后--> AFTER_SALE
 
 - 当前测试的 `expire_at` 分别设置为过去和未来，因此支付条件与关单条件是互斥的。
 - 这证明了两个边界分支和重复运行稳定，但还没有验证订单正好处于过期临界点时两个线程的唯一胜者。
-- 后续需要先设计可控时间入口，再决定是否补真正的时间竞态测试。
+- 通过 `Clock`、`MutableTestClock` 和线程级时间覆盖补齐了真正的临界点测试；支付和关单分别观察过期前后时间，最终状态和库存结果经过 10 次重复验证。
 
 ### 今天最重要的一条理解
 
@@ -2053,6 +2059,10 @@ PAID --申请售后--> AFTER_SALE
 - 新增 `server/src/test/java/org/example/merchant_ai_operation/order/OrderPaymentCloseConcurrencyTest.java`。
 - 测试覆盖过期关单、未过期支付、库存结果、库存流水和重复运行。
 - 提取 `runPaymentAndClose(boolean expired)` 与 `PaymentCloseResult`，删除误生成的空结果类文件。
+- 新增 `server/src/main/java/org/example/merchant_ai_operation/config/TimeConfig.java`，向 Spring 提供统一的 `Clock` Bean。
+- `OrderService`、`OrderCloseService` 和 `OrderCloseRecoveryJob` 统一使用 `applicationClock`。
+- 新增测试辅助类 `server/src/test/java/org/example/merchant_ai_operation/order/MutableTestClock.java`，支持线程级时间覆盖并在 `finally` 中清理。
+- 新增过期临界点支付/关单竞态测试；3 个测试方法总计 30 次全部通过。
 
 ### 侧边任务/对话补充记录
 
@@ -2060,13 +2070,15 @@ PAID --申请售后--> AFTER_SALE
 - 解释了 IDEA 环境变量和 PowerShell 环境变量是两个不同的进程配置来源。
 - 解释了 `ZipkinAutoConfiguration` 的条件报告只是启动诊断信息，不是每一条 `Did not match` 都代表错误。
 - 解释了 `record` 适合保存测试中的多个返回结果，但 record 的字段必须在组件列表中声明。
+- 解释了 `LocalDateTime.now()` 与 `LocalDateTime.now(applicationClock)` 的区别：生产环境仍读取真实时间，测试环境可以替换时间来源。
+- 解释了 `Clock.fixed` 是停住的测试时间，`Clock.offset` 是整体偏移但仍然流动的时间；本次业务代码不使用它们，只使用可控测试时钟。
+- 解释了 `TimeConfig` 只负责向 Spring 注册 `Clock`，业务服务只注入 `Clock`，不直接依赖配置类。
+- 解释了 `ThreadLocal` 时间必须在 `finally` 中清理，避免线程池复用导致测试污染。
 
 ### 今天还没完成
 
-- 尚未增加可控时间入口，因此未完成同一订单过期临界点的真实支付/关单竞态测试。
-- 尚未提交 Git，等待步骤 21 是否继续补真实时间竞态后统一收口。
+- 步骤 21 的代码与测试验收已完成；本次加餐尚未提交 Git。
 
 ### 明日优先
 
-- 评估引入 `Clock` 或时间提供器是否值得作为当前步骤的测试辅助。
-- 如果引入，先让支付和关单服务都使用统一时间入口，再写唯一胜者测试。
+- 检查本次代码与日志 diff，完成 Git 提交；步骤 22 暂不提前展开。

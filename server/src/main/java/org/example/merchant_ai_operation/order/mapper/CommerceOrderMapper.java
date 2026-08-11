@@ -145,6 +145,7 @@ public interface CommerceOrderMapper {
         LIMIT #{limit}
         """)
     //兜底任务的待处理订单清单查询”，只找，不关。
+    //从数据库找出“已经过期、但仍然是待支付状态”的订单 ID。
     List<Long> selectExpiredPendingOrderIds(
             @Param("now") LocalDateTime now,
             @Param("limit") int limit

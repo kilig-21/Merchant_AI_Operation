@@ -27,6 +27,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -47,6 +48,7 @@ public class OrderService {
     private final IdempotentRequestMapper idempotentRequestMapper;
     private final OutboxEventMapper outboxEventMapper;
     private final ObjectMapper objectMapper;
+    private final Clock applicationClock;
 
     public OrderService(ProductSkuMapper productSkuMapper,
                         CommerceOrderMapper commerceOrderMapper,
@@ -55,7 +57,8 @@ public class OrderService {
                         InventoryMovementMapper inventoryMovementMapper,
                         IdempotentRequestMapper idempotentRequestMapper,
                         OutboxEventMapper outboxEventMapper,
-                        ObjectMapper objectMapper
+                        ObjectMapper objectMapper,
+                        Clock applicationClock
 
     ) {
         this.productSkuMapper = productSkuMapper;
@@ -66,6 +69,7 @@ public class OrderService {
         this.idempotentRequestMapper = idempotentRequestMapper;
         this.outboxEventMapper = outboxEventMapper;
         this.objectMapper = objectMapper;
+        this.applicationClock = applicationClock;
     }
 
 
@@ -220,7 +224,7 @@ public class OrderService {
         int paid = commerceOrderMapper.markPaidByIdAndConsumerId(
                 orderId,
                 consumerId,
-                LocalDateTime.now()
+                LocalDateTime.now(applicationClock)
         );
 
         if(paid != 1){
@@ -358,7 +362,7 @@ public class OrderService {
         order.setConsumerId(consumerId);                //记录是谁买的
         order.setStatus("PENDING_PAYMENT");             //订单刚创建，还没支付，所以状态是“待支付”
         order.setTotalAmount(totalAmount);              //将上面算好的金额放进去
-        order.setExpireAt(LocalDateTime.now().plusMinutes(30)); //设置 30 分钟后过期。后面做超时关单时会用到。
+        order.setExpireAt(LocalDateTime.now(applicationClock).plusMinutes(30)); //设置 30 分钟后过期。后面做超时关单时会用到。
         return order;
     }
 
@@ -442,7 +446,7 @@ public class OrderService {
 
     //创建订单号码
     private String generateOrderNo() {
-        String datePart = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        String datePart = LocalDateTime.now(applicationClock).format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
         int randomPart = ThreadLocalRandom.current().nextInt(100000, 1000000);
         return "ORD" + datePart + randomPart;
     }
@@ -479,7 +483,7 @@ public class OrderService {
 
         event.setStatus("PENDING");
         event.setRetryCount(0);
-        event.setNextRetryAt(LocalDateTime.now());
+        event.setNextRetryAt(LocalDateTime.now(applicationClock));
 
         return event;
     }

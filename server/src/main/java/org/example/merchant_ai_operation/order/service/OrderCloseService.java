@@ -13,6 +13,7 @@ import org.example.merchant_ai_operation.order.mapper.CommerceOrderMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -23,17 +24,20 @@ public class OrderCloseService {
     private final CommerceOrderItemMapper commerceOrderItemMapper;
     private final ProductSkuMapper productSkuMapper;
     private final InventoryMovementMapper inventoryMovementMapper;
+    private final Clock applicationClock;
 
     public OrderCloseService(
             CommerceOrderMapper commerceOrderMapper,
             CommerceOrderItemMapper commerceOrderItemMapper,
             ProductSkuMapper productSkuMapper,
-            InventoryMovementMapper inventoryMovementMapper
+            InventoryMovementMapper inventoryMovementMapper,
+            Clock applicationClock
     ) {
         this.commerceOrderMapper = commerceOrderMapper;
         this.commerceOrderItemMapper = commerceOrderItemMapper;
         this.productSkuMapper = productSkuMapper;
         this.inventoryMovementMapper = inventoryMovementMapper;
+        this.applicationClock = applicationClock;
     }
 
     //关闭过期订单事务
@@ -45,7 +49,7 @@ public class OrderCloseService {
 
         int closed = commerceOrderMapper.markClosedIfPendingAndExpired(
                 orderId,
-                LocalDateTime.now()
+                LocalDateTime.now(applicationClock)
         );
         if (closed != 1) {return;}
 
