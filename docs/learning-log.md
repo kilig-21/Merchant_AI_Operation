@@ -1975,3 +1975,66 @@ PAID --申请售后--> AFTER_SALE
 
 - 若继续步骤 21，先决定是否补做支付与关单并发测试。
 - 若不补测试，整理步骤 21 的开发文档和工作区改动，再准备提交。
+
+## Day 20：2026-08-11 / 02-步骤21
+
+### 今天实际学了什么
+
+1. 并发测试的起跑线
+   - 使用 `CountDownLatch(1)` 让支付线程和关单线程先进入等待状态，再由主线程统一放行。
+   - `Future.get()` 用来等待两个线程结束，并取得支付线程和关单线程的结果。
+   - 在每个支付线程中单独设置和清理 `SecurityContext`，因为登录上下文不会自动跨线程传播。
+   - 掌握等级：K2 会用，能够解释线程池、闩锁和 Future 的职责。
+
+2. 条件更新与库存结果
+   - 过期订单只允许 `PENDING_PAYMENT → CLOSED`，未过期订单只允许 `PENDING_PAYMENT → PAID`。
+   - 关单成功后库存从 `19/1` 恢复为 `20/0`，支付成功后库存从 `19/1` 变为 `19/0`。
+   - `ORDER_CLOSE` 和 `ORDER_PAID` 流水数量都必须是 1。
+   - 掌握等级：K2 会用，能够通过数据库状态、库存和流水进行双重验收。
+
+3. 测试重复运行与代码整理
+   - 两个测试各使用 `@RepeatedTest(10)`，总计 20 次全部通过。
+   - 将重复的并发执行代码提取为 `runPaymentAndClose(boolean expired)`，用 `PaymentCloseResult` record 保存两个线程的结果。
+   - 掌握等级：K2 会用，理解测试辅助方法为什么要返回结构化结果。
+
+### 今天遇到的问题
+
+#### Q-020：IDEA 测试通过但终端运行失败
+
+- 实际现象：终端运行测试时出现 MySQL `Access denied`、JWT 占位符缺失或 RabbitMQ `ACCESS_REFUSED`。
+- 原因：IDEA 的运行配置环境变量不会自动传给 PowerShell；Maven 也不会自动读取 `deploy/.env`。
+- 解决步骤：启动 Docker 服务，并在当前 Maven 进程中传入 `MYSQL_ROOT_PASSWORD`、`JWT_SECRET`、`RABBITMQ_DEFAULT_USER` 和 `RABBITMQ_DEFAULT_PASS`。
+- 如何证明已解决：Spring 成功启动，Flyway 校验 9 个迁移，RabbitMQ 建立连接，20 个重复测试全部通过。
+
+#### Q-021：为什么两个边界测试还不能代表真正时间竞态
+
+- 当前测试的 `expire_at` 分别设置为过去和未来，因此支付条件与关单条件是互斥的。
+- 这证明了两个边界分支和重复运行稳定，但还没有验证订单正好处于过期临界点时两个线程的唯一胜者。
+- 后续需要先设计可控时间入口，再决定是否补真正的时间竞态测试。
+
+### 今天最重要的一条理解
+
+“并发线程同时开始”不等于“两个业务条件同时成立”。真正的支付/关单竞态需要同时控制线程起跑线和时间条件；数据库条件更新负责最终裁决，只有状态转换成功的一方才能继续修改库存和写流水。
+
+### 重要修改
+
+- 新增 `server/src/test/java/org/example/merchant_ai_operation/order/OrderPaymentCloseConcurrencyTest.java`。
+- 测试覆盖过期关单、未过期支付、库存结果、库存流水和重复运行。
+- 提取 `runPaymentAndClose(boolean expired)` 与 `PaymentCloseResult`，删除误生成的空结果类文件。
+
+### 侧边任务/对话补充记录
+
+- 解释了为什么 Docker 没启动时测试上下文会在 Flyway 阶段失败。
+- 解释了 IDEA 环境变量和 PowerShell 环境变量是两个不同的进程配置来源。
+- 解释了 `ZipkinAutoConfiguration` 的条件报告只是启动诊断信息，不是每一条 `Did not match` 都代表错误。
+- 解释了 `record` 适合保存测试中的多个返回结果，但 record 的字段必须在组件列表中声明。
+
+### 今天还没完成
+
+- 尚未增加可控时间入口，因此未完成同一订单过期临界点的真实支付/关单竞态测试。
+- 尚未提交 Git，等待步骤 21 是否继续补真实时间竞态后统一收口。
+
+### 明日优先
+
+- 评估引入 `Clock` 或时间提供器是否值得作为当前步骤的测试辅助。
+- 如果引入，先让支付和关单服务都使用统一时间入口，再写唯一胜者测试。
