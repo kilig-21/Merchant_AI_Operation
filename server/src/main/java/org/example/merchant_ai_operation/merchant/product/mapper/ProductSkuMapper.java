@@ -171,5 +171,36 @@ public interface ProductSkuMapper {
     );
 
 
+    @Update("""
+    UPDATE product_sku
+    SET available_stock = available_stock - #{quantity},
+        version = version + 1
+    WHERE id = #{skuId}
+      AND tenant_id = #{tenantId}
+      AND status = 'ON_SALE'
+      AND available_stock >= #{quantity}
+    """)
+    //“原子划拨活动库存”方法
+    // AND available_stock >= #{quantity} -> 防止超卖
+    int allocatePromotionStock(
+            @Param("skuId") Long skuId,
+            @Param("tenantId") Long tenantId,
+            @Param("quantity") Integer quantity
+    );
+
+    @Update("""
+        UPDATE product_sku
+        SET available_stock = available_stock + #{quantity},
+            version = version + 1
+        WHERE id = #{skuId}
+          AND tenant_id = #{tenantId}
+        """)
+    //取消活动属于库存账务归还，即使商品后来被下架，也必须把原先划走的库存还回去
+    int restorePromotionStock(
+            @Param("skuId") Long skuId,
+            @Param("tenantId") Long tenantId,
+            @Param("quantity") Integer quantity
+    );
+
 
 }
