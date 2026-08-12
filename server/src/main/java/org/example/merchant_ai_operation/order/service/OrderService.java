@@ -227,21 +227,16 @@ public class OrderService {
                 LocalDateTime.now(applicationClock)
         );
 
-        if(paid != 1){
-            throw new BizException("订单不存在或状态不允许支付");
-        }
+        if(paid != 1){throw new BizException("订单不存在或状态不允许支付");}
 
         CommerceOrder order = commerceOrderMapper.selectByOrderIdAndConsumerId(orderId, consumerId);
 
-        if (order == null) {
-            throw new BizException("订单不存在");
-        }
+        if (order == null) {throw new BizException("订单不存在");}
 
         // 查询订单明细：支付成功后需要知道这笔订单买了哪些 SKU、每个 SKU 买了几个。
         List<CommerceOrderItem> items = commerceOrderItemMapper.selectByOrderId(orderId);
-        if (items.isEmpty()) {
-            throw new BizException("订单明细不存在");
-        }
+
+        if (items.isEmpty()) {throw new BizException("订单明细不存在");}
 
         for (CommerceOrderItem item : items) {
             //依次遍历订单从锁定库存中移出
@@ -250,17 +245,13 @@ public class OrderService {
                     item.getQuantity()
             );
             //一般一次就释放一个订单,所以这里如果不等于1就失败;通过@Transactional直接全部退回;
-            if (deducted != 1) {
-                throw new BizException("订单锁定库存异常");
-            }
+            if (deducted != 1) {throw new BizException("订单锁定库存异常");}
 
             ProductSku latestSku = productSkuMapper.selectByIdAndTenantId(
                     item.getSkuId(),
                     order.getTenantId()
             );
-            if (latestSku == null) {
-                throw new BizException("商品不存在");
-            }
+            if (latestSku == null) {throw new BizException("商品不存在");}
 
             //创建变化后的流水记录
             InventoryMovement movement = createOrderPaidMovement(item, order, latestSku);

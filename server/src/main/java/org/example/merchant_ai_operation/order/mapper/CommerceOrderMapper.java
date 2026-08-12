@@ -32,21 +32,6 @@ public interface CommerceOrderMapper {
     //增加订单
     int insert(CommerceOrder order);
 
-    @Update("""
-        UPDATE commerce_order
-        SET status = 'PAID'
-        WHERE id = #{orderId}
-          AND consumer_id = #{consumerId}
-          AND status = 'PENDING_PAYMENT'
-          AND expire_at > #{now}
-        """)
-    //更改支付的状态,支付完后就应该改成paid,否则不满足支付逻辑;
-    int markPaidByIdAndConsumerId(
-            @Param("orderId") Long orderId,
-            @Param("consumerId") Long consumerId,
-            @Param("now") LocalDateTime now
-    );
-
     @Select("""
             SELECT
                 id,
@@ -101,6 +86,21 @@ public interface CommerceOrderMapper {
     int markCancelledByIdAndConsumerId(
             @Param("orderId") Long orderId,
             @Param("consumerId") Long consumerId
+    );
+
+    @Update("""
+        UPDATE commerce_order
+        SET status = 'PAID'
+        WHERE id = #{orderId}
+          AND consumer_id = #{consumerId}
+          AND status = 'PENDING_PAYMENT'
+          AND expire_at > #{now}
+        """)
+    //更改支付的状态,支付完后就应该改成paid,否则不满足支付逻辑;
+    int markPaidByIdAndConsumerId(
+            @Param("orderId") Long orderId,
+            @Param("consumerId") Long consumerId,
+            @Param("now") LocalDateTime now
     );
 
     @Update("""
