@@ -11,20 +11,20 @@
 | 当前阶段 | 第 1 阶段：工程与基础业务 |
 | 本周任务 | `███████` 7 / 7 |
 | 周验收 | 已通过 |
-| 最近提交 | `649f5ec test(order): add controllable payment close race test` |
+| 最近提交 | `0831e01 style(order): format payment order mapper and service` |
 
 ## 进度看板
 | 项目     | 当前状态                         |
 | ------ | ---------------------------- |
 | 当前阶段   | 第 1 阶段：工程与基础业务               |
 | 当前文档   | `02-交易库存限量促销开发链.md`           |
-| 当前步骤   | 步骤 22 已完成；下一步为步骤 23：Redis Lua 原子预扣与异步创建促销订单 |
+| 当前步骤   | 步骤 23 进行中：已完成 Redis Lua 资格预扣、活动预热与未开始分支验收；异步创建促销订单待继续 |
 | 本周目标   | 后端继续推进可靠交易基础：缓存一致性、消息可靠性和订单关闭 |
-| 今日目标   | 完成步骤 22 的促销规则、活动库存划拨与取消归还闭环 |
-| 昨日完成   | 步骤 19 Redis 商品缓存与一致性策略已完成 |
-| 当前卡点   | 步骤 23 尚未开始；需先理解 Redis Lua 原子预扣和异步订单链路 |
-| 最近一次提交 | `649f5ec test(order): add controllable payment close race test`；步骤 22 待提交 |
-| 明日优先   | 开始步骤 23：设计促销资格预扣的 Redis Key、Lua 脚本与异步订单事件 |
+| 今日目标   | 完成步骤 23 的 Redis 原子资格预扣前半段：脚本、预热、消费者入口与基础分支验收 |
+| 昨日完成   | 步骤 22 促销规则、库存划拨与取消归还已完成并提交 |
+| 当前卡点   | 成功资格尚未落库，未接入 Outbox/RabbitMQ 异步创建促销订单、结果查询与失败补偿 |
+| 最近一次提交 | `0831e01 style(order): format payment order mapper and service`；今天步骤 23 半程改动待提交 |
+| 明日优先   | 先补活动启动入口与成功抢购/重复请求/售罄/超限验收，再进入资格落库和异步创建促销订单 |
 
 ## 每日任务
 ## Day 1：2026-07-19
@@ -1036,3 +1036,42 @@
 ### 今日 Git
 
 - 步骤 22 已完成代码审查与 `git diff --check`；订单目录下两处既有格式调整不纳入本次促销提交。
+
+## Day 22：2026-08-13 / 步骤 23（进行中）
+
+### 今日目标
+
+- 完成 Redis Lua 抢购资格预扣的前半段：规则/库存预热、消费者调用入口，以及未开始活动的安全拒绝。
+
+### 今日完成
+
+- [x] 新增 `promotion_reserve.lua`：在同一次 Redis Lua 执行中按顺序校验重复请求、预热状态、活动时间、限购和库存；成功时才原子扣减库存、累计用户数量并写入请求幂等资格。
+- [x] 设计带 `{itemId}` 哈希标签的规则、库存、用户数量和请求幂等 Key；规则 Hash 保存 `startAt`、`endAt`、`limitPerUser`，库存使用独立 String。
+- [x] 新增 Lua 脚本 Bean、商家活动预热 Service 与 `POST /api/merchant/promotions/{activityId}/preheat`。
+- [x] 创建活动 `8`，预热成功；Redis 验证规则 Hash 包含时间与限购规则，库存 Key 为 `1`，与 MySQL `promotion_items` 一致。
+- [x] 新增消费者 `POST /api/promotions/reservations`、请求 DTO、Lua 结果 DTO 和返回码映射。
+- [x] 使用消费者 Token 验证活动 `8` 未开始时返回业务码 `409`、消息“活动尚未开始”；Redis 库存仍为 `1`，证明拒绝路径未扣减库存。
+
+### 今日未完成
+
+- [ ] 尚未验证活动开始后的首次成功抢购、相同 `requestKey` 重试、售罄和超过限购。
+- [ ] 尚未将 Lua 成功资格写入 `promotion_reservations`，未通过 Outbox/RabbitMQ 异步创建促销订单。
+- [ ] 尚未实现 reservation 查询结果、落单失败补偿和自动化测试；因此步骤 23 仍为进行中。
+- [ ] 终端 `mvnw -DskipTests compile` 未能开始编译：Maven 下载 Spring Boot 父 POM 时被当前网络沙箱拒绝（`getsockopt: Permission denied`）；这不是已确认的源码编译失败，后续需在可联网环境再次验证。
+
+### 今日验收
+
+- [x] 商家创建活动响应 `data: 8`，活动状态为 `SCHEDULED`。
+- [x] 商家预热接口响应 `code: 0`。
+- [x] Redis `HGETALL promotion:item:{8}:rules:v1` 返回 `startAt`、`endAt`、`limitPerUser`；`GET promotion:item:{8}:stock:v1` 返回 `"1"`。
+- [x] 消费者抢购接口返回 `code: 409`、`message: "活动尚未开始"`。
+- [x] 未开始拒绝后库存 Key 仍为 `"1"`。
+- [ ] Maven 编译待在可联网/依赖可用的环境复验。
+
+### 今日 Git
+
+- 待用户提交：Redis Lua 资格预扣前半段、预热接口与消费者抢购入口；未包含 Token、`.env` 或聊天截图。
+
+### 明日优先
+
+- 继续步骤 23：建立活动启动入口，完成首次成功、重复请求、售罄和限购分支验收；之后再落库资格并接入异步订单创建。

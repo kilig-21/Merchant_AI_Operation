@@ -65,4 +65,23 @@ public interface PromotionActivityMapper {
             @Param("tenantId") Long tenantId
     );
 
+    @Select("""
+        SELECT
+            id,
+            tenant_id AS tenantId,
+            name,
+            start_at AS startAt,
+            end_at AS endAt,
+            status
+        FROM promotion_activities
+        WHERE id = #{activityId}
+          AND tenant_id = #{tenantId}
+        """)
+    //根据活动ID查询活动规则
+    //→ 查活动主信息
+    //→ 开始时间、结束时间、状态
+    PromotionActivity selectByIdAndTenantId(
+            @Param("activityId") Long activityId,
+            @Param("tenantId") Long tenantId
+    );
 }
