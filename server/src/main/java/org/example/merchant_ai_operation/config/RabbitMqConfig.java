@@ -13,8 +13,21 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @Configuration
 @EnableScheduling   //用定时任务功能。
 public class RabbitMqConfig {
+
+    /*
+    * 促销变量
+    * */
+    public static final String PROMOTION_EXCHANGE = "ai.commerce.promotion.exchange";
+
+    public static final String PROMOTION_ORDER_CREATE_QUEUE = "ai.commerce.promotion.order.create.queue";
+
+    public static final String PROMOTION_ORDER_CREATE_KEY = "promotion.order.create";
+
+    /*
+    * 异步订单变量
+    * */
     //exchange机
-    public static final String  ORDER_EXCHANGE =  "ai.commerce.order.exchange";
+    public static final String ORDER_EXCHANGE =  "ai.commerce.order.exchange";
 
     //延迟队列
     public static final String ORDER_DELAY_QUEUE = "ai.commerce.order.delay.queue";
@@ -108,5 +121,29 @@ public class RabbitMqConfig {
                 .bind(orderFailedQueue)
                 .to(orderExchange)
                 .with(ORDER_FAILED_KEY);
+    }
+
+    /*
+    * 促销变量Binging
+    * */
+    @Bean
+    public DirectExchange promotionExchange() {
+        return new DirectExchange(PROMOTION_EXCHANGE, true, false);
+    }
+
+    @Bean
+    public Queue promotionOrderCreateQueue() {
+        return QueueBuilder.durable(PROMOTION_ORDER_CREATE_QUEUE).build();
+    }
+
+    @Bean
+    public Binding promotionOrderCreateBinding(
+            Queue promotionOrderCreateQueue,
+            DirectExchange promotionExchange
+    ) {
+        return BindingBuilder
+                .bind(promotionOrderCreateQueue)
+                .to(promotionExchange)
+                .with(PROMOTION_ORDER_CREATE_KEY);
     }
 }

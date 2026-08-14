@@ -82,4 +82,33 @@ public interface PromotionItemMapper {
             @Param("activityId") Long activityId,
             @Param("tenantId") Long tenantId
     );
+
+    @Select("""
+            SELECT
+                id,
+                activity_id AS activityId,
+                tenant_id AS tenantId,
+                sku_id AS skuId,
+                activity_price AS activityPrice,
+                stock_total AS stockTotal,
+                stock_available AS stockAvailable,
+                limit_per_user AS limitPerUser
+            FROM promotion_items
+            WHERE id = #{itemId}
+            """)
+    PromotionItem selectById(@Param("itemId") Long itemId);
+
+    @Update("""
+        UPDATE promotion_items
+        SET stock_available = stock_available - #{quantity}
+        WHERE id = #{itemId}
+          AND tenant_id = #{tenantId}
+          AND stock_available >= #{quantity}
+        """)
+    // 异步建单时同步扣减活动库存；返回 1 才允许继续建单。
+    int deductAvailableStockForReservation(
+            @Param("itemId") Long itemId,
+            @Param("tenantId") Long tenantId,
+            @Param("quantity") Integer quantity
+    );
 }

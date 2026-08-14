@@ -37,7 +37,7 @@ public class OutboxPublisher {
     }
 
 
-    /**
+    /*
      * 定时扫描待发布的 Outbox 事件，并尝试发送到 RabbitMQ。
      * fixedDelay = 5000 表示：
      * 上一次方法执行结束后，再等待 5 秒执行下一次。
@@ -61,7 +61,7 @@ public class OutboxPublisher {
         }
     }
 
-    /**
+    /*
      * 发布单条 Outbox 事件。
      * 发布成功：确认 RabbitMQ 已接收，并更新事件状态。
      * 发布失败：保留待发布状态，等待下次定时任务重试。
@@ -75,9 +75,11 @@ public class OutboxPublisher {
             CorrelationData correlationData =
                     new CorrelationData(event.getEventId());
 
+            EventDestination destination = resolveDestination(event);
+
             rabbitTemplate.convertAndSend(
-                    RabbitMqConfig.ORDER_EXCHANGE,
-                    RabbitMqConfig.ORDER_CREATED_KEY,
+                    destination.exchange(),
+                    destination.routingKey(),
                     event.getPayload(),
                     message -> {
                         message.getMessageProperties()
@@ -110,5 +112,27 @@ public class OutboxPublisher {
         } catch (Exception e) {
             log.error("发布事件失败，eventId={}", event.getEventId(), e);
         }
+    }
+
+    private EventDestination resolveDestination(OutboxEvent event) {
+        return switch (event.getEventType()) {
+            case "ORDER_CREATED" -> new EventDestination(
+                    RabbitMqConfig.ORDER_EXCHANGE,
+                    RabbitMqConfig.ORDER_CREATED_KEY
+            );
+            case "PROMOTION_ORDER_CREATE" -> new EventDestination(
+                    RabbitMqConfig.PROMOTION_EXCHANGE,
+                    RabbitMqConfig.PROMOTION_ORDER_CREATE_KEY
+            );
+            default -> throw new IllegalArgumentException(
+                    "不支持的 Outbox 事件类型：" + event.getEventType()
+            );
+        };
+    }
+
+    private record EventDestination(
+            String exchange,
+            String routingKey
+    ) {
     }
 }
