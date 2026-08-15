@@ -2167,3 +2167,48 @@ PAID --申请售后--> AFTER_SALE
 
 - Lua 的 7 个返回码及其“先校验、后写入”的顺序。
 - `reservationId` 是资格的稳定编号，不是订单 ID；下一步需要解决资格落库和异步订单创建。
+
+## Day 23：2026-08-14～2026-08-15 / 步骤 23 主链验收
+
+### 今天学了什么
+
+- 一次促销抢购成功由两段组成：Lua 在 Redis 原子预扣资格，随后在 MySQL 中把资格和 Outbox 一起持久化；Outbox 发布事件后，RabbitMQ 消费者再异步创建订单。
+- `reservationId` 是跨 HTTP、Outbox 和 RabbitMQ 的稳定业务标识。HTTP 层使用 `requestKey` 防重复，消息消费层使用资格状态和 `reservationId` 防重复，两层都不能省。
+- Outbox 的 `PUBLISHED` 只表示消息已可靠发送给 RabbitMQ；队列 `messages = 0`、`consumers = 1` 与数据库订单结果一起，才能证明消息已被实际消费并完成建单。
+- 同一活动项的 MySQL `stock_available` 与 Redis Key 必须共同验收。两边均为 `0` 时，才能证明预扣结果没有只停留在缓存或数据库中的任一侧。
+
+### 今天完成的手工验收
+
+- 后端健康检查返回 `UP`。
+- 资格联查显示 `ORDER_CREATED`，且关联一笔 `PENDING_PAYMENT` 促销订单和正确的订单明细。
+- Redis 活动库存 Key 为 `0`，活动库存表也为 `0`。
+- Outbox 已发布促销建单事件，促销订单创建队列无积压且有一个消费者。
+- 同一个 `requestKey` 重复请求返回原 `reservationId` 与内部 `data.code = 2`；数据库数量仍为资格 `1`、订单 `1`。
+- 手工向 Exchange 发布相同 `reservationId` 的重复消息后，数据库数量仍为资格 `1`、订单 `1`，证明消费者幂等。
+- 库存耗尽后，新请求返回业务 `code: 409`、“活动库存不足或已售罄”。
+
+### 侧边任务/对话补充记录
+
+- 8080 端口已被监听并不等于用户自己的 IDEA 应用已经成功启动；先停止占用端口的临时进程，再由用户在 IDEA 中启动，并用 `/actuator/health` 确认当前验收对象。
+- RabbitMQ 的队列输出三列分别是队列名、待消费消息数和消费者数。`0 / 1` 表示当前无积压、一个消费者正在监听，不表示“没有消息链路”。
+- HTTP 重复请求与 MQ 重复消息是两种不同的故障模型：前者模拟客户端重试，后者模拟消息投递至少一次；本次分别验证了两层幂等。
+- 本项目的页面可能显示 HTTP `200`，但业务是否成功仍以响应体 `code` 和 `message` 判断。本次库存耗尽的 HTTP 请求页面为 200，业务码为 409，属于预期拒绝。
+- 对库存为 `0` 的活动再次发新请求，会优先得到“库存不足或已售罄”，不能借此证明同一活动上的用户限购分支；限购分支已有前序手工记录，高并发与完整分支仍需用新的可用活动补测。
+
+### 当前未完成
+
+- 未实现资格/订单结果查询接口。
+- 未实现消费者永久失败时的库存补偿、资格状态审计与失败恢复。
+- 未完成新的活动数据上的高并发抢购压测；因此步骤 23 不能整体标记完成。
+
+### 截图记录
+
+- `docs/images/day-23/health-up.png`：用户 IDEA 启动的后端健康检查返回 `{"status":"UP"}`。
+- `docs/images/day-23/async-order-db.png`：资格联查显示 `ORDER_CREATED`、`PENDING_PAYMENT` 订单和正确订单明细。
+- `docs/images/day-23/redis-stock-zero.png`：Redis 活动项 `8` 的库存 Key 返回 `0`。
+- `docs/images/day-23/outbox-published.png`：促销建单 Outbox 事件状态为 `PUBLISHED`。
+- `docs/images/day-23/rabbitmq-queue-consumed.png`：促销建单队列显示 `messages = 0`、`consumers = 1`。
+- `docs/images/day-23/http-idempotent-repeat.png`：相同 HTTP `requestKey` 返回内部 `data.code = 2` 与原资格编号。
+- `docs/images/day-23/stock-sold-out.png`：库存耗尽后接口返回业务码 `409`。
+- `docs/images/day-23/rabbitmq-duplicate-published.png`：RabbitMQ 管理页面确认重复促销建单消息已发布。
+- `docs/images/day-23/duplicate-message-counts.png`：重复消息处理后资格数、订单数仍为 `1 / 1`。

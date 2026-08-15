@@ -11,20 +11,20 @@
 | 当前阶段 | 第 1 阶段：工程与基础业务 |
 | 本周任务 | `███████` 7 / 7 |
 | 周验收 | 已通过 |
-| 最近提交 | `0831e01 style(order): format payment order mapper and service` |
+| 最近提交 | `1668abe feat(promotion): create orders asynchronously from reservations` |
 
 ## 进度看板
 | 项目     | 当前状态                         |
 | ------ | ---------------------------- |
 | 当前阶段   | 第 1 阶段：工程与基础业务               |
 | 当前文档   | `02-交易库存限量促销开发链.md`           |
-| 当前步骤   | 步骤 23 进行中：已完成 Redis Lua 资格预扣、活动预热与未开始分支验收；异步创建促销订单待继续 |
+| 当前步骤   | 步骤 23 进行中：异步创建促销订单主链已验收；结果查询、失败补偿与高并发压测待补 |
 | 本周目标   | 后端继续推进可靠交易基础：缓存一致性、消息可靠性和订单关闭 |
-| 今日目标   | 完成步骤 23 的 Redis 原子资格预扣前半段：脚本、预热、消费者入口与基础分支验收 |
+| 今日目标   | 完成步骤 23 的资格落库、Outbox/RabbitMQ 异步建单主链并进行手工验收 |
 | 昨日完成   | 步骤 22 促销规则、库存划拨与取消归还已完成并提交 |
-| 当前卡点   | 成功资格尚未落库，未接入 Outbox/RabbitMQ 异步创建促销订单、结果查询与失败补偿 |
-| 最近一次提交 | `0831e01 style(order): format payment order mapper and service`；今天步骤 23 半程改动待提交 |
-| 明日优先   | 先补活动启动入口与成功抢购/重复请求/售罄/超限验收，再进入资格落库和异步创建促销订单 |
+| 当前卡点   | 主链已落地；尚缺资格/订单结果查询、永久失败补偿/审计与高并发自动化验证 |
+| 最近一次提交 | `1668abe feat(promotion): create orders asynchronously from reservations`；本次验收文档与截图待提交 |
+| 明日优先   | 继续步骤 23：先设计资格/订单结果查询，再补失败补偿与高并发压测 |
 
 ## 每日任务
 ## Day 1：2026-07-19
@@ -1075,3 +1075,41 @@
 ### 明日优先
 
 - 继续步骤 23：建立活动启动入口，完成首次成功、重复请求、售罄和限购分支验收；之后再落库资格并接入异步订单创建。
+
+## Day 23：2026-08-14～2026-08-15 / 步骤 23（主链验收）
+
+### 今日目标
+
+- 将 Lua 成功资格持久化，并通过 Outbox 和 RabbitMQ 异步创建促销订单；以手工证据验收重复 HTTP 请求和重复 MQ 消息均不会重复建单。
+
+### 今日完成
+
+- [x] 成功抢购后在同一 MySQL 事务内写入 `promotion_reservations`（初始 `PENDING_ORDER`）和 `PROMOTION_ORDER_CREATE` Outbox 事件。
+- [x] Outbox 发布器将促销事件路由到 `ai.commerce.promotion.exchange`，由 `ai.commerce.promotion.order.create.queue` 消费。
+- [x] 消费者按 `reservationId` 锁定资格记录，创建一笔 `PENDING_PAYMENT` 促销订单及订单明细，并将资格条件更新为 `ORDER_CREATED`。
+- [x] 订单创建后，MySQL 活动库存与 Redis 活动库存均为 `0`；活动资格、订单、订单明细和 Outbox 状态相互一致。
+- [x] 相同 HTTP `requestKey` 重放返回原资格（内部 `data.code = 2`），没有再次扣减库存或创建订单。
+- [x] 库存为 `0` 时，新请求返回业务码 `409`、消息“活动库存不足或已售罄”。
+- [x] 通过 RabbitMQ 管理页面手工发布重复 `PROMOTION_ORDER_CREATE` 消息；最终资格数和订单数仍为 `1 / 1`。
+
+### 今日验收
+
+- [x] 用户本人启动后端，`GET /actuator/health` 返回 `{"status":"UP"}`。
+- [x] DataGrip 联查显示资格状态 `ORDER_CREATED`，关联订单为 `PENDING_PAYMENT`，订单明细的 SKU、活动价 `99.00` 和数量 `1` 正确。
+- [x] Redis `GET promotion:item:{8}:stock:v1` 返回 `0`，与 `promotion_items.stock_available = 0` 一致。
+- [x] Outbox 记录为 `aggregate_type = PROMOTION_RESERVATION`、`event_type = PROMOTION_ORDER_CREATE`、`status = PUBLISHED`、`retry_count = 0`，且 `published_at` 非空。
+- [x] RabbitMQ 队列 `ai.commerce.promotion.order.create.queue` 显示 `messages = 0`、`consumers = 1`。
+- [x] 重复 HTTP 请求后资格数和订单数为 `1 / 1`。
+- [x] 重复 MQ 消息发布并消费后资格数和订单数仍为 `1 / 1`。
+- [x] `mvn -q -DskipTests compile` 通过。
+- [ ] 高并发抢购压测、资格/订单结果查询接口、永久失败后的库存补偿与审计尚未完成；步骤 23 整体仍为进行中。
+
+### 今日 Git
+
+- 代码主链已提交并推送：`1668abe feat(promotion): create orders asynchronously from reservations`。
+- 本次仅新增验收文档与截图，待用户执行单独的文档提交。
+
+### 明日优先
+
+- 先补消费者侧的资格/订单结果查询，避免抢购接口只返回资格编号而没有可轮询的最终订单结果。
+- 设计永久失败的补偿与审计边界，再用新的活动数据执行高并发压测；未完成前不把步骤 23 标记为整体完成。
