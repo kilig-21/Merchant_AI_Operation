@@ -2,6 +2,7 @@ package org.example.merchant_ai_operation.promotion.mapper;
 
 import org.apache.ibatis.annotations.*;
 import org.example.merchant_ai_operation.promotion.entity.PromotionReservation;
+import org.example.merchant_ai_operation.promotion.vo.PromotionReservationDetailVO;
 
 @Mapper
 public interface PromotionReservationMapper {
@@ -29,6 +30,7 @@ public interface PromotionReservationMapper {
             #{status}
         )
         """)
+    //将资格入数据库
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(PromotionReservation reservation);
 
@@ -69,5 +71,41 @@ public interface PromotionReservationMapper {
             @Param("reservationId") String reservationId,
             @Param("orderId") Long orderId
     );
+
+    @Select("""
+            SELECT
+                pr.reservation_id AS reservationId,
+                pr.activity_item_id AS activityItemId,
+                pr.quantity,
+                pr.unit_price_snapshot AS unitPriceSnapshot,
+                pr.status AS reservationStatus,
+                pr.order_id AS orderId,
+                co.order_no AS orderNo,
+                co.status AS orderStatus,
+                co.total_amount AS totalAmount,
+                co.expire_at AS expireAt,
+                pr.created_at AS createdAt,
+                pr.updated_at AS updatedAt
+            FROM promotion_reservations pr
+            LEFT JOIN commerce_order co
+              ON co.id = pr.order_id
+             AND co.consumer_id = pr.consumer_id
+            WHERE pr.reservation_id = #{reservationId}
+              AND pr.consumer_id = #{consumerId}
+            """)
+    //查询上面业务已经入库的资格返回的用户
+    PromotionReservationDetailVO selectDetailByReservationIdAndConsumerId(
+            @Param("reservationId") String reservationId,
+            @Param("consumerId") Long consumerId
+    );
+
+    @Update("""
+            UPDATE promotion_reservations
+            SET status = 'COMPENSATED'
+            WHERE reservation_id = #{reservationId}
+              AND status = 'PENDING_ORDER'
+            """)
+    //这条抢购资格已经完成补偿，不再等待创建订单。将状态改为已经补偿了
+    int markCompensated(@Param("reservationId") String reservationId);
 
 }

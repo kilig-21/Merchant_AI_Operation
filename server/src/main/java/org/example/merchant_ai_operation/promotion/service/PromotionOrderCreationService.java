@@ -67,15 +67,18 @@ public class PromotionOrderCreationService {
         if (promotionItemMapper.deductAvailableStockForReservation(
                 reservation.getActivityItemId(),
                 reservation.getTenantId(),
-                reservation.getQuantity()) != 1) {
+                reservation.getQuantity()) != 1 /*看是否更改了一行*/ ) {
             throw new BizException(409, "活动库存不足或状态不一致");
         }
 
+
+        //实际创建订单主表对象
         CommerceOrder order = createPendingPaymentOrder(reservation);
         if (commerceOrderMapper.insert(order) != 1) {
             throw new BizException(500, "创建促销订单失败");
         }
 
+        //实际创建订单明细对象
         CommerceOrderItem orderItem =
                 createPromotionOrderItem(reservation, order);
 
@@ -88,6 +91,7 @@ public class PromotionOrderCreationService {
         }
     }
 
+    //创建订单
     private CommerceOrder createPendingPaymentOrder(PromotionReservation reservation) {
         CommerceOrder order = new CommerceOrder();
         order.setOrderNo(generatePromotionOrderNo());
@@ -104,14 +108,7 @@ public class PromotionOrderCreationService {
         return order;
     }
 
-    private String generatePromotionOrderNo() {
-        String datePart = LocalDateTime.now(applicationClock)
-                .format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
-        int randomPart = ThreadLocalRandom.current()
-                .nextInt(100000, 1000000);
-        return "PROMO" + datePart + randomPart;
-    }
-
+    //创建订单详情
     private CommerceOrderItem createPromotionOrderItem(PromotionReservation reservation, CommerceOrder order) {
         PromotionItem promotionItem = promotionItemMapper.selectById(
                 reservation.getActivityItemId()
@@ -138,4 +135,14 @@ public class PromotionOrderCreationService {
         orderItem.setQuantity(reservation.getQuantity());
         return orderItem;
     }
+
+    private String generatePromotionOrderNo() {
+        String datePart = LocalDateTime.now(applicationClock)
+                .format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        int randomPart = ThreadLocalRandom.current()
+                .nextInt(100000, 1000000);
+        return "PROMO" + datePart + randomPart;
+    }
+
+
 }

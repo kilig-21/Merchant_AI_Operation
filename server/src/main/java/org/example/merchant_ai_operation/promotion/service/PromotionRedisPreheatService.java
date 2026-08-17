@@ -40,11 +40,9 @@ public class PromotionRedisPreheatService {
         //查询到活动信息
         PromotionActivity activity = promotionActivityMapper.selectByIdAndTenantId(activityId,tenantId);
         if(activity == null){ throw new BizException(404, "促销活动不存在");}
-        if (!"SCHEDULED".equals(activity.getStatus())
-                && !"ACTIVE".equals(activity.getStatus())) {
+        if (!"SCHEDULED".equals(activity.getStatus())) {
             throw new BizException(409, "当前活动状态不能预热");
         }
-
         //查询活动商品
         PromotionItem item = promotionItemMapper.selectByActivityId(activityId,tenantId);
         if(item == null){throw new BizException(500, "促销活动缺少活动商品");}
