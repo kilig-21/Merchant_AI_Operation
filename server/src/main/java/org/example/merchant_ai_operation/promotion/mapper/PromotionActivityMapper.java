@@ -84,4 +84,23 @@ public interface PromotionActivityMapper {
             @Param("activityId") Long activityId,
             @Param("tenantId") Long tenantId
     );
+
+    @Update("""
+    UPDATE promotion_activities
+    SET status = 'ACTIVE'
+    WHERE status = 'SCHEDULED'
+      AND start_at <= #{now}
+      AND end_at > #{now}
+    """)
+    //标记活动待安排 -> 正在开始并传进时间
+    int markScheduledAsActive(@Param("now") LocalDateTime now);
+
+    @Update("""
+    UPDATE promotion_activities
+    SET status = 'ENDED'
+    WHERE status IN ('SCHEDULED', 'ACTIVE')
+      AND end_at <= #{now}
+    """)
+    //标记活动结束了并传进时间
+    int markExpiredAsEnded ( @Param("now") LocalDateTime now);
 }

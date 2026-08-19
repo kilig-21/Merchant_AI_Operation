@@ -7,24 +7,24 @@
 
 | 项目 | 进度 |
 |---|---|
-| 总步骤 | `██████████████████████` 22 / 36（步骤 22 已完成） |
+| 总步骤 | `████████████████████████` 24 / 36（步骤 24 已完成） |
 | 当前阶段 | 第 1 阶段：工程与基础业务 |
 | 本周任务 | `███████` 7 / 7 |
 | 周验收 | 已通过 |
-| 最近提交 | `1668abe feat(promotion): create orders asynchronously from reservations` |
+| 最近提交 | `e3cabc9 docs: add promotion flow comments` |
 
 ## 进度看板
 | 项目     | 当前状态                         |
 | ------ | ---------------------------- |
 | 当前阶段   | 第 1 阶段：工程与基础业务               |
 | 当前文档   | `02-交易库存限量促销开发链.md`           |
-| 当前步骤   | 步骤 23 收口中：结果查询与失败补偿代码已补；高并发压测未执行，时区统一待补 |
+| 当前步骤   | 步骤 24 已完成：时区统一、促销对账、自动化并发验收与故障补偿演练 |
 | 本周目标   | 后端继续推进可靠交易基础：缓存一致性、消息可靠性和订单关闭 |
-| 今日目标   | 收口步骤 23 的失败补偿代码、静态并发审查与验收文档 |
+| 今日目标   | 完成步骤 24 的自动化并发验收、异步建单对账与故障补偿演练 |
 | 昨日完成   | 步骤 22 促销规则、库存划拨与取消归还已完成并提交 |
-| 当前卡点   | 代码编译已通过；高并发自动化验证按用户要求暂不执行，应用与 MySQL 时区仍需统一 |
-| 最近一次提交 | `1668abe feat(promotion): create orders asynchronously from reservations`；本次代码与文档准备单独提交 |
-| 明日优先   | 若继续推进，进入步骤 24：对账、补偿、压测与故障演练；先处理时区统一 |
+| 当前卡点   | 步骤 24 核心验收已完成；多实例 Outbox 发布抢占与更完整的重试/死信策略留待后续增强 |
+| 最近一次提交 | `e3cabc9 docs: add promotion flow comments`；本次时区、状态任务、步骤 24 测试与文档待用户提交 |
+| 明日优先   | 按路线进入步骤 25 前，先复盘本次可靠交易测试与提交检查点 |
 
 ## 每日任务
 ## Day 1：2026-07-19
@@ -1154,3 +1154,40 @@
 
 - 当前步骤可以作为“代码收口检查点”提交，但不能把未执行的高并发压测记录为已通过。
 - 后续进入步骤 24，重点做促销对账、时区统一、故障演练和压测报告。
+
+## Day 25：2026-08-19 / 步骤 24 验收完成
+
+### 今日目标
+
+- 用可重复的自动化测试替代固定时间窗口和手工 Apifox 验收。
+- 验收促销抢购在并发、Outbox 异步建单与故障补偿后的最终一致性。
+- 归档验收截图、学习记录与测试代码讲解。
+
+### 今日完成
+
+- [x] 明确应用 `Clock` 为 `Asia/Shanghai`，MySQL 容器启动参数为 `--default-time-zone=+08:00`；促销状态恢复任务每 30 秒推进 `SCHEDULED → ACTIVE → ENDED`。
+- [x] 新增 `PromotionReservationConcurrencyTest`，使用 `MutableTestClock` 固定测试时间，避免等待真实活动开始时间。
+- [x] 每次测试自动创建独立的活动、活动商品与 Redis 预热数据；结束后按 Outbox、补偿、订单、资格、活动商品、活动的逆序清理，并清理对应 Redis Key。
+- [x] 20 个不同消费者同时抢购库存为 10 的活动：成功资格数为 10，Redis 库存为 0，MySQL 资格数为 10。
+- [x] 测试中主动执行一次 Outbox 发布器，并等待 RabbitMQ 消费者完成建单：10 条资格均为 `ORDER_CREATED`，10 笔订单创建成功，MySQL 活动库存为 0，10 条促销 Outbox 事件均为 `PUBLISHED`。
+- [x] 用测试专用活动商品的不存在 SKU 制造建单失败：资格状态为 `COMPENSATED`，补偿记录为 `COMPLETED`，订单数为 0，Redis 活动库存恢复到 10，用户限购数量回到 0。
+- [x] IDEA 运行 `PromotionReservationConcurrencyTest`：3 个测试全部通过。
+
+### 今日验收
+
+- [x] `shouldLoadPromotionConcurrencyTestContext`：真实 Spring、MySQL、Redis、RabbitMQ 与固定时钟测试环境可用。
+- [x] `concurrentReservationsShouldNotOversell`：20 并发请求不会超卖，并完成 Outbox → RabbitMQ → 订单的最终对账。
+- [x] `orderCreationFailureShouldCompensateReservationAndRedisStock`：受控建单失败会执行幂等补偿，且不会产生孤儿订单。
+- [x] 测试截图已归档：`docs/images/day-25/promotion-concurrency-order-flow-tests.png`、`docs/images/day-25/promotion-compensation-tests-success.png`。
+- [x] 测试说明文档已生成：`docs/步骤24-促销并发与补偿测试代码讲解.md`。
+
+### 当前边界
+
+- 当前测试使用本地开发环境的真实 MySQL、Redis 与 RabbitMQ；不得指向共享或生产数据库。
+- 测试主动调用 `OutboxPublisher.publishPendingEvents()` 以避免等待 5 秒定时器，因此该调用会扫描本地环境的 `PENDING` Outbox 事件。
+- 多实例 Outbox 抢占、指数退避和死信队列治理不属于本步骤验收范围，后续可作为可靠消息增强项继续推进。
+
+### 今日 Git
+
+- 待用户提交：时区配置、促销状态恢复任务、步骤 24 自动化测试、验收截图与文档。
+- 提交前已通过 `mvn -DskipTests test-compile` 与 `git diff --check`。
