@@ -73,17 +73,19 @@ public class PromotionReservationService {
         String reservationId = UUID.randomUUID().toString();
         long nowMillis = Instant.now(applicationClock).toEpochMilli();
 
+        //信息给进方法内去执行lua脚本
         List<?> result = executeReservationScript(request, itemId, consumerId, nowMillis, reservationId);
 
         //result == null 要满足上线后lua是空白的
+        // 返回结果不是约定的 {返回码, reservationId} 两项结构时，停止处理。
         if (result == null || result.size() != 2) {
             throw new IllegalStateException("抢购 Lua 脚本返回结果异常");
         }
 
+        //获得状态码和reservationId
         int code = Integer.parseInt(String.valueOf(result.get(0)));
         String resultReservationId = String.valueOf(result.get(1));
 
-        // 返回结果不是约定的 {返回码, reservationId} 两项结构时，停止处理。
         switch (code) {
             case 1 -> {
                 //资格外部保存成java对象
@@ -96,11 +98,12 @@ public class PromotionReservationService {
 
                 //写进OutBox后面异步创建订单
                 try {
-                    //验收后保存资格进数据库
+                    //1. 保存抢购资格在验收后
                     if (promotionReservationMapper.insert(reservation) != 1) {
                         throw new BizException(500, "保存抢购资格失败");
                     }
 
+                    // 2. 保存“创建订单”事件
                     persistPromotionOrderCreateOutboxEvent(reservation);
 
                     return new PromotionReservationResult(code, resultReservationId);

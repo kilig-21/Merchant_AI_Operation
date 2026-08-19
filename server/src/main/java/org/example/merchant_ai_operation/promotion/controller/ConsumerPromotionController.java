@@ -20,6 +20,7 @@ public class ConsumerPromotionController {
         this.promotionReservationService = promotionReservationService;
     }
 
+    //保存抢购成功资格接口
     @PostMapping("/reservations")
     public ApiResponse<PromotionReservationResult> reserve(
             @Valid @RequestBody ReservePromotionRequest request

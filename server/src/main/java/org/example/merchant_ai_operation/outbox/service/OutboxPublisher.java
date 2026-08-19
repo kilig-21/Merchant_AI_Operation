@@ -1,8 +1,6 @@
 package org.example.merchant_ai_operation.outbox.service;
 
 
-import lombok.extern.log4j.Log4j;
-import lombok.extern.log4j.Log4j2;
 import lombok.extern.slf4j.Slf4j;
 import org.example.merchant_ai_operation.config.RabbitMqConfig;
 import org.example.merchant_ai_operation.outbox.entity.OutboxEvent;
@@ -72,9 +70,10 @@ public class OutboxPublisher {
         try {
             log.info("开始发布事件，eventId={}", event.getEventId());
 
-            CorrelationData correlationData =
-                    new CorrelationData(event.getEventId());
+            //给消息绑定id
+            CorrelationData correlationData = new CorrelationData(event.getEventId());
 
+            //确认消息的目的地
             EventDestination destination = resolveDestination(event);
 
             rabbitTemplate.convertAndSend(

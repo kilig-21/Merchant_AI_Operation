@@ -36,6 +36,7 @@ public class PromotionOrderCreateConsumer {
         this.promotionCompensationService = promotionCompensationService;
     }
 
+    //监听队列
     @RabbitListener(queues = RabbitMqConfig.PROMOTION_ORDER_CREATE_QUEUE)
     public void handlePromotionOrderCreate(Message message, Channel channel) throws IOException {
         long deliveryTag = message.getMessageProperties().getDeliveryTag();
@@ -43,6 +44,8 @@ public class PromotionOrderCreateConsumer {
 
         try {
             String payload = new String(message.getBody(), StandardCharsets.UTF_8);
+
+            //readValue先转化为对象好做事
             event = objectMapper.readValue(
                     payload,
                     PromotionOrderCreateEvent.class
