@@ -54,7 +54,7 @@ const campaignSlides: MorphSlide[] = [
     eyebrow: "MORROW / LISTEN 01",
     titleLines: ["安静，也可以", "很有力量。"],
     summary: "把专注留给自己，让声音落在刚刚好的地方。",
-    href: "/stores/1001/products",
+    href: "/stores",
     ctaLabel: "查看本期选物",
   },
   {
@@ -63,7 +63,7 @@ const campaignSlides: MorphSlide[] = [
     eyebrow: "MORROW / GLOW 02",
     titleLines: ["给夜晚留一盏", "刚刚好的光。"],
     summary: "不追赶明亮，只为晚归与阅读留一小块温度。",
-    href: "/stores/1001/products",
+    href: "/stores",
     ctaLabel: "查看本期选物",
   },
   {
@@ -72,7 +72,7 @@ const campaignSlides: MorphSlide[] = [
     eyebrow: "MORROW / TRAVEL 03",
     titleLines: ["少带一点，也能", "走得更远。"],
     summary: "轻装出发，只留下真正会被使用的可靠物件。",
-    href: "/stores/1001/products",
+    href: "/stores",
     ctaLabel: "查看本期选物",
   },
 ];
@@ -154,7 +154,7 @@ export default function HomePage() {
               </h1>
               <p>我们挑选真正耐用、愿意每天使用的物件。少一点仓促，多一点刚刚好的决定。</p>
               <div className="hero-actions">
-                <Link className="button dark" href="/stores/1001/products">
+                <Link className="button dark" href="/stores">
                   开始选购 ↗
                 </Link>
                 <Link className="button" href="#curation">
@@ -177,7 +177,7 @@ export default function HomePage() {
                   <Link href="#curation">
                     01 / 精心策选 <b>→</b>
                   </Link>
-                  <Link href="/stores/1001/products">
+                  <Link href="/stores">
                     02 / 信息清楚 <b>→</b>
                   </Link>
                   <Link href="/consumer/login">
@@ -232,7 +232,7 @@ export default function HomePage() {
                 >
                   <Link
                     className="campaign-entry"
-                    href="/stores/1001/products"
+                    href="/stores"
                     aria-label={`${entry.title}，进入本期选物`}
                   >
                     <span className="eyebrow">{entry.eyebrow}</span>
@@ -264,7 +264,7 @@ export default function HomePage() {
             </RevealFx>
             <div className="curation-grid">
               {productVisuals.slice(0, 3).map((item, index) => (
-                <Link className="curation-card" href="/stores/1001/products" key={item.id}>
+                <Link className="curation-card" href="/stores" key={item.id}>
                   <Image src={item.image} alt={item.category} fill sizes={index === 0 ? "60vw" : "40vw"} />
                   <div>
                     <span className="eyebrow">0{index + 1} / CURATION</span>
@@ -283,7 +283,7 @@ export default function HomePage() {
             </div>
             <div className="curation-grid curation-grid-secondary">
               {productVisuals.slice(3).map((item, index) => (
-                <Link className="curation-card" href="/stores/1001/products" key={item.id}>
+                <Link className="curation-card" href="/stores" key={item.id}>
                   <Image src={item.image} alt={item.category} fill sizes="(max-width: 720px) 92vw, 33vw" />
                   <div>
                     <span className="eyebrow">0{index + 4} / CURATION</span>

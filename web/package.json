@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "check": "biome check . && tsc --noEmit",
+    "check": "biome lint . && tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {

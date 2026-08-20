@@ -1,12 +1,23 @@
 "use client";
 
 import { apiClient } from "@/lib/client-api";
+import { addDemoCartLine } from "@/lib/demo-commerce";
 import { currency } from "@/lib/demo-data";
 import type { CartItem, ProductDetail, Sku } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
-export function ProductPurchase({ product, demo }: { product: ProductDetail; demo: boolean }) {
+export function ProductPurchase({
+  product,
+  demo,
+  storeId,
+  storeName,
+}: {
+  product: ProductDetail;
+  demo: boolean;
+  storeId: number;
+  storeName: string;
+}) {
   const [sku, setSku] = useState<Sku>(product.skus[0]);
   const [quantity, setQuantity] = useState(1);
   const [message, setMessage] = useState("");
@@ -15,7 +26,8 @@ export function ProductPurchase({ product, demo }: { product: ProductDetail; dem
   const canAdd = useMemo(() => sku.availableStock >= quantity && sku.availableStock > 0, [sku, quantity]);
   async function add() {
     if (demo) {
-      setMessage("演示商品不可加入真实购物袋，请连接后端后再试。");
+      addDemoCartLine({ storeId, storeName, productId: product.id, productName: product.name, sku, quantity });
+      setMessage("已加入演示购物袋；结算时会按店铺拆分订单。");
       return;
     }
     setLoading(true);
@@ -61,11 +73,12 @@ export function ProductPurchase({ product, demo }: { product: ProductDetail; dem
       </div>
       <div className="purchase-row">
         <div className="stepper">
-          <button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))}>
+          <button aria-label="减少购买数量" type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))}>
             −
           </button>
           <span>{quantity}</span>
           <button
+            aria-label="增加购买数量"
             type="button"
             disabled={quantity >= sku.availableStock}
             onClick={() => setQuantity(quantity + 1)}
@@ -78,7 +91,11 @@ export function ProductPurchase({ product, demo }: { product: ProductDetail; dem
         </button>
       </div>
       <p className="feedback">库存 {sku.availableStock} 件 · 下单前会再次确认价格与库存</p>
-      {message && <p className="feedback">{message}</p>}
+      {message && (
+        <output className="feedback">
+          {message} {demo && <a href="/cart">查看购物袋 ↗</a>}
+        </output>
+      )}
     </>
   );
 }

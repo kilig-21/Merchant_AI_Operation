@@ -3,12 +3,14 @@ import { ProductGridClient } from "@/components/ProductGridClient";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteNav } from "@/components/SiteNav";
 import { getPublicProducts } from "@/lib/backend";
-import { demoProducts } from "@/lib/demo-data";
+import { demoProductsForStore, storeFor } from "@/lib/demo-data";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 export default async function StoreProductsPage({ params }: { params: Promise<{ storeId: string }> }) {
   const storeId = Number((await params).storeId) || 1001;
-  let products = demoProducts;
+  const store = storeFor(storeId);
+  let products = demoProductsForStore(storeId);
   let demo = false;
   try {
     const remote = await getPublicProducts(storeId);
@@ -23,17 +25,17 @@ export default async function StoreProductsPage({ params }: { params: Promise<{ 
       <main className="page-shell">
         <header className="page-intro">
           <div>
-            <span className="eyebrow">MORROW / STORE {storeId}</span>
+            <Link className="eyebrow" href={`/stores/${store.id}`}>← {store.name}</Link>
             <h1>
-              选一些真正会
+              从这间店里，选一些真正会
               <br />
               陪你生活的东西。
             </h1>
           </div>
-          <p>为专注、出发、停留和每一个平常时刻，慢慢挑选。</p>
+          <p>{store.description}</p>
         </header>
         {demo && <DemoNotice />}
-        <ProductGridClient products={products} storeId={storeId} />
+        <ProductGridClient products={products} storeId={store.id} />
       </main>
       <SiteFooter />
     </>
