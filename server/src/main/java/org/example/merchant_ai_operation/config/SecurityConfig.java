@@ -1,5 +1,7 @@
 package org.example.merchant_ai_operation.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.example.merchant_ai_operation.common.ApiResponse;
 import org.example.merchant_ai_operation.security.JwtAuthentication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,8 +19,10 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig{
 
     private final JwtAuthentication jwtAuthentication;
-    public SecurityConfig(JwtAuthentication jwtAuthentication) {
+    private final ObjectMapper  objectMapper;
+    public SecurityConfig(JwtAuthentication jwtAuthentication , ObjectMapper objectMapper) {
         this.jwtAuthentication = jwtAuthentication;
+        this.objectMapper = objectMapper;
     }
 
 
@@ -36,13 +40,28 @@ public class SecurityConfig{
                 //触发时机：用户未登录、缺少有效凭证时（没有 Authentication）
                 .exceptionHandling(exception -> exception
 
-                        .authenticationEntryPoint((request, response, authException) ->
-                                response.setStatus(HttpStatus.UNAUTHORIZED.value())
-                        )
-                        //accessDeniedHandler：认证成功了，但权限不够，返回 403
-                        .accessDeniedHandler((request, response, accessDeniedException) ->
-                                response.setStatus(HttpStatus.FORBIDDEN.value())
-                        )
+                        //未登录:返回401的JSON
+                        .authenticationEntryPoint((request,
+                                                   response,
+                                                   authException) ->{
+                            response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                            response.setContentType("application/json;charset=UTF-8");
+                            objectMapper.writeValue(
+                                    response.getWriter(),
+                                    ApiResponse.error(401, "请先登录")
+                            );
+                        })
+
+                        //accessDeniedHandler：认证成功了，但权限不够，返回 403的JSON
+                        .accessDeniedHandler((request, response, accessDeniedException) ->{
+                            response.setStatus(HttpStatus.FORBIDDEN.value());
+                            response.setContentType("application/json;charset=UTF-8");
+                            objectMapper.writeValue(
+                                    response.getWriter(),
+                                    ApiResponse.error(403, "没有权限访问该资源")
+                            );
+                        })
+
                 )
 
 
@@ -73,6 +92,7 @@ public class SecurityConfig{
         .build();
     }
 
+    //将密码加密:BCrypt算法
     @Bean
     public PasswordEncoder passwordEncoder(){
         return new BCryptPasswordEncoder();

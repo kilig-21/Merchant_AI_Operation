@@ -2291,3 +2291,71 @@ PAID --申请售后--> AFTER_SALE
 
 - `docs/images/day-25/promotion-concurrency-order-flow-tests.png`：并发抢购与异步建单测试通过。
 - `docs/images/day-25/promotion-compensation-tests-success.png`：测试类共 3 个测试通过，包含故障补偿演练。
+
+## Day 26：2026-08-21 / 前后端联调与部署副线 S1、S3、S4 阶段推进
+
+### 今天对应任务
+
+- 副线 S1：接口合同和分支集成策略阶段完成。
+- 副线 S3：店铺目录、跨店浏览与搜索的后端真实读取阶段完成。
+- 副线 S4：地址主数据和订单地址快照基础设施进行中。
+
+### 今天学了什么
+
+- `@WebMvcTest`、`@AutoConfigureMockMvc(addFilters = false)` 和 Spring 容器是三个不同层次：`addFilters = false` 只是不让 MockMvc 请求经过安全过滤器，但测试上下文仍可能创建 `JwtAuthentication`、`SecurityConfig` 等 Bean，所以缺失的 `JwtService` 仍要用 `@MockitoBean` 补齐。
+- 前后端联调不能只看 HTTP 状态。项目统一返回 `{ code, message, data }`，因此未登录要同时看到 HTTP 401 和 `code: 401`，无权限要同时看到 HTTP 403 和 `code: 403`。
+- `tenant_id` 是商家隔离字段，`consumer_id` 是消费者身份字段。公共店铺搜索按 tenant 查询；地址 CRUD 按当前 consumer 查询，两者不能混用。
+- 地址主数据记录“当前可修改的收货地址”，订单地址快照记录“下单当时不可变的收货信息”。订单历史不能随着消费者改地址而变化。
+- Flyway 的版本文件应由 Spring Boot 启动执行。V12 创建消费者地址表，V13 创建订单地址快照表；手动在数据库执行会绕过迁移历史管理。
+- `isDefault` 的空值语义要区分新增和修改：新增空值转成 `0`；修改空值应保留数据库原值。SQL 中分别对应 `COALESCE(参数, 0)` 和 `COALESCE(参数, is_default)`。
+- 从方法提取出来的代码要根据职责命名。快照对象只是被组装出来，还没有写数据库，所以 `buildOrderAddressSnapshot` 比 IDE 默认的 `extracted` 更准确。
+
+### 今天完成
+
+- 完成前后端接口合同 `docs/frontend-backend-contract.md`，记录 `feature/backend` 与 `feature/web-v2` 基线、统一响应、权限边界、真实接口和 Demo 缺口。
+- 修复 Spring Security 401/403 统一错误响应，并用 FoxAPI 验收未登录和消费者访问商家接口的边界。
+- 新增公开店铺目录与跨店商品搜索，完成编译、服务测试、控制器测试和 FoxAPI 读取验收。
+- 新增消费者地址表 V12、地址 DTO/VO/Mapper/Service/Controller，完成真实地址创建、列表、默认切换、修改和删除。
+- 新增订单地址快照表 V13、`CommerceOrderAddress` 实体、`CommerceOrderAddressMapper` 和快照服务；`CreateOrderRequest` 增加可选 `addressId`，并保留旧构造器以兼容已有订单测试。
+- 当前新增代码多次通过 Maven compile；本日代码未提交。
+
+### 今天遇到的问题
+
+| 问题 | 原因与解决 | 是否已理解 |
+|---|---|---|
+| `addFilters = false` 后测试仍需要 `JwtService` | 关闭的是请求过滤器，不是 Spring Bean 创建；用 `@MockitoBean JwtService` 让测试上下文启动 | 是 |
+| 地址修改 SQL 编译前发现逻辑错误 | `is_default =` 被误放到 INSERT 的 VALUES；检查后改回正确的 INSERT/UPDATE 两种 `COALESCE` 语义 | 是 |
+| Mapper、Service、Controller 之间的职责边界 | Mapper 只做数据库读写，Service 负责当前用户、事务和默认地址规则，Controller 负责 HTTP 参数与统一响应 | 是 |
+| 为什么地址快照不直接复用地址表 | 地址表会被消费者修改或删除；订单快照必须复制字段，不能依赖当前地址记录 | 是 |
+| 为什么当前还不能说 S4 完成 | 地址和快照基础设施已具备，但 `addressId` 尚未接入现有订单事务，跨店拆单、整体回滚和集成测试仍未完成 | 是 |
+
+### 侧边任务/对话补充记录
+
+- 用户明确要求继续使用 FoxAPI，不重复已经完成的基础接口验收；本日只对新增副线接口进行真实请求和结果核对。
+- 用户确认由自己逐步编写后端代码，助手负责根据真实代码给出下一小步、检查文件并执行编译/测试验收；未切换分支，也未默认合并。
+- 用户询问 `@Data` 是否可以替代 `@Getter/@Setter/@NoArgsConstructor/@AllArgsConstructor`；本日的快照实体使用 `@Data`，因未声明其他构造器仍保留无参构造器，编译通过。
+- 用户询问当前距离 S4 完成还有多少：已明确说明 S4 仍进行中，后续还要接入订单快照、返回订单地址、跨店拆单、整体回滚和集成测试。
+- 用户本日要求收工时写入日志、归档截图并只提供提交语句；因此本次不执行 `git add`、`git commit` 或 `git push`。
+
+### 今天还没完成
+
+- `addressId` 尚未接入 `OrderService.createOrderVO`，现有订单不会自动生成地址快照。
+- 订单详情还没有返回 `commerce_order_address` 的快照数据。
+- 跨店购物车按商家拆单、父结算编号、整体事务回滚和跨店幂等尚未完成。
+- S4 集成测试尚未覆盖两个商家成功、库存不足整体失败、同一幂等键重试、地址越权和空购物车。
+- `feature/web-v2` 前端尚未接入真实地址选择和跨店结算；分支隔离策略保持不变。
+
+### 截图记录
+
+- `docs/images/day-26-side-S4/flyway-v12-consumer-address-success.png`：Flyway 成功应用 V12，消费者地址表创建完成。
+- `docs/images/day-26-side-S4/flyway-v13-order-address-snapshot-success.png`：Flyway 成功应用 V13，订单地址快照表创建完成。
+- `docs/images/day-26-side-S4/address-create-success.png`：FoxAPI 新增地址成功。
+- `docs/images/day-26-side-S4/address-default-switch-success.png`：FoxAPI 新增第二个默认地址成功。
+- `docs/images/day-26-side-S4/address-update-success.png`：FoxAPI 修改地址成功。
+- `docs/images/day-26-side-S4/address-list-default-state.png`：FoxAPI 查询确认默认地址状态切换成功。
+- 删除接口成功截图和部分 GET 截图包含可见 JWT，因此不复制到仓库。
+
+### 明日优先
+
+- 将 `addressId` 接入现有订单事务，在库存锁定和订单写入的同一事务内创建订单地址快照。
+- 先补单店订单快照读取，再设计跨店拆单和整体回滚，不直接跳到前端 Demo 替换。

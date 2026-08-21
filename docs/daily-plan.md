@@ -1191,3 +1191,79 @@
 
 - 待用户提交：时区配置、促销状态恢复任务、步骤 24 自动化测试、验收截图与文档。
 - 提交前已通过 `mvn -DskipTests test-compile` 与 `git diff --check`。
+
+## Day 26：2026-08-21 / 前后端联调与部署副线 S1、S3、S4 阶段推进
+
+### 今日目标
+
+- 建立并验收公共店铺目录、跨店商品搜索和地址真实读取能力。
+- 开始 S4 地址与订单收货地址快照基础设施，不提前宣称跨店拆单闭环完成。
+- 保持当前 `feature/backend` 分支，不切换或合并 `feature/web-v2`，不推进 AI 主线步骤 25～30。
+
+### 今日完成
+
+- [x] 完成前后端接口合同文件 `docs/frontend-backend-contract.md`，记录分支基线、统一响应、权限边界、已知缺口和后续集成策略；S1 达到阶段完成。
+- [x] 将 Spring Security 未登录/无权限响应统一为 `ApiResponse` JSON：401 返回“请先登录”，403 返回“没有权限访问该资源”。
+- [x] 新增公开店铺目录 `GET /api/public/stores`，返回启用店铺及公开在售商品数量。
+- [x] 新增跨店公开搜索 `GET /api/public/stores/products/search`，支持关键词、店铺筛选和分页上限；仅查询启用店铺、已上架商品和已上架 SKU。
+- [x] 新增 `PublicStoreServiceTest`、`PublicStoreControllerTest`；控制器测试中补充 `JwtService` Mock，确认 `addFilters = false` 只关闭 MockMvc 请求过滤，不会阻止测试上下文创建安全 Bean。
+- [x] Flyway V12 成功创建 `consumer_address`，并完成消费者地址 GET/POST/PUT/DELETE 接口。
+- [x] FoxAPI 验收地址创建、地址列表、默认地址切换、地址修改和地址删除；验证同一消费者最多保留一个默认地址，地址查询按当前消费者隔离。
+- [x] Flyway V13 成功创建 `commerce_order_address` 订单收货地址快照表；新增快照实体、Mapper、快照服务，并为 `CreateOrderRequest` 增加兼容旧调用的可选 `addressId`。
+- [x] 今日涉及代码均通过 `mvn -q -DskipTests compile`；没有执行 Git 提交。
+
+### 今日未完成
+
+- [ ] `addressId` 尚未接入现有 `OrderService.createOrderVO`，现有订单创建还不会真正写入地址快照。
+- [ ] 订单详情尚未返回收货地址快照。
+- [ ] 尚未实现按 tenant 拆分购物车、一次结算生成多笔商家子订单，以及跨店事务整体回滚。
+- [ ] 尚未补 S4 后端集成测试：两个商家成功、一个 SKU 库存不足整体失败、幂等重试、地址越权和空购物车。
+- [ ] `feature/web-v2` 前端尚未接入真实地址和跨店结算；当前未切换分支，也未建立工作树合并。
+
+### 今日验收
+
+- [x] FoxAPI：公共店铺目录返回店铺 1001/1002 及商品数量。
+- [x] FoxAPI：关键词“耳机”跨店搜索返回蓝牙耳机；按店铺 1002 查询返回空数组。
+- [x] FoxAPI：消费者无地址时 GET 返回 `code: 0`、`data: []`。
+- [x] FoxAPI：新增两条地址并切换默认地址，旧地址变为 `isDefault: false`，新地址为 `true`。
+- [x] FoxAPI：修改地址后字段和 `updatedAt` 正确变化；删除非默认地址后列表只剩默认地址。
+- [x] IDEA/Flyway：V12、V13 分别成功应用，数据库版本从 11 升到 12、再升到 13。
+- [x] Maven：公共店铺控制器测试 2 条通过；服务测试 2 条通过；后续新增地址代码编译通过。
+
+### 今日关键理解
+
+- `addFilters = false` 只关闭 MockMvc 发请求时的安全过滤器，不等于测试上下文不创建 `JwtAuthentication`；因此仍需为 `JwtService` 提供 `@MockitoBean`。
+- 地址主数据和订单地址快照不是同一份数据：消费者地址可以修改/删除，订单快照必须保留下单时的原始内容。
+- `consumer_id` 必须来自 `CurrentUser.requiredConsumerId()`，不能由前端传入；Mapper 的查询、修改和删除都必须带消费者条件。
+- 新增地址未传 `isDefault` 时使用 `0`；修改地址未传 `isDefault` 时保留原值，不能误取消默认地址。
+- Flyway 迁移文件应由后端启动自动执行，不能手动复制 SQL，否则可能与 `flyway_schema_history` 不一致。
+
+### 今日遇到的问题
+
+| 问题 | 原因与解决 | 是否已理解 |
+|---|---|---|
+| 控制器测试启动失败 | `@WebMvcTest` 上下文仍创建安全相关 Bean，缺少 `JwtService`；增加 `@MockitoBean` 后通过 | 是 |
+| 修改地址的默认值 SQL 写错位置 | 把 `is_default =` 误放进 INSERT 的 `VALUES`；恢复为 INSERT 使用 `COALESCE(..., 0)`，UPDATE 使用 `COALESCE(..., is_default)` | 是 |
+| 提取方法名为 `extracted` | IDE 默认名称不能表达职责；改为 `buildOrderAddressSnapshot`，突出“组装快照对象”而不是持久化 | 是 |
+| Maven 偶尔无法开始 | 沙箱网络阻止访问 Maven Central；申请联网权限后编译通过，确认不是源码错误 | 是 |
+
+### 今日截图记录
+
+- `docs/images/day-26-side-S4/flyway-v12-consumer-address-success.png`：Flyway 成功应用 V12，创建 `consumer_address` 表。
+- `docs/images/day-26-side-S4/flyway-v13-order-address-snapshot-success.png`：Flyway 成功应用 V13，创建 `commerce_order_address` 订单地址快照表。
+- `docs/images/day-26-side-S4/address-create-success.png`：FoxAPI 新增地址返回 `code: 0`、HTTP 200。
+- `docs/images/day-26-side-S4/address-default-switch-success.png`：FoxAPI 新增第二个默认地址返回成功。
+- `docs/images/day-26-side-S4/address-update-success.png`：FoxAPI 修改地址返回 `code: 0`、HTTP 200。
+- `docs/images/day-26-side-S4/address-list-default-state.png`：FoxAPI 查询结果显示默认地址状态已切换。
+- 删除接口成功截图和部分 GET 截图包含可见 JWT，因此不复制到仓库，避免归档敏感凭据。
+
+### 今日 Git
+
+- 当前分支：`feature/backend`。
+- AI 主线步骤 25～30 未改动。
+- 当前代码、迁移、测试、接口合同、日志和截图均未提交，等待用户执行提交命令。
+
+### 下一步
+
+- 将 `addressId` 接入现有订单创建事务，在订单写入成功后同事务保存 `commerce_order_address` 快照。
+- 再补订单详情地址返回，之后进入跨店拆单和整体回滚设计。
