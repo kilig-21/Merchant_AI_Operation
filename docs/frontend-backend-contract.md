@@ -81,9 +81,10 @@ S3 后端接口已通过服务测试、控制器测试和 FoxAPI 验收；`featu
 ### 订单字段
 
 - 订单：`id`、`orderNo`、`tenantId`、`status`、`totalAmount`、`expireAt`、`createdAt`、`items`。
+- 跨店订单附加字段：`checkoutGroupId`；订单详情还可返回 `shippingAddress` 快照。
 - 订单明细：`id`、`skuId`、`skuNameSnapshot`、`salePrice`、`quantity`。
 - 创建订单的幂等键由前端根据购物车项生成并在重复提交时复用；成功后清理对应的临时状态。
-- 当前订单模型面向单商家结算；前端跨店拆单仍属于 Demo，不纳入 S2 真实验收。
+- 旧的 `/api/orders` 仍面向单商家结算；跨店结算副线阶段接口见第 6.2 节，前端尚未接入。
 
 ## 6. S2 商家商品接口
 
@@ -106,7 +107,23 @@ S3 后端接口已通过服务测试、控制器测试和 FoxAPI 验收；`featu
 | 修改地址 | `PUT /api/addresses/{id}` | 完整地址字段、可选 `isDefault` | `data: null` | `id` 必须属于当前消费者 |
 | 删除地址 | `DELETE /api/addresses/{id}` | 无 | `data: null` | `id` 必须属于当前消费者 |
 
-V12 已创建 `consumer_address`；V13 已创建 `commerce_order_address` 订单收货地址快照表。当前 `CreateOrderRequest.addressId` 只是兼容旧订单测试的可选字段，尚未接入 `OrderService` 的订单事务。
+V12 已创建 `consumer_address`；V13 已创建 `commerce_order_address` 订单收货地址快照表。当前 `CreateOrderRequest.addressId` 已接入订单创建事务并写入地址快照，同时保留旧构造器兼容已有单店调用。
+
+## 6.2 S4 跨店结算副线阶段接口
+
+| 页面操作 | 后端接口 | 请求 | 成功响应 | 当前状态 |
+|---|---|---|---|---|
+| 创建结算组草稿 | `POST /api/checkouts/prepare` | Body：`cartItemIds: number[]`、`addressId: number` | `CreateCheckoutGroupVO { checkoutGroupId, checkoutNo, status, totalAmount, orders }`；首次创建时 `orders` 为空 | 后端已完成并通过 FoxAPI 验收 |
+| 创建结算组子订单 | `POST /api/checkouts/{checkoutGroupId}/orders` | Header：`Idempotency-Key`；Body：`cartItemIds`、`addressId` | 返回结算组及按 `tenantId` 拆出的 `CreateOrderVO[]` | 后端已完成阶段实现并通过 FoxAPI 验收 |
+| 查询订单关联 | `GET /api/orders`、`GET /api/orders/{id}` | 当前消费者身份 | `OrderDetailVO` 返回 `checkoutGroupId`；详情返回 `shippingAddress` | 已完成 |
+
+### 跨店结算字段与边界
+
+- `checkout_group` 是一次结算的父记录；`commerce_order.checkout_group_id` 指向父结算组，一个结算组可以对应多个商家订单。
+- `checkoutGroupId` 由后端生成并返回，不能由前端伪造；订单查询同时使用当前 `consumer_id` 做数据隔离。
+- 子订单按可信商品快照中的 `tenantId` 分组；金额由当前 `salePrice × quantity` 重新计算。
+- 当前接口是 S4 副线阶段能力，`feature/web-v2` 尚未接入；AI 主线步骤 25～30 不受影响。
+- 当前仍缺少结算组详情查询、组级支付、整体取消/回滚和父级幂等重试闭环，不能把本阶段描述为完整支付闭环。
 
 ## 7. 当前明确缺口与暂不接入范围
 
@@ -114,7 +131,7 @@ V12 已创建 `consumer_address`；V13 已创建 `commerce_order_address` 订单
 |---|---|---|
 | 商家订单列表 | 前端调用 `/api/backend/merchant/orders`，后端暂无对应 Controller | S6 补商家订单分页接口；当前前端必须保留明确 Demo 标识 |
 | 店铺目录与跨店搜索 | 后端已新增真实目录/搜索接口并完成 FoxAPI 验收；前端仍使用 `demoStores`、`demoMarketplaceProducts` | S3 后端阶段完成；待前端分支接入 |
-| 地址与跨店结算 | 后端已完成地址 CRUD 和订单地址快照基础设施；订单事务尚未写入快照，前端仍使用浏览器本地地址和演示拆单 | S4 继续接入订单快照，再设计跨店拆单和整体回滚 |
+| 地址与跨店结算 | 后端已完成地址 CRUD、订单地址快照、结算组创建和阶段性跨店拆单；前端尚未接入真实接口，组级查询/支付/回滚/父级幂等仍缺失 | S4 继续补齐结算组查询、组级支付、整体回滚和集成测试 |
 | 收藏与售后 | 前端使用 `localStorage`，后端暂无领域模型 | 收藏后置；S5 设计真实售后状态机 |
 | 商家营销、顾客洞察、平台端 | 当前为 Demo 或只读演示 | 不阻塞 S2；暂不伪造真实接口 |
 | 401/403 错误体 | Spring Security 入口当前主要设置 HTTP 状态，可能没有完整 `ApiResponse` JSON | S2 联调时单独验收，必要时补统一错误响应 |
@@ -139,3 +156,10 @@ V12 已创建 `consumer_address`；V13 已创建 `commerce_order_address` 订单
 - S1：接口合同和分支集成策略达到阶段完成；未切换或合并分支。
 - S3：公共店铺目录、跨店搜索后端阶段完成；前端真实接入仍待 `feature/web-v2` 集成。
 - S4：地址 CRUD、V12 地址表、V13 订单地址快照表和快照服务完成；订单创建事务、跨店拆单和回滚仍未完成。
+
+## 11. 2026-08-23 副线阶段记录
+
+- S4：V14 结算组模型、按商家拆单、订单 `checkoutGroupId` 关联、订单详情/列表返回和 FoxAPI 阶段验收完成。
+- 当前实证：结算组 `3` 创建成功，子订单 `9300000000046` 创建成功，订单详情与列表均返回 `checkoutGroupId = 3`。
+- 当前未完成：结算组详情查询、组级支付、整体取消/回滚、父级幂等重试、两个真实商家的集成测试和前端接入。
+- 本记录属于副线 S4，不推进 AI 主线步骤 25～30；代码与文档由用户自行检查并提交。

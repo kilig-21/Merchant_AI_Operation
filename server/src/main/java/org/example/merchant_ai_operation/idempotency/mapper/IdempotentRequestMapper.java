@@ -34,6 +34,7 @@ public interface IdempotentRequestMapper {
                 request_hash AS requestHash,
                 status,
                 order_id AS orderId,
+                checkout_group_id AS checkoutGroupId,
                 response_body AS responseBody,
                 created_at AS createdAt,
                 updated_at AS updatedAt
@@ -58,6 +59,21 @@ public interface IdempotentRequestMapper {
     void markSuccess(
             @Param("id") Long id,
             @Param("orderId") Long orderId
+    );
+
+    @Update("""
+            UPDATE idempotent_request
+            SET status = 'SUCCESS',
+                order_id = #{orderId},
+                checkout_group_id = #{checkoutGroupId}
+            WHERE id = #{id}
+              AND status = 'PROCESSING'
+            """)
+    //将组订单标记成功
+    void markSuccessWithCheckoutGroup(
+            @Param("id") Long id,
+            @Param("orderId") Long orderId,
+            @Param("checkoutGroupId") Long checkoutGroupId
     );
 
 

@@ -1,5 +1,6 @@
 package org.example.merchant_ai_operation.order.entity;
 
+
 import lombok.Getter;
 import lombok.Setter;
 
@@ -8,15 +9,12 @@ import java.time.LocalDateTime;
 
 @Getter
 @Setter
-public class CommerceOrder {
+public class CheckoutGroup {
     private Long id;
-    private Long checkoutGroupId;
-    private String orderNo;
-    private Long tenantId;
+    private String checkoutNo;
     private Long consumerId;
     private String status;
     private BigDecimal totalAmount;
-    private LocalDateTime expireAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

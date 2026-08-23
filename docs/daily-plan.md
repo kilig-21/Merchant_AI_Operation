@@ -1267,3 +1267,65 @@
 
 - 将 `addressId` 接入现有订单创建事务，在订单写入成功后同事务保存 `commerce_order_address` 快照。
 - 再补订单详情地址返回，之后进入跨店拆单和整体回滚设计。
+
+## Day 27：2026-08-23 / 跨店结算副线 S4 阶段闭环
+
+### 今日目标
+
+- 在不切换主线、不自动修改工作区的前提下，完成一次“结算组创建 → 按商家拆单 → 订单关联 → 订单查询”的副线闭环。
+- 用单元测试、集成测试、Flyway 启动日志和 FoxAPI 实际请求逐层验收。
+- 记录当前闭环边界，提交由用户自行执行。
+
+### 今日完成
+
+- [x] 新增 Flyway `V14__add_checkout_group.sql`，创建 `checkout_group`，并为 `commerce_order`、`idempotent_request` 增加可空 `checkout_group_id`；Flyway 成功升级到版本 14。
+- [x] 新增 `CheckoutGroup`、`CheckoutGroupMapper`、`CheckoutGroupService`，完成结算组编号生成、`PENDING_PAYMENT` 初始化和当前消费者隔离查询。
+- [x] 新增 `CreateCheckoutRequest`、`CreateCheckoutGroupVO`、`CheckoutService` 和 `CheckoutController`。
+- [x] 实现 `POST /api/checkouts/prepare`：读取购物车可信快照、按 `tenantId` 分组、计算总金额并创建结算组。
+- [x] 实现 `POST /api/checkouts/{checkoutGroupId}/orders`：按商家创建子订单，传递 `checkoutGroupId`，为每个商家生成子幂等键，并在事务中清理购物车项。
+- [x] 现有单店 `OrderService.createOrderVO(idempotencyKey, request)` 保持兼容；新增三参数重载支持可选结算组关联。
+- [x] 订单详情和订单列表返回 `checkoutGroupId`；订单地址快照仍返回 `shippingAddress`。
+- [x] 完成 `CheckoutGroupServiceTest`、`CheckoutServiceTest`、`CheckoutControllerTest` 和 Mapper/Service 集成测试；截图显示相关测试分别通过 4、7、1 条，以及集成测试通过。
+
+### 今日验收
+
+- [x] FoxAPI `POST /api/checkouts/prepare` 成功创建 `checkoutGroupId = 3`，总金额 `299.00`，状态 `PENDING_PAYMENT`。
+- [x] FoxAPI `POST /api/checkouts/3/orders` 成功创建子订单 `9300000000046`，金额 `299.00`，状态 `PENDING_PAYMENT`。
+- [x] `GET /api/orders/9300000000046` 返回订单明细、商品快照、地址快照和 `checkoutGroupId = 3`。
+- [x] `GET /api/orders` 返回同一订单的 `checkoutGroupId = 3`；曾发现列表调用旧构造器导致 `null`，已修正并复验。
+- [x] 旧的单店 `POST /api/orders` 仍可用；其历史订单 `9300000000045` 的 `checkoutGroupId = null` 属于预期。
+- [x] Flyway、编译和测试截图已归档到 `docs/images/day-27-side-S4/`。
+
+### 今日关键理解
+
+- `checkout_group` 是一次跨店结算的父记录，`commerce_order` 是某个商家的子订单；一个父结算组可以对应多个商家订单。
+- 不能直接相信前端价格或商家编号，必须先通过 `ProductSkuMapper` 读取当前消费者的购物车商品快照，再按快照中的 `tenantId` 分组。
+- 旧单店入口通过重载方法传入 `null`，从而兼容历史订单；跨店子订单才传入真实 `checkoutGroupId`。
+- HTTP 返回 200 不等于业务完成，必须同时检查响应体 `code`、`status`、订单数量和数据库关联字段。
+- `checkoutGroupId` 在详情接口出现但列表接口为 `null`，最终定位为列表使用了旧构造器；这类问题属于“SQL 已查出、组装 VO 时丢字段”。
+
+### 当前未完成与边界
+
+- [ ] 结算组查询接口尚未完成；下一步需要增加按 `checkoutGroupId + consumerId` 查询全部子订单的 Mapper、Service 和 Controller。
+- [ ] 目前没有结算组级别支付、整体取消和整体状态推进；现有 `mock-pay` 仍按单笔订单工作。
+- [ ] `prepare` 与子订单流程尚未完成父级幂等重试闭环；购物车清理后重复请求的恢复策略需要单独设计。
+- [ ] 尚未用两个真实商家的购物车数据完成完整集成验收；当前多租户分组由单元测试覆盖，FoxAPI 实际数据为一个商家子订单。
+- [ ] 前端 `feature/web-v2` 尚未接入真实跨店结算接口；AI 主线步骤 25～30 未改动。
+
+### 侧边任务/对话补充记录
+
+- 用户明确要求由自己逐步编写代码，助手只提供下一小步、检查真实文件和解释错误；本日未替用户自动修改业务代码。
+- 用户确认测试中的 Mockito 自附加 Agent、动态加载和 JVM Sharing 警告不是测试失败，绿色结果和退出码 0 才是验收依据。
+- 用户询问“闭环是否完成以及是否可以提交”：已区分“结算组创建与拆单技术闭环”已完成，与“支付、查询、回滚、完整幂等的业务闭环”仍未完成；当前可作为阶段性提交点。
+- 用户询问 `git add .`：已提醒当前工作区还包含地址快照等既有改动，不建议未经检查盲目暂存；提交由用户自行执行。
+- 用户提供的 FoxAPI、IDEA、Flyway 和侧边栏聊天截图已整理为本日副线记录；截图中的 Token 仅作为本地学习证据，不写入接口合同正文。
+
+### 今日 Git
+
+- 当前分支：`feature/backend`。
+- 本次副线代码、迁移、测试、文档和截图均未执行提交，等待用户自行检查后提交。
+
+### 下一步
+
+- 先提交本阶段“结算组创建与跨商家拆单”检查点。
+- 然后实现结算组详情查询，再处理父级幂等、组级支付和整体回滚。

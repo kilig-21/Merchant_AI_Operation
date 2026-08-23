@@ -48,7 +48,11 @@ public interface CommerceOrderAddressMapper {
                 created_at AS createdAt
             FROM commerce_order_address
             WHERE order_id = #{orderId}
+              AND consumer_id = #{consumerId}
             """)
-    //通过订单id查看订单的地址
-    CommerceOrderAddress selectByOrderId(@Param("orderId") Long orderId);
+    //通过订单ID查询订单细节
+    CommerceOrderAddress selectByOrderIdAndConsumerId(
+            @Param("orderId") Long orderId,
+            @Param("consumerId") Long consumerId
+    );
 }

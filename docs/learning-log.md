@@ -2359,3 +2359,62 @@ PAID --申请售后--> AFTER_SALE
 
 - 将 `addressId` 接入现有订单事务，在库存锁定和订单写入的同一事务内创建订单地址快照。
 - 先补单店订单快照读取，再设计跨店拆单和整体回滚，不直接跳到前端 Demo 替换。
+
+## Day 27：2026-08-23 / 跨店结算副线 S4 阶段验收
+
+### 今天学了什么
+
+- `checkout_group` 是一次跨店结算的父记录，`commerce_order` 是按 `tenantId` 拆出的商家子订单；父子关联通过 `checkout_group_id` 完成。
+- 跨店结算不能使用前端传来的价格或商家编号，而要先查询当前消费者的购物车商品快照，再按可信快照分组并重新计算金额。
+- 保留单店 `createOrderVO(idempotencyKey, request)`，通过三参数重载增加 `checkoutGroupId`，可以在不破坏旧接口的情况下逐步扩展业务。
+- 业务验收要串起数据库迁移、单元测试、Controller、FoxAPI 创建结算组、FoxAPI 拆单、订单详情和订单列表；只看到某一层成功不能称为闭环。
+- 列表接口曾返回 `checkoutGroupId: null`，原因不是 SQL，而是 `OrderService.listMyOrders()` 调用了没有结算组参数的旧 `OrderDetailVO` 构造器；修正组装层后列表恢复正确。
+
+### 今天完成
+
+- 完成 V14 结算组数据模型、实体、Mapper、Service、DTO、VO、Controller 和测试。
+- 完成 `POST /api/checkouts/prepare`，真实创建结算组 `3`，总金额 `299.00`。
+- 完成 `POST /api/checkouts/3/orders`，真实创建子订单 `9300000000046`，状态为 `PENDING_PAYMENT`。
+- 订单详情返回 `checkoutGroupId`、商品明细和 `shippingAddress`；订单列表也已返回 `checkoutGroupId = 3`。
+- `CheckoutGroupServiceTest` 4 条、`CheckoutServiceTest` 7 条、`CheckoutControllerTest` 1 条，以及 Mapper/Service 集成验收均通过截图确认。
+
+### 遇到的问题与解决
+
+| 问题 | 原因与解决 | 是否已理解 |
+|---|---|---|
+| 不知道购物车项 ID 和地址 ID | 先调用 `GET /api/cart/items`、`GET /api/addresses` 查询当前消费者真实数据，不凭空填写 ID | 是 |
+| `OrderDetailVO` 列表构造报错 | 增加 `checkoutGroupId` 后完整构造器还需要 `shippingAddress`，列表补 `null` | 是 |
+| 详情有结算组 ID、列表却是 `null` | 列表使用旧兼容构造器，改为显式传 `order.getCheckoutGroupId()` | 是 |
+| 不清楚是否已经形成闭环 | 区分阶段性技术闭环与完整业务闭环；当前创建、拆单、关联、查询已完成，组级支付、回滚和父级幂等仍未完成 | 是 |
+
+### 侧边任务/对话补充记录
+
+- 用户坚持采用“助手给下一步代码、用户亲自输入、助手只读检查和解释”的学习方式；本日按此方式推进。
+- 用户准备每个闭环单独提交；已说明当前可以作为“结算组创建与跨商家拆单”阶段性提交点，但不能宣称完整结算业务全部完成。
+- 用户询问是否直接 `git add .`；已提醒工作区同时存在地址快照等既有改动，应先查看 `git status` 和暂存 diff，再由用户决定暂存范围。
+- 用户提供的侧边栏聊天记录主要用于确认任务顺序、错误修复和验收边界；文档只记录结论，不把聊天中的指令误当成项目需求。
+
+### 截图记录
+
+- `docs/images/day-27-side-S4/flyway-v14-checkout-group-success.png`：Flyway 成功验证 14 个迁移，数据库版本为 14。
+- `docs/images/day-27-side-S4/maven-compile-success.png`：IDEA/Maven 编译显示 `BUILD SUCCESS`。
+- `docs/images/day-27-side-S4/checkout-group-service-tests-4-pass.png`：结算组 Service 测试 4 条通过。
+- `docs/images/day-27-side-S4/checkout-group-mapper-integration-pass.png`：结算组 Mapper 集成测试通过。
+- `docs/images/day-27-side-S4/checkout-service-tests-7-pass.png`、`checkout-service-tests-6-pass.png`、`checkout-service-tests-5-pass.png`、`checkout-service-tests-4-pass.png`、`checkout-service-tests-3-pass.png`：结算编排 Service 分阶段测试通过，最终扩展到 7 条。
+- `docs/images/day-27-side-S4/checkout-controller-test-pass.png`：结算 Controller 测试通过。
+- `docs/images/day-27-side-S4/checkout-group-service-integration-pass.png`：结算组 Service 集成测试通过。
+- `docs/images/day-27-side-S4/checkout-group-mapper-integration-pass.png`：结算组 Mapper 集成测试通过。
+- `docs/images/day-27-side-S4/checkout-child-order-api-success.png`：FoxAPI 创建结算组子订单成功，返回订单 `9300000000046`。
+- `docs/images/day-27-side-S4/order-detail-checkout-group-success.png`：订单详情返回 `checkoutGroupId = 3`、明细和地址快照。
+- `docs/images/day-27-side-S4/order-list-checkout-group-success.png`：订单列表返回 `checkoutGroupId = 3`。
+
+### 当前未完成
+
+- 结算组详情查询接口尚未完成。
+- 结算组级别支付、整体取消/回滚和父级幂等重试尚未完成。
+- 两个真实商家的跨店集成测试和前端真实接入尚未完成。
+
+### Git 提交边界
+
+- 本日副线代码、V14 迁移、测试、文档和截图均待用户检查后自行提交。
+- 建议本阶段提交信息：`feat(order): support checkout group split`。
