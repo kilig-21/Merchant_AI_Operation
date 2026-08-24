@@ -70,6 +70,33 @@ class CheckoutControllerTest {
     }
 
     @Test
+    void shouldDelegateSubmitCheckout() {
+        CreateCheckoutRequest request =
+                new CreateCheckoutRequest(List.of(11L, 22L), 88L);
+
+        CreateCheckoutGroupVO groupVO =
+                new CreateCheckoutGroupVO(
+                        3L,
+                        "CHK20260824164000123456",
+                        "PENDING_PAYMENT",
+                        new BigDecimal("30.00"),
+                        List.of()
+                );
+
+        when(checkoutService.submitCheckout("checkout-key", request))
+                .thenReturn(groupVO);
+
+        ApiResponse<CreateCheckoutGroupVO> response =
+                checkoutController.submitCheckout("checkout-key", request);
+
+        assertEquals(0, response.code());
+        assertEquals(groupVO, response.data());
+
+        verify(checkoutService)
+                .submitCheckout("checkout-key", request);
+    }
+
+    @Test
     void shouldDelegateCheckoutGroupDetail() {
         CheckoutGroupDetailVO detailVO = new CheckoutGroupDetailVO(
                 7L,

@@ -150,6 +150,37 @@ public interface CommerceOrderMapper {
             @Param("now") LocalDateTime now
     );
 
+    @Select("""
+            SELECT COUNT(1)
+            FROM commerce_order
+            WHERE checkout_group_id = #{checkoutGroupId}
+              AND status <> 'PAID'
+            """)
+    //统计这个结算组下面还有多少笔子订单没有支付
+    int countNonPaidByCheckoutGroupId(
+            @Param("checkoutGroupId") Long checkoutGroupId
+    );
+
+    @Select("""
+            SELECT COUNT(1)
+            FROM commerce_order
+            WHERE checkout_group_id = #{checkoutGroupId}
+              AND status <> 'CANCELLED'
+            """)
+    //查看组里有哪些取消了的
+    int countNonCancelledByCheckoutGroupId(@Param("checkoutGroupId") Long checkoutGroupId);
+
+    @Select("""
+            SELECT COUNT(1)
+            FROM commerce_order
+            WHERE checkout_group_id = #{checkoutGroupId}
+              AND status <> 'CLOSED'
+            """)
+    //先统计未关闭的组订单有哪些
+    int countNonClosedByCheckoutGroupId(
+            @Param("checkoutGroupId") Long checkoutGroupId
+    );
+
     // ==================== 超时关单内部查询（MQ 消费 + 定时兜底） ==================== //
 
     @Select("""

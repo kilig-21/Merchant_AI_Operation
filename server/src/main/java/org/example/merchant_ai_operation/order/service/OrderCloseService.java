@@ -25,19 +25,22 @@ public class OrderCloseService {
     private final ProductSkuMapper productSkuMapper;
     private final InventoryMovementMapper inventoryMovementMapper;
     private final Clock applicationClock;
+    private final CheckoutGroupService checkoutGroupService;
 
     public OrderCloseService(
             CommerceOrderMapper commerceOrderMapper,
             CommerceOrderItemMapper commerceOrderItemMapper,
             ProductSkuMapper productSkuMapper,
             InventoryMovementMapper inventoryMovementMapper,
-            Clock applicationClock
+            Clock applicationClock,
+            CheckoutGroupService checkoutGroupService
     ) {
         this.commerceOrderMapper = commerceOrderMapper;
         this.commerceOrderItemMapper = commerceOrderItemMapper;
         this.productSkuMapper = productSkuMapper;
         this.inventoryMovementMapper = inventoryMovementMapper;
         this.applicationClock = applicationClock;
+        this.checkoutGroupService = checkoutGroupService;
     }
 
     //关闭过期订单事务
@@ -70,11 +73,18 @@ public class OrderCloseService {
                     order.getTenantId()
             );
 
-/*            if (latestSku == null) {
-                throw new BizException("商品不存在");
-            }*/
+            /*
+             if (latestSku == null) {
+             throw new BizException("商品不存在");
+            }
+            */
             //下方方法
             recordOrderCloseMovement(item, order, latestSku);
+        }
+        if (order.getCheckoutGroupId() != null) {
+            checkoutGroupService.markClosedIfAllChildrenClosed(
+                    order.getCheckoutGroupId()
+            );
         }
     }
 

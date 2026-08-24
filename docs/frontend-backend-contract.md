@@ -172,3 +172,20 @@ V12 已创建 `consumer_address`；V13 已创建 `commerce_order_address` 订单
 - 实证：本地真实请求 `GET /api/checkouts/3` 返回结算组 `3` 及其一笔子订单；未登录请求返回 HTTP/body `401`，不存在的 `999999` 返回 HTTP/body `404`。
 - 为使业务异常的传输状态与响应体一致，`GlobalExceptionHandler` 的 `BizException` 分支改为以异常业务码设置 HTTP 状态。该调整不等于所有校验和未知异常均已统一为相同的 HTTP 状态。
 - 本次仍是副线 S4；不切换或合并分支，不推进 AI 主线步骤 25～30。
+
+## 13. 2026-08-24 S4 后端结算组状态机与前端接入合同
+
+| 页面操作 | 前端 BFF 调用 | 后端接口 | 请求 | 成功响应 | 当前状态 |
+|---|---|---|---|---|---|
+| 一键提交结算 | `POST /api/backend/checkouts` | `POST /api/checkouts` | Header `Idempotency-Key`；Body：`cartItemIds: number[]`、`addressId: number` | `CreateCheckoutGroupVO { checkoutGroupId, checkoutNo, status, totalAmount, orders }` | 后端代码完成；已做单商家真实创建，双商家/幂等 ApiFox 待验收 |
+| 查询结算组 | `GET /api/backend/checkouts/{id}` | `GET /api/checkouts/{id}` | 当前消费者身份 | `CheckoutGroupDetailVO` | 后端完成；已有真实成功、401、404 验收 |
+| 全组模拟支付 | `POST /api/backend/checkouts/{id}/mock-pay` | `POST /api/checkouts/{id}/mock-pay` | 无 Body | `data: null`；全部子订单支付后父组为 `PAID` | 后端代码完成；ApiFox 待验收 |
+| 全组取消 | `POST /api/backend/checkouts/{id}/cancel` | `POST /api/checkouts/{id}/cancel` | 无 Body | `data: null`；全部子订单取消后父组为 `CANCELLED` | 后端代码完成；ApiFox 待验收 |
+
+### S4 当前状态约定
+
+- 父结算组初始状态为 `PENDING_PAYMENT`；所有子订单支付完成后为 `PAID`，所有子订单主动取消后为 `CANCELLED`，所有子订单超时关单后为 `CLOSED`。
+- 对于支付、取消、关闭，后端均锁定父结算组并统计子订单状态；只要仍存在未达目标状态的子订单，父组保持原状态。
+- 一键结算的重复提交必须复用相同 `Idempotency-Key`；相同请求指纹返回已有结算组，不同购物车项或地址返回 `409`。
+- 旧的 `POST /api/checkouts/prepare` 与 `POST /api/checkouts/{id}/orders` 仍保留为阶段兼容入口；`feature/web-v2` 接入时应以一键接口为准。
+- `feature/web-v2` 当前仍调用本地 `demo-commerce`，尚未实现上述 BFF 调用、状态刷新、错误态和真实地址选择；这部分不应标为已完成。

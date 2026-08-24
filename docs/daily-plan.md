@@ -1385,3 +1385,38 @@
 - 当前分支：`feature/backend`；未切换、未合并、未提交。
 - `CheckoutGroupDetailVO.java` 先前有过一次空文件暂存，最终提交前必须再次暂存其当前 record 内容。
 - 本日更新仅属于副线 S4，不改变 AI 主线步骤 25～30 的进度。
+
+### Day 28 后续推进：S4 后端四个核心闭环（待 ApiFox 最终验收）
+
+#### 本次完成
+
+- [x] 将旧的 `prepare → 创建子订单` 两步入口收敛为 `POST /api/checkouts`：同一事务内创建父结算组和按商家拆分的子订单；任一环节抛出业务异常时由事务回滚。
+- [x] 为一键结算补父级 `Idempotency-Key`：请求指纹由排序后的购物车项与地址组成；成功重试复用原结算组，参数不一致或处理中请求返回 `409`。
+- [x] 新增结算组级模拟支付 `POST /api/checkouts/{checkoutGroupId}/mock-pay`；所有子订单均支付后父组才从 `PENDING_PAYMENT` 变为 `PAID`。
+- [x] 新增结算组级取消 `POST /api/checkouts/{checkoutGroupId}/cancel`；只允许待支付子订单取消，库存释放和流水写完后，全部子订单均为 `CANCELLED` 才更新父组。
+- [x] 超时关单 `OrderCloseService` 已同步结算组：所有子订单均为 `CLOSED` 时，父组更新为 `CLOSED`。
+- [x] 父组状态更新统一采用“锁定父记录 → 统计未达目标状态的子订单 → 条件更新父组”的方式，避免并发下提前推进父状态。
+
+#### 本次实际验收与待验收
+
+- [x] 主代码静态检查：`git diff --check -- server/src/main/java` 无空白错误；已逐段核对事务边界、Mapper SQL 条件、Controller 路由与 Service 依赖。
+- [x] 先前真实请求：`POST /api/checkouts` 成功创建结算组 `4` 与待支付子订单；随后 `GET /api/checkouts/4` 成功返回父组和子订单摘要。
+- [ ] 今天**没有**完成 ApiFox 的组级支付、组级取消、超时关闭、双商家原子失败和幂等重试验收；这些真实接口矩阵留到明天，不能据此把运行时验收写成已完成。
+- [ ] `feature/web-v2` 仍为本地演示结算，尚未接入真实结算组接口；本轮未切换或合并分支。
+
+#### 侧边任务/对话补充记录
+
+- 测试运行配置中的环境变量曾丢失，应用上下文测试暴露的是 MySQL/RabbitMQ 等真实依赖配置问题，而不是本轮业务源码的确定性失败；用户决定本轮不再围绕测试环境排障，改为先完成主代码并将 ApiFox 验收延后。
+- 复核旧侧边栏 Day 26/Day 27 记录后确认：地址快照是本轮跨店结算的前置闭环，V14 结算组与详情查询是本次四个状态闭环的起点，避免把某一条接口成功误记为整个 S4 已完成。
+- 用户原本希望每个闭环都可独立提交；本次四个后端闭环连续完成但尚未提交，现作为一个完整的后端 S4 检查点提交。
+
+#### 截图记录
+
+- `docs/images/day-28-side-S4/checkout-atomic-submit-success.png`：真实 `POST /api/checkouts` 成功创建结算组和待支付子订单。
+- `docs/images/day-28-side-S4/checkout-group-detail-after-submit-success.png`：真实 `GET /api/checkouts/4` 返回父结算组和子订单摘要。
+- 支付、取消和超时关闭没有新的 ApiFox 截图，故不归档或伪造相应验收证据。
+
+#### 下一步
+
+- 明天先在 ApiFox 用真实数据依次验收：一键结算幂等重试、组级支付、组级取消、超时关闭，以及两个商家时的原子失败路径。
+- 后端真实验收完成后，再在用户确认下切至 `feature/web-v2` 接入真实地址与结算组接口。

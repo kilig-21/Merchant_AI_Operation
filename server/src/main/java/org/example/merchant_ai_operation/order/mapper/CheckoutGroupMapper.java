@@ -43,5 +43,42 @@ public interface CheckoutGroupMapper {
             @Param("consumerId") Long consumerId
     );
 
+    @Select("""
+        SELECT id
+        FROM checkout_group
+        WHERE id = #{checkoutGroupId}
+        FOR UPDATE
+        """)
+    //锁住这一条父结算组记录。
+    Long lockById(@Param("checkoutGroupId") Long checkoutGroupId);
+
+    @Update("""
+        UPDATE checkout_group
+        SET status = 'PAID'
+        WHERE id = #{checkoutGroupId}
+          AND status = 'PENDING_PAYMENT'
+        """)
+    //把状态标记为已经支付
+    void markPaidIfPending(@Param("checkoutGroupId") Long checkoutGroupId);
+
+    @Update("""
+        UPDATE checkout_group
+        SET status = 'CANCELLED'
+        WHERE id = #{checkoutGroupId}
+          AND status = 'PENDING_PAYMENT'
+        """)
+    //将组里的订单标记为取消
+    void markCancelledIfPending(@Param("checkoutGroupId") Long checkoutGroupId);
+
+    @Update("""
+            UPDATE checkout_group
+            SET status = 'CLOSED'
+            WHERE id = #{checkoutGroupId}
+              AND status = 'PENDING_PAYMENT'
+            """)
+    //将组订单标记为已关闭
+    int markClosedIfPending(
+            @Param("checkoutGroupId") Long checkoutGroupId
+    );
 
 }

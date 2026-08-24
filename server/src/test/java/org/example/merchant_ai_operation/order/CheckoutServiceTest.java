@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.example.merchant_ai_operation.order.vo.CreateOrderVO;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,7 +48,8 @@ class CheckoutServiceTest {
         checkoutService = new CheckoutService(
                 productSkuMapper,
                 checkoutGroupService,
-                orderService
+                orderService,
+                null
         );
 
         LoginPrincipal principal =
@@ -251,6 +253,132 @@ class CheckoutServiceTest {
                         request.cartItemIds().equals(List.of(33L))
                                 && request.addressId().equals(88L)
                 ),
+                eq(3L)
+        );
+    }
+
+    @Test
+    void shouldSubmitCheckoutInOneCall() {
+        List<Long> cartItemIds = List.of(11L, 22L, 33L);
+        CreateCheckoutRequest request =
+                new CreateCheckoutRequest(cartItemIds, 88L);
+
+        when(productSkuMapper.selectOrderSkuSnapshots(5001L, cartItemIds))
+                .thenReturn(List.of(
+                        snapshot(11L, 101L),
+                        snapshot(22L, 101L),
+                        snapshot(33L, 202L)
+                ));
+
+        CheckoutGroup group = new CheckoutGroup();
+        group.setId(3L);
+        group.setCheckoutNo("CHK20260823120000123456");
+        group.setStatus("PENDING_PAYMENT");
+        group.setTotalAmount(new BigDecimal("30.00"));
+
+        when(checkoutGroupService.createPending(new BigDecimal("30.00")))
+                .thenReturn(group);
+        when(checkoutGroupService.getMine(3L))
+                .thenReturn(group);
+
+        when(orderService.createOrderVO(
+                eq("checkout-key:101"),
+                any(CreateOrderRequest.class),
+                eq(3L)
+        )).thenReturn(new CreateOrderVO(
+                1011L, "ORDER-101", "PENDING_PAYMENT",
+                new BigDecimal("20.00"), null
+        ));
+
+        when(orderService.createOrderVO(
+                eq("checkout-key:202"),
+                any(CreateOrderRequest.class),
+                eq(3L)
+        )).thenReturn(new CreateOrderVO(
+                2021L, "ORDER-202", "PENDING_PAYMENT",
+                new BigDecimal("10.00"), null
+        ));
+
+        CreateCheckoutGroupVO result =
+                checkoutService.submitCheckout("checkout-key", request);
+
+        assertEquals(3L, result.checkoutGroupId());
+        assertEquals(2, result.orders().size());
+
+        InOrder inOrder = inOrder(checkoutGroupService, orderService);
+        inOrder.verify(checkoutGroupService)
+                .createPending(new BigDecimal("30.00"));
+        inOrder.verify(checkoutGroupService).getMine(3L);
+        inOrder.verify(orderService).createOrderVO(
+                eq("checkout-key:101"),
+                any(CreateOrderRequest.class),
+                eq(3L)
+        );
+        inOrder.verify(orderService).createOrderVO(
+                eq("checkout-key:202"),
+                any(CreateOrderRequest.class),
+                eq(3L)
+        );
+
+        verify(productSkuMapper, times(2))
+                .selectOrderSkuSnapshots(5001L, cartItemIds);
+    }
+
+    @Test
+    void shouldStopSubmitCheckoutWhenAnyChildOrderFails() {
+        List<Long> cartItemIds = List.of(11L, 22L, 33L);
+        CreateCheckoutRequest request =
+                new CreateCheckoutRequest(cartItemIds, 88L);
+
+        when(productSkuMapper.selectOrderSkuSnapshots(5001L, cartItemIds))
+                .thenReturn(List.of(
+                        snapshot(11L, 101L),
+                        snapshot(22L, 101L),
+                        snapshot(33L, 202L)
+                ));
+
+        CheckoutGroup group = new CheckoutGroup();
+        group.setId(3L);
+        group.setCheckoutNo("CHK20260824170000123456");
+        group.setStatus("PENDING_PAYMENT");
+        group.setTotalAmount(new BigDecimal("30.00"));
+
+        when(checkoutGroupService.createPending(new BigDecimal("30.00")))
+                .thenReturn(group);
+        when(checkoutGroupService.getMine(3L))
+                .thenReturn(group);
+
+        when(orderService.createOrderVO(
+                eq("checkout-key:101"),
+                any(CreateOrderRequest.class),
+                eq(3L)
+        )).thenReturn(new CreateOrderVO(
+                1011L, "ORDER-101", "PENDING_PAYMENT",
+                new BigDecimal("20.00"), null
+        ));
+
+        when(orderService.createOrderVO(
+                eq("checkout-key:202"),
+                any(CreateOrderRequest.class),
+                eq(3L)
+        )).thenThrow(new BizException(409, "商品库存不足"));
+
+        BizException exception = assertThrows(
+                BizException.class,
+                () -> checkoutService.submitCheckout("checkout-key", request)
+        );
+
+        assertEquals(409, exception.getCode());
+        assertEquals("商品库存不足", exception.getMessage());
+
+        verify(orderService).createOrderVO(
+                eq("checkout-key:101"),
+                any(CreateOrderRequest.class),
+                eq(3L)
+        );
+        verify(orderService).createOrderVO(
+                eq("checkout-key:202"),
+                any(CreateOrderRequest.class),
                 eq(3L)
         );
     }

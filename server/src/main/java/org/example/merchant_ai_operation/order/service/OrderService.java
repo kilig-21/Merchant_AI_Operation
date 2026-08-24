@@ -47,6 +47,7 @@ public class OrderService {
     private final ObjectMapper objectMapper;
     private final Clock applicationClock;
     private final CommerceOrderAddressService commerceOrderAddressService;
+    private final CheckoutGroupService checkoutGroupService;
 
     public OrderService(ProductSkuMapper productSkuMapper,
                         CommerceOrderMapper commerceOrderMapper,
@@ -57,7 +58,8 @@ public class OrderService {
                         OutboxEventMapper outboxEventMapper,
                         ObjectMapper objectMapper,
                         Clock applicationClock,
-                        CommerceOrderAddressService commerceOrderAddressService
+                        CommerceOrderAddressService commerceOrderAddressService,
+                        CheckoutGroupService checkoutGroupService
 
     ) {
         this.productSkuMapper = productSkuMapper;
@@ -70,6 +72,7 @@ public class OrderService {
         this.objectMapper = objectMapper;
         this.applicationClock = applicationClock;
         this.commerceOrderAddressService = commerceOrderAddressService;
+        this.checkoutGroupService = checkoutGroupService;
     }
 
 
@@ -286,6 +289,11 @@ public class OrderService {
             InventoryMovement movement = createOrderPaidMovement(item, order, latestSku);
             inventoryMovementMapper.insert(movement);
         }
+        if (order.getCheckoutGroupId() != null) {
+            checkoutGroupService.markPaidIfAllChildrenPaid(
+                    order.getCheckoutGroupId()
+            );
+        }
     }
 
     //列出订单列表
@@ -376,6 +384,11 @@ public class OrderService {
             //写入流水
             InventoryMovement movement = createOrderCancelMovement(item, order, latestSku);
             inventoryMovementMapper.insert(movement);
+        }
+        if (order.getCheckoutGroupId() != null) {
+            checkoutGroupService.markCancelledIfAllChildrenCancelled(
+                    order.getCheckoutGroupId()
+            );
         }
     }
 

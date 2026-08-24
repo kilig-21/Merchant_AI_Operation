@@ -59,6 +59,65 @@ public class CheckoutGroupService {
 
     }
 
+    //标记为已支付
+    @Transactional
+    public void markPaidIfAllChildrenPaid(Long checkoutGroupId){
+        if(checkoutGroupId == null) {return;}
+
+        //先锁住父结算组这一行,避免两个支付请求同时修改父状态。
+        Long lockedGroupId = checkoutGroupMapper.lockById(checkoutGroupId);
+
+        if(lockedGroupId ==null){throw new BizException(404,"结算组不存在");}
+
+        //统计这个组下面还有多少笔子订单不是 PAID。
+        int nonPaidCount = commerceOrderMapper.countNonPaidByCheckoutGroupId(checkoutGroupId);
+
+        if (nonPaidCount != 0) {return;}
+
+        //全部标记成功
+        checkoutGroupMapper.markPaidIfPending(checkoutGroupId);
+
+    }
+
+    //标记为已取消
+    @Transactional
+    public void markCancelledIfAllChildrenCancelled(Long checkoutGroupId){
+        if (checkoutGroupId == null) {return;}
+
+        //先锁住组
+        Long lockedGroupId = checkoutGroupMapper.lockById(checkoutGroupId);
+        if (lockedGroupId == null) {throw new BizException(404, "结算组不存在");}
+
+        //然后改变状态 -> 将子订单标记为取消
+        int nonCancelledCount = commerceOrderMapper.countNonCancelledByCheckoutGroupId(checkoutGroupId);
+        if (nonCancelledCount != 0) {return;}
+
+        //全部检查完后,将父组改为取消
+        checkoutGroupMapper.markCancelledIfPending(checkoutGroupId);
+    }
+
+    //标记超时的组订单为关闭
+    @Transactional
+    public void markClosedIfAllChildrenClosed(Long checkoutGroupId) {
+        if (checkoutGroupId == null) {
+            return;
+        }
+
+        Long lockedGroupId = checkoutGroupMapper.lockById(checkoutGroupId);
+        if (lockedGroupId == null) {
+            throw new BizException(404, "结算组不存在");
+        }
+
+        int nonClosedCount =
+                commerceOrderMapper.countNonClosedByCheckoutGroupId(checkoutGroupId);
+
+        if (nonClosedCount != 0) {
+            return;
+        }
+
+        checkoutGroupMapper.markClosedIfPending(checkoutGroupId);
+    }
+
     //查询自己的结算组
     public CheckoutGroup getMine(Long checkoutGroupId){
         Long consumerId = CurrentUser.requiredConsumerId();
@@ -108,6 +167,8 @@ public class CheckoutGroupService {
 
     }
 
+
+    //<------------------------ 私有方法 ------------------------>
 
 
     //创建组订单的号码号

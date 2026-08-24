@@ -76,6 +76,19 @@ public interface IdempotentRequestMapper {
             @Param("checkoutGroupId") Long checkoutGroupId
     );
 
+    @Update("""
+        UPDATE idempotent_request
+        SET status = 'SUCCESS',
+            checkout_group_id = #{checkoutGroupId}
+        WHERE id = #{id}
+          AND status = 'PROCESSING'
+        """)
+    //标记父结算组的成功写入关联
+    int markCheckoutGroupSuccess(
+            @Param("id") Long id,
+            @Param("checkoutGroupId") Long checkoutGroupId
+    );
+
 
 
 
