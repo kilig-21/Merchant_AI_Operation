@@ -2418,3 +2418,45 @@ PAID --申请售后--> AFTER_SALE
 
 - 本日副线代码、V14 迁移、测试、文档和截图均待用户检查后自行提交。
 - 建议本阶段提交信息：`feat(order): support checkout group split`。
+
+## Day 28：2026-08-24 / 结算组详情查询与真实错误态验收
+
+### 今天学了什么
+
+- `CheckoutService` 负责创建结算组和拆单等写流程；`CheckoutGroupService` 负责结算组读取。Controller 可同时注入二者，但路由必须委托给职责匹配的 Service。
+- 越权保护不是只验证父结算组：查询子订单的 Mapper 也要带 `checkout_group_id` 和当前 `consumer_id`。
+- 统一 JSON 的 `code` 与 HTTP 状态是两个层次。`ApiResponse.error(404, ...)` 自身只改变响应体；`ResponseEntity.status(404)` 才会让客户端收到 HTTP 404。
+- 订单摘要和订单详情应明确区分：结算组详情当前只提供订单编号、金额、状态等摘要，不伪造 `items` 或地址快照数据。
+
+### 今天完成
+
+- 新增结算组详情 VO、子订单隔离查询和 `GET /api/checkouts/{checkoutGroupId}`。
+- 补齐结算组 Service 第 5 条测试及 Controller 第 2 条测试，分别通过。
+- 修复 `BizException` 的 HTTP 状态与业务码不一致问题，并完成存在、缺失、未登录三种真实请求验收。
+
+### 遇到的问题与解决
+
+| 问题 | 原因与解决 | 是否已理解 |
+|---|---|---|
+| 详情接口应该放在哪个 Service | 创建流程与读取流程职责不同；Controller 保留写服务，GET 委托给 `CheckoutGroupService` | 是 |
+| 不存在的结算组响应体是 404、HTTP 却是 200 | 旧 Handler 只返回 `ApiResponse`；改为 `ResponseEntity.status(ex.getCode())` 后真实 HTTP 为 404 | 是 |
+| 本地测试环境变量消失 | 恢复本地运行配置所需值并启动依赖；测试本身仍以 Mockito 单元测试为主，不把密钥写入日志 | 是 |
+| Maven 命令失败 | 单引号和命令前的误输入字符被 Windows/Maven 当作参数或路径；改为正确命令后测试、编译通过 | 是 |
+
+### 侧边任务/对话补充记录
+
+- 用户继续采用“讲一步、我写一步、验收一步”的后端学习方式；助手未代写本日业务代码。
+- Docker 依赖容器和后端应用均恢复后才进行真实 FoxAPI 验收。
+- 有 Bearer Token 的成功、404、401 截图不提交仓库；仅保存无敏感信息的测试和编译截图。
+
+### 截图记录
+
+- `docs/images/day-28-side-S4/checkout-group-service-tests-5-pass.png`
+- `docs/images/day-28-side-S4/checkout-controller-tests-2-pass.png`
+- `docs/images/day-28-side-S4/checkout-group-detail-compile-success.png`
+
+### 当前未完成
+
+- 两步结算仍需收敛为跨商家原子提交。
+- 父级幂等、全量回滚、组级支付/取消/超时状态机仍未完成。
+- 还需两个真实商家的集成验收与 `feature/web-v2` 的真实接口接入；AI 主线步骤 25～30 不受影响。

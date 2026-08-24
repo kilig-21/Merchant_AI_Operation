@@ -1329,3 +1329,59 @@
 
 - 先提交本阶段“结算组创建与跨商家拆单”检查点。
 - 然后实现结算组详情查询，再处理父级幂等、组级支付和整体回滚。
+
+## Day 28：2026-08-24 / 前后端联调与部署副线 S4：结算组详情查询
+
+### 今日目标
+
+- 在 `feature/backend` 继续完成结算组详情的后端查询、错误态和真实环境验收。
+- 后端保持“讲一步、用户写一步、验收一步”；不切换分支、不自动合并，不推进 AI 主线步骤 25～30。
+
+### 今日完成
+
+- [x] `CommerceOrderMapper` 新增按 `checkoutGroupId + consumerId` 查询子订单的方法。
+- [x] 新增 `CheckoutGroupDetailVO`，返回父结算组基本信息和当前消费者的子订单摘要。
+- [x] `CheckoutGroupService.getMyDetail` 先读取当前消费者的父结算组，再读取同一消费者的子订单；摘要中的 `items` 暂为空数组、`shippingAddress` 暂为 `null`。
+- [x] `CheckoutController` 新增 `GET /api/checkouts/{checkoutGroupId}`，读取职责委托给 `CheckoutGroupService`；原有 `CheckoutService` 继续负责 prepare/拆单写流程。
+- [x] `GlobalExceptionHandler` 的 `BizException` 分支改为 `ResponseEntity`，使业务码 `404` 同时成为实际 HTTP 404。
+
+### 今日验收
+
+- [x] `CheckoutGroupServiceTest`：5 条通过。
+- [x] `CheckoutControllerTest`：2 条通过。
+- [x] `mvnw.cmd -DskipTests compile`：`BUILD SUCCESS`。
+- [x] 本地依赖容器恢复、应用启动后，真实请求 `GET /api/checkouts/3` 返回 HTTP 200、`code: 0`、父结算组和子订单摘要。
+- [x] 真实请求不存在的 `GET /api/checkouts/999999` 返回 HTTP 404、`code: 404`；无 Authorization 的请求返回 HTTP 401、`code: 401`。
+
+### 今日关键理解
+
+- 结算组详情属于读取模型，Controller 可以统一路由，但应把读取逻辑放在 `CheckoutGroupService`，不能混入负责创建流程的 `CheckoutService`。
+- 父结算组和子订单都必须按当前 `consumer_id` 查询；只校验父记录不足以保证子订单读取边界。
+- 响应体中的 `code: 404` 不会自动让 HTTP 成为 404；需要用 `ResponseEntity.status(...)` 明确设置传输状态。
+- 当前详情接口返回子订单摘要，不应假装已经提供商品项和收货地址快照。
+
+### 侧边任务/对话补充记录
+
+- 用户亲自完成后端代码输入，助手仅基于真实代码给出下一小步、检查和验收。
+- 测试/运行环境变量一度丢失；确认部署环境文件仍在后恢复本地依赖和应用启动，文档不记录任何密钥值。
+- Maven 的单引号参数和命令前误输入字符导致的失败属于命令格式问题，不是源码失败；使用正确的 Windows 命令后两组测试均通过。
+- 真实请求截图含 Bearer Token，不归档；只归档不含凭据的两组测试和编译截图。
+
+### 当前未完成与下一步
+
+- [ ] 将“prepare 后再创建子订单”的两步操作收敛为单命令、跨商家原子提交。
+- [ ] 设计父结算组级幂等与全量回滚，覆盖重复请求和任一商家失败。
+- [ ] 补结算组级支付、取消、超时及状态推进；当前真实数据已观察到子订单 `CLOSED` 而父组仍 `PENDING_PAYMENT`，不能把状态机视为完成。
+- [ ] 用两个真实商家的购物车完成集成验收，并由 `feature/web-v2` 接入真实地址和结算接口。
+
+### 今日截图记录
+
+- `docs/images/day-28-side-S4/checkout-group-service-tests-5-pass.png`：结算组 Service 5 条测试通过。
+- `docs/images/day-28-side-S4/checkout-controller-tests-2-pass.png`：结算 Controller 2 条测试通过。
+- `docs/images/day-28-side-S4/checkout-group-detail-compile-success.png`：结算组详情改动后的 Maven 编译成功。
+
+### 今日 Git
+
+- 当前分支：`feature/backend`；未切换、未合并、未提交。
+- `CheckoutGroupDetailVO.java` 先前有过一次空文件暂存，最终提交前必须再次暂存其当前 record 内容。
+- 本日更新仅属于副线 S4，不改变 AI 主线步骤 25～30 的进度。

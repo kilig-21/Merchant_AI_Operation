@@ -115,6 +115,7 @@ V12 已创建 `consumer_address`；V13 已创建 `commerce_order_address` 订单
 |---|---|---|---|---|
 | 创建结算组草稿 | `POST /api/checkouts/prepare` | Body：`cartItemIds: number[]`、`addressId: number` | `CreateCheckoutGroupVO { checkoutGroupId, checkoutNo, status, totalAmount, orders }`；首次创建时 `orders` 为空 | 后端已完成并通过 FoxAPI 验收 |
 | 创建结算组子订单 | `POST /api/checkouts/{checkoutGroupId}/orders` | Header：`Idempotency-Key`；Body：`cartItemIds`、`addressId` | 返回结算组及按 `tenantId` 拆出的 `CreateOrderVO[]` | 后端已完成阶段实现并通过 FoxAPI 验收 |
+| 查询结算组详情 | `GET /api/checkouts/{checkoutGroupId}` | 当前消费者身份 | `CheckoutGroupDetailVO { checkoutGroupId, checkoutNo, status, totalAmount, createdAt, orders: OrderDetailVO[] }`；子订单当前为摘要，`items: []`、`shippingAddress: null` | 已完成；未登录为 HTTP/body `401`，不存在或非本人为 HTTP/body `404` |
 | 查询订单关联 | `GET /api/orders`、`GET /api/orders/{id}` | 当前消费者身份 | `OrderDetailVO` 返回 `checkoutGroupId`；详情返回 `shippingAddress` | 已完成 |
 
 ### 跨店结算字段与边界
@@ -123,7 +124,8 @@ V12 已创建 `consumer_address`；V13 已创建 `commerce_order_address` 订单
 - `checkoutGroupId` 由后端生成并返回，不能由前端伪造；订单查询同时使用当前 `consumer_id` 做数据隔离。
 - 子订单按可信商品快照中的 `tenantId` 分组；金额由当前 `salePrice × quantity` 重新计算。
 - 当前接口是 S4 副线阶段能力，`feature/web-v2` 尚未接入；AI 主线步骤 25～30 不受影响。
-- 当前仍缺少结算组详情查询、组级支付、整体取消/回滚和父级幂等重试闭环，不能把本阶段描述为完整支付闭环。
+- 结算组详情查询已按父记录和子订单的 `consumer_id` 双重隔离；当前子订单只返回摘要，商品项和收货地址仍应通过订单详情读取。
+- 当前仍缺少组级支付、整体取消/回滚和父级幂等重试闭环，不能把本阶段描述为完整支付闭环。
 
 ## 7. 当前明确缺口与暂不接入范围
 
@@ -131,10 +133,10 @@ V12 已创建 `consumer_address`；V13 已创建 `commerce_order_address` 订单
 |---|---|---|
 | 商家订单列表 | 前端调用 `/api/backend/merchant/orders`，后端暂无对应 Controller | S6 补商家订单分页接口；当前前端必须保留明确 Demo 标识 |
 | 店铺目录与跨店搜索 | 后端已新增真实目录/搜索接口并完成 FoxAPI 验收；前端仍使用 `demoStores`、`demoMarketplaceProducts` | S3 后端阶段完成；待前端分支接入 |
-| 地址与跨店结算 | 后端已完成地址 CRUD、订单地址快照、结算组创建和阶段性跨店拆单；前端尚未接入真实接口，组级查询/支付/回滚/父级幂等仍缺失 | S4 继续补齐结算组查询、组级支付、整体回滚和集成测试 |
+| 地址与跨店结算 | 后端已完成地址 CRUD、订单地址快照、结算组创建/拆单及结算组详情查询；前端尚未接入真实接口，组级支付/回滚/父级幂等仍缺失 | S4 继续补齐组级支付、整体回滚和集成测试 |
 | 收藏与售后 | 前端使用 `localStorage`，后端暂无领域模型 | 收藏后置；S5 设计真实售后状态机 |
 | 商家营销、顾客洞察、平台端 | 当前为 Demo 或只读演示 | 不阻塞 S2；暂不伪造真实接口 |
-| 401/403 错误体 | Spring Security 入口当前主要设置 HTTP 状态，可能没有完整 `ApiResponse` JSON | S2 联调时单独验收，必要时补统一错误响应 |
+| 统一业务错误状态 | `BizException` 现已同时返回匹配的 HTTP 状态和 `ApiResponse.code`；安全入口的 401/403 已完成真实验收 | 其他校验/通用异常处理仍按各自 Handler 保持现状，后续统一时单独评估 |
 
 ## 8. 分支与集成策略
 
@@ -163,3 +165,10 @@ V12 已创建 `consumer_address`；V13 已创建 `commerce_order_address` 订单
 - 当前实证：结算组 `3` 创建成功，子订单 `9300000000046` 创建成功，订单详情与列表均返回 `checkoutGroupId = 3`。
 - 当前未完成：结算组详情查询、组级支付、整体取消/回滚、父级幂等重试、两个真实商家的集成测试和前端接入。
 - 本记录属于副线 S4，不推进 AI 主线步骤 25～30；代码与文档由用户自行检查并提交。
+
+## 12. 2026-08-24 副线阶段记录
+
+- S4：新增 `GET /api/checkouts/{checkoutGroupId}`。父结算组经当前消费者查询，子订单查询同样带 `checkout_group_id + consumer_id` 条件，避免越权读取。
+- 实证：本地真实请求 `GET /api/checkouts/3` 返回结算组 `3` 及其一笔子订单；未登录请求返回 HTTP/body `401`，不存在的 `999999` 返回 HTTP/body `404`。
+- 为使业务异常的传输状态与响应体一致，`GlobalExceptionHandler` 的 `BizException` 分支改为以异常业务码设置 HTTP 状态。该调整不等于所有校验和未知异常均已统一为相同的 HTTP 状态。
+- 本次仍是副线 S4；不切换或合并分支，不推进 AI 主线步骤 25～30。
