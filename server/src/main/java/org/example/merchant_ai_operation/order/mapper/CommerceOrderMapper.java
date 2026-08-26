@@ -2,6 +2,7 @@ package org.example.merchant_ai_operation.order.mapper;
 
 
 import org.apache.ibatis.annotations.*;
+import org.example.merchant_ai_operation.aftersale.vo.AfterSaleOrderItemContext;
 import org.example.merchant_ai_operation.order.entity.CommerceOrder;
 
 import java.time.LocalDateTime;
@@ -157,9 +158,7 @@ public interface CommerceOrderMapper {
               AND status <> 'PAID'
             """)
     //统计这个结算组下面还有多少笔子订单没有支付
-    int countNonPaidByCheckoutGroupId(
-            @Param("checkoutGroupId") Long checkoutGroupId
-    );
+    int countNonPaidByCheckoutGroupId(@Param("checkoutGroupId") Long checkoutGroupId);
 
     @Select("""
             SELECT COUNT(1)
@@ -177,8 +176,48 @@ public interface CommerceOrderMapper {
               AND status <> 'CLOSED'
             """)
     //先统计未关闭的组订单有哪些
-    int countNonClosedByCheckoutGroupId(
-            @Param("checkoutGroupId") Long checkoutGroupId
+    int countNonClosedByCheckoutGroupId(@Param("checkoutGroupId") Long checkoutGroupId);
+
+    @Select("""
+    SELECT
+        o.id AS orderId,
+        i.id AS orderItemId,
+        o.tenant_id AS tenantId,
+        o.consumer_id AS consumerId,
+        o.status AS orderStatus,
+        i.sale_price AS salePrice,
+        i.quantity AS purchasedQuantity
+    FROM commerce_order o
+    JOIN commerce_order_item i
+      ON i.order_id = o.id
+    WHERE i.id = #{orderItemId}
+      AND o.consumer_id = #{consumerId}
+    """)
+    //为“创建售后申请”准备和校验原始订单数据。AND o.consumer_id = #{consumerId} 它防止消费者拿别人的 orderItemId 来申请售后。
+    AfterSaleOrderItemContext selectAfterSaleOrderItemContext(
+            @Param("orderItemId") Long orderItemId,
+            @Param("consumerId") Long consumerId
+    );
+
+    @Select("""
+            SELECT
+                o.id AS orderId,
+                i.id AS orderItemId,
+                o.tenant_id AS tenantId,
+                o.consumer_id AS consumerId,
+                o.status AS orderStatus,
+                i.sale_price AS salePrice,
+                i.quantity AS purchasedQuantity
+            FROM commerce_order o
+            JOIN commerce_order_item i
+              ON i.order_id = o.id
+            WHERE o.consumer_id = #{consumerId}
+              AND o.status = 'PAID'
+            ORDER BY o.created_at DESC, i.id ASC
+            """)
+    //查询消费者哪些已支付订单项可以申请售后
+    List<AfterSaleOrderItemContext> selectEligibleAfterSaleItems(
+            @Param("consumerId") Long consumerId
     );
 
     // ==================== 超时关单内部查询（MQ 消费 + 定时兜底） ==================== //

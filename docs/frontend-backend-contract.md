@@ -210,3 +210,22 @@ V12 已创建 `consumer_address`；V13 已创建 `commerce_order_address` 订单
 - S4 后端核心状态机与父级幂等已经有单商家真实 ApiFox 证据，可作为进入 S5 的后端检查点。
 - “S4 所有扩展场景全部完成”仍不成立，双商家库存不足回滚是保留项。
 - 下一阶段进入 S5 售后与商家订单处理最小闭环；不推进 AI 主线步骤 25～30。
+
+## 15. 2026-08-26 S5 售后审核最小闭环
+
+| 页面操作 | 后端接口 | 请求/权限 | 成功响应 | 当前状态 |
+|---|---|---|---|---|
+| 查询可申请订单项 | `GET /api/after-sales/eligible-orders` | 当前消费者身份；只返回本人 `PAID` 订单项 | `AfterSaleOrderItemContext[]` | 已完成并通过 ApiFox 验收 |
+| 提交售后申请 | `POST /api/after-sales` | 当前消费者；Body：`orderItemId`、`quantity`、`reason` | `AfterSaleRequest(status=SUBMITTED)`；金额由后端计算 | 已完成并通过 ApiFox 验收 |
+| 查询我的售后列表/详情 | `GET /api/after-sales`、`GET /api/after-sales/{id}` | 当前消费者 + `consumer_id` 条件 | 当前消费者的售后申请 | 已完成并通过 ApiFox 验收 |
+| 商家查询售后列表/详情 | `GET /api/merchant/after-sales`、`GET /api/merchant/after-sales/{id}` | 当前商家 + `tenant_id` 条件 | 当前租户的售后申请 | 已完成并通过 ApiFox 验收 |
+| 商家审核售后 | `POST /api/merchant/after-sales/{id}/decision` | 当前商家；Body：`decision=APPROVED/REJECTED`、`remark` | 状态推进至 `APPROVED` 或 `REJECTED` | 已完成并通过 ApiFox 验收 |
+
+### S5 状态与边界
+
+- 当前闭环状态：`SUBMITTED → REVIEWING → APPROVED/REJECTED`。
+- 只有订单状态为 `PAID` 的订单项可以提交申请。
+- 申请金额由订单项 `sale_price × quantity` 计算，不接受前端金额字段。
+- 主表：`after_sale_request`；审计表：`after_sale_status_log`。
+- 商家跨租户读取和已结束状态重复审核均返回 HTTP/body `409`。
+- 本阶段不代表真实退款，不接支付平台、不处理退货物流，不接入 `feature/web-v2`。

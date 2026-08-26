@@ -1461,3 +1461,40 @@
 
 - 当前分支：`feature/backend`；不自动执行提交。
 - 建议提交信息：`docs(side-line): record S4 ApiFox acceptance`
+
+## Day 30：2026-08-26 / S5 售后审核后端最小闭环
+
+### 今日完成
+
+- [x] 新增 Flyway `V15__add_after_sale_tables.sql`，创建 `after_sale_request` 和 `after_sale_status_log`。
+- [x] 新增售后实体、请求 DTO、订单项归属查询、Mapper、Service 和消费者/商家 Controller。
+- [x] 消费者可查询自己的 `PAID` 订单项并提交售后申请；申请金额由后端按成交价和数量计算。
+- [x] 商家只能查询当前 `tenant_id` 下的售后申请，并可完成审核。
+- [x] 状态闭环真实验收通过：`SUBMITTED → REVIEWING → APPROVED`。
+- [x] 消费者查询到最终 `APPROVED` 结果；数据库审计日志记录了三次状态变化。
+- [x] 商家跨租户读取返回 HTTP/body `409`；已批准申请重复审核返回 HTTP/body `409`，确认非法动作不产生状态变更。
+
+### 本闭环真实验收数据
+
+- 消费者：`consumerId = 1784881782260`。
+- 订单：`orderId = 9300000000048`；订单项：`orderItemId = 9300000000039`。
+- 商家租户：`tenantId = 1001`；售后申请：`afterSaleId = 1`。
+- 申请金额：`299.00`；商家审核人：`userId = 2`。
+
+### 明确未包含
+
+- [ ] 真实支付平台退款、退款流水和资金状态同步。
+- [ ] 退货物流、收货验货和 `COMPLETED` 终态。
+- [ ] `feature/web-v2` 前端售后页面接入；本轮未切换、未修改、未合并前端分支。
+
+### 侧边聊天与截图记录
+
+- 本轮继续按“讲一步、用户写一步、验收一步”推进，后端代码由用户编写，助手只读检查并带领 ApiFox/DataGrip 验收。
+- S5 截图统一归档到 `docs/images/day-30-side-S5/`，只保留不含可见 Bearer Token 的编译、ApiFox 和 DataGrip 证据。
+- 归档内容包括：可申请订单项、消费者提交、商家列表、商家审核、消费者最终结果、状态日志、跨租户拒绝和重复审核拒绝。
+
+### 今日 Git
+
+- 当前分支：`feature/backend`；未切换、未合并。
+- 按用户约定，将本次 S5 后端最小闭环、文档和无敏感验收截图作为一个提交。
+- 本次不推进 AI 主线步骤 25～30。
