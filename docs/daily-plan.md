@@ -1420,3 +1420,44 @@
 
 - 明天先在 ApiFox 用真实数据依次验收：一键结算幂等重试、组级支付、组级取消、超时关闭，以及两个商家时的原子失败路径。
 - 后端真实验收完成后，再在用户确认下切至 `feature/web-v2` 接入真实地址与结算组接口。
+
+## Day 29：2026-08-26 / S4 ApiFox 状态机验收收口，准备进入 S5
+
+### 今日完成
+
+- [x] `GET /api/addresses` 返回当前消费者默认地址 `id = 1`。
+- [x] 真实加购 SKU `1784970233597`，并完成一键结算：结算组 `5`、子订单 `9300000000048`、金额 `299.00`。
+- [x] 相同 `Idempotency-Key` 重试复用结算组 `5`；同 Key 更换地址返回 HTTP/body `409`。
+- [x] 结算组 `5` 组级支付后，父组和子订单均为 `PAID`。
+- [x] 结算组 `6` 过期后，父组和子订单均为 `CLOSED`；对已关闭组取消返回 `409`。
+- [x] 结算组 `7` 主动取消后，父组和子订单均为 `CANCELLED`。
+- [x] 不含可见 Token 的 ApiFox 截图已归档到 `docs/images/day-29-side-S4/`。
+
+### 今日未完成与边界
+
+- [ ] 两个真实商家中一个 SKU 库存不足、整次结算整体回滚：按用户决定暂缓，不写成已验收。
+- [ ] `feature/web-v2` 前端真实地址/结算接入：本次未切换、未修改、未合并。
+
+### 今日结论与下一步
+
+- S4 后端核心状态机与父级幂等已有单商家真实 ApiFox 证据，可作为进入 S5 的后端检查点。
+- 双商家库存不足是明确保留项；不能宣称 S4 所有扩展场景均已实测完成。
+- 下一阶段进入 S5：售后与商家订单处理最小闭环；仍按“讲一步、用户写一步、验收一步”推进。
+
+### 截图记录
+
+- `docs/images/day-29-side-S4/api-fox-cart-add-success.png`
+- `docs/images/day-29-side-S4/api-fox-cart-readd-success.png`
+- `docs/images/day-29-side-S4/api-fox-checkout-group-5-submit-success.png`
+- `docs/images/day-29-side-S4/api-fox-checkout-group-5-idempotency-conflict.png`
+- `docs/images/day-29-side-S4/api-fox-checkout-group-5-paid-detail.png`
+- `docs/images/day-29-side-S4/api-fox-checkout-group-6-submit-success.png`
+- `docs/images/day-29-side-S4/api-fox-checkout-group-6-timeout-closed.png`
+- `docs/images/day-29-side-S4/api-fox-checkout-group-7-submit-success.png`
+- `docs/images/day-29-side-S4/api-fox-checkout-group-7-cancel-success.png`
+- `docs/images/day-29-side-S4/api-fox-checkout-group-7-cancelled-detail.png`
+
+### 今日 Git
+
+- 当前分支：`feature/backend`；不自动执行提交。
+- 建议提交信息：`docs(side-line): record S4 ApiFox acceptance`
