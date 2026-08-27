@@ -2580,6 +2580,7 @@ PAID --申请售后--> AFTER_SALE
 - 为 `OrderService` 增加商家订单列表服务，统一使用 `CurrentUser.requiredMerchantTenantId()`。
 - 新增 `MerchantOrderController`，提供 `GET /api/merchant/orders`。
 - 通过 ApiFox 完成商家 A 成功读取、商家 B 空列表隔离和消费者访问 `403` 三项验收。
+- 通过 ApiFox 完成商家 A Dashboard 指标读取、商家 B 指标隔离、消费者 `403` 和倒序日期 `400` 四项验收；编译成功和商家 A 指标截图已安全归档，含可见 Authorization 的原始截图不归档。
 
 ### 遇到的问题与处理
 
@@ -2591,5 +2592,6 @@ PAID --申请售后--> AFTER_SALE
 
 ### 下一步
 
-- 当前文档范围内的 S6 商家订单列表已完成；后续只有在文档明确增加商家订单详情或履约要求时再扩展。
+- 当前完成的是 S6 后端范围：商家订单列表、最小经营指标和 Dashboard 只读数据约定；前端接入按用户约定暂缓。
+- 已通过 ApiFox 验证商家 A/B 租户隔离、消费者 `403` 和倒序日期 `400`；不把商家订单详情、发货、履约和状态修改误列为当前 S6 必做项。
 - 真实退款、退货物流、前端接入和 AI 主线步骤 25～30 均不在本轮范围内。

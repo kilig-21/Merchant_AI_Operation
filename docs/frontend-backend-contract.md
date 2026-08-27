@@ -131,7 +131,7 @@ V12 已创建 `consumer_address`；V13 已创建 `commerce_order_address` 订单
 
 | 范围 | 真实代码结论 | 处理安排 |
 |---|---|---|
-| 商家订单列表 | 前端调用 `/api/backend/merchant/orders`；后端提供 `GET /api/merchant/orders` 分页接口 | S6 后端已完成；前端仍保留明确 Demo 标识，暂不接入 |
+| 商家订单列表 | 前端调用 `/api/backend/merchant/orders`；后端提供 `GET /api/merchant/orders` 分页接口 | S6 后端订单列表子项已完成；前端暂不接入 |
 | 店铺目录与跨店搜索 | 后端已新增真实目录/搜索接口并完成 FoxAPI 验收；前端仍使用 `demoStores`、`demoMarketplaceProducts` | S3 后端阶段完成；待前端分支接入 |
 | 地址与跨店结算 | 后端已完成地址 CRUD、订单地址快照、结算组创建/拆单及结算组详情查询；前端尚未接入真实接口，组级支付/回滚/父级幂等仍缺失 | S4 继续补齐组级支付、整体回滚和集成测试 |
 | 收藏与售后 | 前端使用 `localStorage`，后端暂无领域模型 | 收藏后置；S5 设计真实售后状态机 |
@@ -239,7 +239,7 @@ V12 已创建 `consumer_address`；V13 已创建 `commerce_order_address` 订单
 - 商家跨租户读取和已结束状态重复审核均返回 HTTP/body `409`。
 - 本阶段不代表真实退款，不接支付平台、不处理退货物流，不接入 `feature/web-v2`。
 
-## 16. 2026-08-27 S6 商家订单真实读取
+## 16. 2026-08-27 S6 阶段一：商家订单真实读取
 
 | 页面操作 | 后端接口 | 请求/权限 | 成功响应 | 当前状态 |
 |---|---|---|---|---|
@@ -252,8 +252,30 @@ V12 已创建 `consumer_address`；V13 已创建 `commerce_order_address` 订单
 - 消费者 Token 访问商家订单接口：HTTP `403`、`code = 403`、`data = null`。
 - 后端实际接口为 `/api/merchant/orders`；`/api/backend/merchant/orders` 仍属于前端 BFF 约定，本轮未修改前端。
 
+### S6 Dashboard 指标接口
+
+| 页面操作 | 后端接口 | 请求/权限 | 成功响应 | 当前状态 |
+|---|---|---|---|---|
+| 商家经营指标 | `GET /api/merchant/dashboard/metrics?startDate=2026-08-01&endDate=2026-08-31` | 当前商家身份；按 `tenant_id` 隔离 | `MerchantDashboardMetricsVO` | 后端已完成并通过 ApiFox 验收 |
+
+#### 指标 ApiFox 验收结果
+
+- 商家 A（`tenantId = 1001`）：HTTP `200`、`code = 0`，返回 `validOrderCount = 6`、`paidRevenue = 797.00`、`pendingPaymentCount = 3`、`lowStockProductCount = 0`。
+- 商家 B：HTTP `200`、`code = 0`，四项订单指标均为 `0`，未读到商家 A 数据。
+- 消费者 Token：HTTP `403`、`code = 403`、`data = null`。
+- 倒序日期 `startDate=2026-08-31&endDate=2026-08-01`：HTTP `400`、`code = 400`、`data = null`，返回日期范围错误。
+- 安全归档证据：
+  - [Dashboard 编译成功](images/day-31-side-S6/maven-s6-dashboard-compile-success.png)
+  - [商家 A 指标接口返回](images/day-31-side-S6/apifox-s6-dashboard-metrics-merchant-a.png)
+
 ### S6 边界
 
-- 当前只完成商家订单列表真实读取，不包含商家订单详情、发货、履约或状态修改。
+- 当前完成的是 S6 的后端订单列表、最小经营指标和 Dashboard 只读数据约定；前端接入按本项目约定暂缓。
+- 本阶段不包含商家订单详情、发货、履约或状态修改；这些不是当前文档规定的 S6 必做项。
 - 分页由后端限制：默认 `page = 1`、默认 `size = 10`，最大 `size = 50`。
-- 本轮 ApiFox 截图包含可见 Authorization 值，因此只记录文字验收结果，不将原图归档到仓库。
+- 商家 B、消费者 `403` 和日期错误的原始截图包含可见 Authorization 值，因此只记录文字验收结果，不将原图归档到仓库。
+
+### S6 后续后端范围
+
+- 先以书面口径和 SQL 验证有效订单数、已支付营业额、待支付数、库存预警商品数。
+- 再根据指标结果设计只读 Dashboard DTO 和日期范围限制；不修改 AI 主线步骤 25～30。
