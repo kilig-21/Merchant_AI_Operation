@@ -131,7 +131,7 @@ V12 已创建 `consumer_address`；V13 已创建 `commerce_order_address` 订单
 
 | 范围 | 真实代码结论 | 处理安排 |
 |---|---|---|
-| 商家订单列表 | 前端调用 `/api/backend/merchant/orders`，后端暂无对应 Controller | S6 补商家订单分页接口；当前前端必须保留明确 Demo 标识 |
+| 商家订单列表 | 前端调用 `/api/backend/merchant/orders`；后端提供 `GET /api/merchant/orders` 分页接口 | S6 后端已完成；前端仍保留明确 Demo 标识，暂不接入 |
 | 店铺目录与跨店搜索 | 后端已新增真实目录/搜索接口并完成 FoxAPI 验收；前端仍使用 `demoStores`、`demoMarketplaceProducts` | S3 后端阶段完成；待前端分支接入 |
 | 地址与跨店结算 | 后端已完成地址 CRUD、订单地址快照、结算组创建/拆单及结算组详情查询；前端尚未接入真实接口，组级支付/回滚/父级幂等仍缺失 | S4 继续补齐组级支付、整体回滚和集成测试 |
 | 收藏与售后 | 前端使用 `localStorage`，后端暂无领域模型 | 收藏后置；S5 设计真实售后状态机 |
@@ -238,3 +238,22 @@ V12 已创建 `consumer_address`；V13 已创建 `commerce_order_address` 订单
 - 主表：`after_sale_request`；审计表：`after_sale_status_log`。
 - 商家跨租户读取和已结束状态重复审核均返回 HTTP/body `409`。
 - 本阶段不代表真实退款，不接支付平台、不处理退货物流，不接入 `feature/web-v2`。
+
+## 16. 2026-08-27 S6 商家订单真实读取
+
+| 页面操作 | 后端接口 | 请求/权限 | 成功响应 | 当前状态 |
+|---|---|---|---|---|
+| 商家订单列表 | `GET /api/merchant/orders?page=1&size=50` | 当前商家身份；按 `tenant_id` 隔离 | `OrderDetailVO[]`，列表项的 `items` 为空 | 已完成并通过 ApiFox 验收 |
+
+### S6 ApiFox 验收结果
+
+- 商家 A（`tenantId = 1001`）查询成功：HTTP `200`、`code = 0`，返回订单列表。
+- 商家 B 使用相同接口查询成功：HTTP `200`、`code = 0`、`data = []`，未读到商家 A 的订单。
+- 消费者 Token 访问商家订单接口：HTTP `403`、`code = 403`、`data = null`。
+- 后端实际接口为 `/api/merchant/orders`；`/api/backend/merchant/orders` 仍属于前端 BFF 约定，本轮未修改前端。
+
+### S6 边界
+
+- 当前只完成商家订单列表真实读取，不包含商家订单详情、发货、履约或状态修改。
+- 分页由后端限制：默认 `page = 1`、默认 `size = 10`，最大 `size = 50`。
+- 本轮 ApiFox 截图包含可见 Authorization 值，因此只记录文字验收结果，不将原图归档到仓库。

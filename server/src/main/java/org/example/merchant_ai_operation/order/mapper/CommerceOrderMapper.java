@@ -220,6 +220,30 @@ public interface CommerceOrderMapper {
             @Param("consumerId") Long consumerId
     );
 
+    @Select("""
+        SELECT
+            id,
+            order_no AS orderNo,
+            tenant_id AS tenantId,
+            consumer_id AS consumerId,
+            checkout_group_id AS checkoutGroupId,
+            status,
+            total_amount AS totalAmount,
+            expire_at AS expireAt,
+            created_at AS createdAt,
+            updated_at AS updatedAt
+        FROM commerce_order
+        WHERE tenant_id = #{tenantId}
+        ORDER BY created_at DESC, id DESC
+        LIMIT #{limit} OFFSET #{offset}
+        """)
+    //商家端列出订单列表
+    List<CommerceOrder> selectByTenantId(
+            @Param("tenantId") Long tenantId,
+            @Param("limit") int limit,
+            @Param("offset") int offset
+    );
+
     // ==================== 超时关单内部查询（MQ 消费 + 定时兜底） ==================== //
 
     @Select("""

@@ -392,6 +392,32 @@ public class OrderService {
         }
     }
 
+    //商家端返回订单列表
+    public List<OrderDetailVO> listMerchantOrders(Integer page, Integer size){
+        Long tenantId = CurrentUser.requiredMerchantTenantId();
+
+        int safePage = page == null||page < 1 ? 1: page;
+        int safeSize = size == null || size < 1 ? 10: Math.min(size, 50);
+        int offset =  (safePage - 1) * safeSize;
+
+        return commerceOrderMapper
+                .selectByTenantId(tenantId, safeSize, offset)
+                .stream()
+                .map(order -> new OrderDetailVO(
+                        order.getId(),
+                        order.getCheckoutGroupId(),
+                        order.getOrderNo(),
+                        order.getTenantId(),
+                        order.getStatus(),
+                        order.getTotalAmount(),
+                        order.getExpireAt(),
+                        order.getCreatedAt(),
+                        List.of(),
+                        null
+                ))
+                .toList();
+
+    }
 
     // ==================== 方法抽取 ==================== //
 
