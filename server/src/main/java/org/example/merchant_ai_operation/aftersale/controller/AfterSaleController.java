@@ -3,9 +3,9 @@ package org.example.merchant_ai_operation.aftersale.controller;
 
 import jakarta.validation.Valid;
 import org.example.merchant_ai_operation.aftersale.dto.SubmitAfterSaleRequest;
-import org.example.merchant_ai_operation.aftersale.entity.AfterSaleRequest;
 import org.example.merchant_ai_operation.aftersale.service.AfterSaleService;
 import org.example.merchant_ai_operation.aftersale.vo.AfterSaleOrderItemContext;
+import org.example.merchant_ai_operation.aftersale.vo.AfterSaleRequestVO;
 import org.example.merchant_ai_operation.common.ApiResponse;
 import org.springframework.web.bind.annotation.*;
 
@@ -34,19 +34,19 @@ public class AfterSaleController {
 
     //提交售后记录接口
     @PostMapping
-    public ApiResponse<AfterSaleRequest> submit(@Valid @RequestBody SubmitAfterSaleRequest request) {
+    public ApiResponse<AfterSaleRequestVO> submit(@Valid @RequestBody SubmitAfterSaleRequest request) {
         return ApiResponse.ok(afterSaleService.submit(request));
     }
 
     //列出我的所有售后记录的接口
     @GetMapping
-    public ApiResponse<List<AfterSaleRequest>> listMine() {
+    public ApiResponse<List<AfterSaleRequestVO>> listMine() {
         return ApiResponse.ok(afterSaleService.listMyRequest());
     }
 
     //查看售后记录细节的接口
     @GetMapping("/{id}")
-    public ApiResponse<AfterSaleRequest> detail(@PathVariable Long id) {
+    public ApiResponse<AfterSaleRequestVO> detail(@PathVariable Long id) {
         return ApiResponse.ok(afterSaleService.getMyRequest(id));
     }
 

@@ -2542,7 +2542,8 @@ PAID --申请售后--> AFTER_SALE
 - 新增 V15 售后申请主表和状态日志表。
 - 完成消费者查询可申请 `PAID` 订单项、提交申请、查询详情/列表。
 - 完成商家按租户查询、详情和审核接口。
-- 通过 ApiFox 完成一条真实申请从提交到审核通过的闭环。
+- 通过 ApiFox 完成两条真实申请的最终状态闭环：`SUBMITTED → REVIEWING → APPROVED` 和 `SUBMITTED → REVIEWING → REJECTED`。
+- 将消费者、商家接口返回从 Entity 收敛为 `AfterSaleRequestVO`，保留业务展示字段并隐藏租户、消费者和审核人内部字段。
 - 通过 DataGrip 确认 3 条状态日志，并通过跨租户和重复审核负向验收。
 
 ### 遇到的问题与处理
@@ -2552,12 +2553,14 @@ PAID --申请售后--> AFTER_SALE
 | Service 编译通过但时间类型有风险 | 误导入 Micrometer 的 `Clock`；项目 Bean 实际是 `java.time.Clock`，改回 Java 时间类型并去掉强制转换 | 是 |
 | 刚插入对象的时间字段为空 | Mapper 返回的是内存中的插入对象，数据库默认时间需重新查询才能看到；不影响事务写入 | 是 |
 | 审核状态为什么有两段日志 | 通过 `SUBMITTED → REVIEWING → APPROVED/REJECTED` 表达审核过程，日志比只写最终状态更可审计 | 是 |
+| 为什么接口不能直接返回售后 Entity | Entity 包含 `tenantId`、`consumerId`、`decidedBy` 等内部字段 | 新增 `AfterSaleRequestVO`，由 Service 显式映射后再返回，避免把数据隔离字段泄露给消费者或商家客户端 | 是 |
 
 ### 侧边聊天与截图记录
 
 - 本日继续遵守“讲一步、用户写一步、验收一步”；未直接替用户编写后端业务代码。
 - 本日截图统一归档到 `docs/images/day-30-side-S5/`，不含可见 Bearer Token 的图片才进入仓库。
+- 新增拒绝流程证据：消费者提交申请、商家拒绝审核、消费者查询最终拒绝结果；带有可见 Bearer Token 的原始截图不归档。
 
 ### 下一步
 
-- 下一闭环再评估商家订单处理和售后详情 VO；真实退款、退货物流和前端接入不在本次闭环内。
+- 下一闭环进入 S6 商家订单真实读取；真实退款、退货物流和前端接入不在本次闭环内。

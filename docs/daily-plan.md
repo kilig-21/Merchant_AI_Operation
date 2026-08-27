@@ -1470,16 +1470,17 @@
 - [x] 新增售后实体、请求 DTO、订单项归属查询、Mapper、Service 和消费者/商家 Controller。
 - [x] 消费者可查询自己的 `PAID` 订单项并提交售后申请；申请金额由后端按成交价和数量计算。
 - [x] 商家只能查询当前 `tenant_id` 下的售后申请，并可完成审核。
-- [x] 状态闭环真实验收通过：`SUBMITTED → REVIEWING → APPROVED`。
-- [x] 消费者查询到最终 `APPROVED` 结果；数据库审计日志记录了三次状态变化。
+- [x] 状态闭环真实验收通过：`SUBMITTED → REVIEWING → APPROVED/REJECTED`。
+- [x] 消费者查询到最终 `APPROVED` 和 `REJECTED` 结果；状态日志机制已有记录，本次两条最终状态通过 ApiFox 验收。
 - [x] 商家跨租户读取返回 HTTP/body `409`；已批准申请重复审核返回 HTTP/body `409`，确认非法动作不产生状态变更。
+- [x] 消费者和商家接口统一返回 `AfterSaleRequestVO`，不暴露 `tenantId`、`consumerId`、`decidedBy`。
 
 ### 本闭环真实验收数据
 
 - 消费者：`consumerId = 1784881782260`。
 - 订单：`orderId = 9300000000048`；订单项：`orderItemId = 9300000000039`。
-- 商家租户：`tenantId = 1001`；售后申请：`afterSaleId = 1`。
-- 申请金额：`299.00`；商家审核人：`userId = 2`。
+- 商家租户：`tenantId = 1001`；已验收售后申请：`afterSaleId = 1`（通过）、`afterSaleId = 2`（拒绝）。
+- 申请金额：均为 `299.00`；商家审核人：`userId = 2`。
 
 ### 明确未包含
 
@@ -1492,6 +1493,10 @@
 - 本轮继续按“讲一步、用户写一步、验收一步”推进，后端代码由用户编写，助手只读检查并带领 ApiFox/DataGrip 验收。
 - S5 截图统一归档到 `docs/images/day-30-side-S5/`，只保留不含可见 Bearer Token 的编译、ApiFox 和 DataGrip 证据。
 - 归档内容包括：可申请订单项、消费者提交、商家列表、商家审核、消费者最终结果、状态日志、跨租户拒绝和重复审核拒绝。
+- 本次新增拒绝分支截图：
+  - `apifox-s5-consumer-submit-rejected-path.png`
+  - `apifox-s5-merchant-review-rejected.png`
+  - `apifox-s5-consumer-rejected-detail.png`
 
 ### 今日 Git
 

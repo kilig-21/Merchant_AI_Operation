@@ -221,9 +221,18 @@ V12 已创建 `consumer_address`；V13 已创建 `commerce_order_address` 订单
 | 商家查询售后列表/详情 | `GET /api/merchant/after-sales`、`GET /api/merchant/after-sales/{id}` | 当前商家 + `tenant_id` 条件 | 当前租户的售后申请 | 已完成并通过 ApiFox 验收 |
 | 商家审核售后 | `POST /api/merchant/after-sales/{id}/decision` | 当前商家；Body：`decision=APPROVED/REJECTED`、`remark` | 状态推进至 `APPROVED` 或 `REJECTED` | 已完成并通过 ApiFox 验收 |
 
+### S5 ApiFox 与返回边界补充
+
+- 已实测 `APPROVED` 和 `REJECTED` 两条最终状态路径：申请 `1` 通过，申请 `2` 被拒绝。
+- 消费者和商家查询接口统一返回 `AfterSaleRequestVO`，不向接口暴露 `tenantId`、`consumerId`、`decidedBy` 等内部归属和操作字段。
+- 本轮 ApiFox 证据：
+  - [消费者提交拒绝流程申请](images/day-30-side-S5/apifox-s5-consumer-submit-rejected-path.png)
+  - [商家审核拒绝](images/day-30-side-S5/apifox-s5-merchant-review-rejected.png)
+  - [消费者查询最终拒绝结果](images/day-30-side-S5/apifox-s5-consumer-rejected-detail.png)
+
 ### S5 状态与边界
 
-- 当前闭环状态：`SUBMITTED → REVIEWING → APPROVED/REJECTED`。
+- 当前闭环状态：`SUBMITTED → REVIEWING → APPROVED/REJECTED`；两条最终状态均已通过 ApiFox 验收。
 - 只有订单状态为 `PAID` 的订单项可以提交申请。
 - 申请金额由订单项 `sale_price × quantity` 计算，不接受前端金额字段。
 - 主表：`after_sale_request`；审计表：`after_sale_status_log`。

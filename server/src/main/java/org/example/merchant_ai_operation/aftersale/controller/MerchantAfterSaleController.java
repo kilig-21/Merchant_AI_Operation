@@ -3,8 +3,8 @@ package org.example.merchant_ai_operation.aftersale.controller;
 
 import jakarta.validation.Valid;
 import org.example.merchant_ai_operation.aftersale.dto.ReviewAfterSaleRequest;
-import org.example.merchant_ai_operation.aftersale.entity.AfterSaleRequest;
 import org.example.merchant_ai_operation.aftersale.service.AfterSaleService;
+import org.example.merchant_ai_operation.aftersale.vo.AfterSaleRequestVO;
 import org.example.merchant_ai_operation.common.ApiResponse;
 import org.springframework.web.bind.annotation.*;
 
@@ -31,17 +31,17 @@ public class MerchantAfterSaleController {
     }
 
     @GetMapping
-    public ApiResponse<List<AfterSaleRequest>> listMine(){
+    public ApiResponse<List<AfterSaleRequestVO>> listMine(){
         return ApiResponse.ok(afterSaleService.listMerchantRequests());
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<AfterSaleRequest> detail(@PathVariable Long id) {
+    public ApiResponse<AfterSaleRequestVO> detail(@PathVariable Long id) {
         return ApiResponse.ok(afterSaleService.getMerchantRequest(id));
     }
 
     @PostMapping("/{id}/decision")
-    public ApiResponse<AfterSaleRequest> decision(
+    public ApiResponse<AfterSaleRequestVO> decision(
             @PathVariable Long id,
             @Valid @RequestBody ReviewAfterSaleRequest request
     ) {

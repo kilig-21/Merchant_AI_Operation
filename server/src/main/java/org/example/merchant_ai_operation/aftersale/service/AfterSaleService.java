@@ -8,6 +8,7 @@ import org.example.merchant_ai_operation.aftersale.entity.AfterSaleStatusLog;
 import org.example.merchant_ai_operation.aftersale.mapper.AfterSaleRequestMapper;
 import org.example.merchant_ai_operation.aftersale.mapper.AfterSaleStatusLogMapper;
 import org.example.merchant_ai_operation.aftersale.vo.AfterSaleOrderItemContext;
+import org.example.merchant_ai_operation.aftersale.vo.AfterSaleRequestVO;
 import org.example.merchant_ai_operation.common.BizException;
 import org.example.merchant_ai_operation.order.mapper.CommerceOrderMapper;
 import org.example.merchant_ai_operation.security.CurrentUser;
@@ -43,7 +44,7 @@ public class AfterSaleService {
 
     //提交售后记录
     @Transactional
-    public AfterSaleRequest submit(SubmitAfterSaleRequest request){
+    public AfterSaleRequestVO submit(SubmitAfterSaleRequest request){
         Long consumerId = CurrentUser.requiredConsumerId();
 
         //先核对订单的上下文是否正确
@@ -91,12 +92,12 @@ public class AfterSaleService {
                 "CONSUMER",
                 null
         );
-        return afterSale;
+        return toVO(afterSale);
     }
 
     //商家看售后记录
     @Transactional
-    public AfterSaleRequest review(Long id, ReviewAfterSaleRequest reviewRequest){
+    public AfterSaleRequestVO review(Long id, ReviewAfterSaleRequest reviewRequest){
 
         Long tenantId = CurrentUser.requiredMerchantTenantId();
         LoginPrincipal principal = CurrentUser.required();
@@ -155,16 +156,19 @@ public class AfterSaleService {
         target.setDecidedBy(operatorId);
         target.setDecidedAt(decidedAt);
 
-        return target;
+        return toVO(target);
     }
 
     //查我的售后列表
-    public List<AfterSaleRequest> listMyRequest(){
-        return afterSaleRequestMapper.selectByConsumerId(CurrentUser.requiredConsumerId());
+    public List<AfterSaleRequestVO> listMyRequest(){
+        return afterSaleRequestMapper.selectByConsumerId(CurrentUser.requiredConsumerId())
+                .stream()
+                .map(this::toVO)
+                .toList();
     }
 
     //查某个详细售后订单
-    public AfterSaleRequest getMyRequest(Long id) {
+    public AfterSaleRequestVO getMyRequest(Long id) {
         AfterSaleRequest request = afterSaleRequestMapper.selectByIdAndConsumerId(
                 id,
                 CurrentUser.requiredConsumerId()
@@ -174,16 +178,19 @@ public class AfterSaleService {
             throw new BizException("售后申请不存在");
         }
 
-        return request;
+        return toVO(request);
     }
 
     //列出商家的售后订单列表
-    public List<AfterSaleRequest> listMerchantRequests() {
-        return afterSaleRequestMapper.selectByTenantId(CurrentUser.requiredMerchantTenantId());
+    public List<AfterSaleRequestVO> listMerchantRequests() {
+        return afterSaleRequestMapper.selectByTenantId(CurrentUser.requiredMerchantTenantId())
+                .stream()
+                .map(this::toVO)
+                .toList();
     }
 
     //查询商家某个售后订单详情
-    public AfterSaleRequest getMerchantRequest(Long id) {
+    public AfterSaleRequestVO getMerchantRequest(Long id) {
         AfterSaleRequest request = afterSaleRequestMapper.selectByIdAndTenantId(
                 id,
                 CurrentUser.requiredMerchantTenantId()
@@ -191,7 +198,7 @@ public class AfterSaleService {
 
         if (request == null) {throw new BizException("售后申请不存在");}
 
-        return request;
+        return toVO(request);
     }
 
     public List<AfterSaleOrderItemContext> listEligibleOrderItems() {
@@ -265,6 +272,24 @@ public class AfterSaleService {
                 operatorId,
                 "MERCHANT",
                 merchantRemark
+        );
+    }
+
+    //将AfterSaleRequest转换成给用户看的安全的VO
+    private AfterSaleRequestVO toVO(AfterSaleRequest source){
+        return new AfterSaleRequestVO(
+                source.getId(),
+                source.getRequestNo(),
+                source.getOrderId(),
+                source.getOrderItemId(),
+                source.getQuantity(),
+                source.getRequestedAmount(),
+                source.getReason(),
+                source.getStatus(),
+                source.getMerchantRemark(),
+                source.getDecidedAt(),
+                source.getCreatedAt(),
+                source.getUpdatedAt()
         );
     }
 
