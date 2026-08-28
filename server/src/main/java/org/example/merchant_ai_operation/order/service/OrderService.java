@@ -15,10 +15,7 @@ import org.example.merchant_ai_operation.order.entity.CommerceOrder;
 import org.example.merchant_ai_operation.order.entity.CommerceOrderItem;
 import org.example.merchant_ai_operation.order.mapper.CommerceOrderItemMapper;
 import org.example.merchant_ai_operation.order.mapper.CommerceOrderMapper;
-import org.example.merchant_ai_operation.order.vo.CreateOrderVO;
-import org.example.merchant_ai_operation.order.vo.OrderDetailVO;
-import org.example.merchant_ai_operation.order.vo.OrderItemVO;
-import org.example.merchant_ai_operation.order.vo.OrderSkuSnapshotVO;
+import org.example.merchant_ai_operation.order.vo.*;
 import org.example.merchant_ai_operation.outbox.entity.OutboxEvent;
 import org.example.merchant_ai_operation.outbox.mapper.OutboxEventMapper;
 import org.example.merchant_ai_operation.security.CurrentUser;
@@ -27,6 +24,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -47,6 +45,9 @@ public class OrderService {
     private final IdempotentRequestMapper idempotentRequestMapper;
     private final OutboxEventMapper outboxEventMapper;
     private final ObjectMapper objectMapper;
+    private final Clock applicationClock;
+    private final CommerceOrderAddressService commerceOrderAddressService;
+    private final CheckoutGroupService checkoutGroupService;
 
     public OrderService(ProductSkuMapper productSkuMapper,
                         CommerceOrderMapper commerceOrderMapper,
@@ -55,7 +56,10 @@ public class OrderService {
                         InventoryMovementMapper inventoryMovementMapper,
                         IdempotentRequestMapper idempotentRequestMapper,
                         OutboxEventMapper outboxEventMapper,
-                        ObjectMapper objectMapper
+                        ObjectMapper objectMapper,
+                        Clock applicationClock,
+                        CommerceOrderAddressService commerceOrderAddressService,
+                        CheckoutGroupService checkoutGroupService
 
     ) {
         this.productSkuMapper = productSkuMapper;
@@ -66,12 +70,25 @@ public class OrderService {
         this.idempotentRequestMapper = idempotentRequestMapper;
         this.outboxEventMapper = outboxEventMapper;
         this.objectMapper = objectMapper;
+        this.applicationClock = applicationClock;
+        this.commerceOrderAddressService = commerceOrderAddressService;
+        this.checkoutGroupService = checkoutGroupService;
     }
 
 
-    //创建订单的service方法
+    //原来的单一商家结算订单方法
     @Transactional
-    public CreateOrderVO createOrderVO(String idempotencyKey, CreateOrderRequest request) {
+    public CreateOrderVO createOrderVO(
+            String idempotencyKey,
+            CreateOrderRequest request) {
+        return createOrderVO(idempotencyKey, request, null);
+    }
+
+    //创建订单的service方法(新的跨商店结算订单)
+    @Transactional
+    public CreateOrderVO createOrderVO(String idempotencyKey,
+                                       CreateOrderRequest request,
+                                       Long checkoutGroupId) {
         Long consumerId = CurrentUser.requiredConsumerId();
 
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
@@ -151,9 +168,16 @@ public class OrderService {
         }
 
         //创建订单主表:
-        CommerceOrder order = createOrder(tenantId, consumerId, totalAmount);
+        CommerceOrder order = createOrder(tenantId, consumerId, totalAmount,checkoutGroupId);
         //将设好值的订单通过mapper放进数据库里
         commerceOrderMapper.insert(order);
+
+        if (request.addressId() != null) {
+            commerceOrderAddressService.createSnapshot(
+                    order.getId(),
+                    request.addressId()
+            );
+        }
 
 
         //把每个购物车项变成订单项，同时锁定库存，并把已结算的购物车项删掉。
@@ -201,7 +225,19 @@ public class OrderService {
         outboxEventMapper.insert(event);
 
         //订单好了后再return之前把订单成功的记录传过去;->把订单id给写回idempotent_request.order_id
-        idempotentRequestMapper.markSuccess(idempotentRequest.getId(), order.getId());
+        //新增一个前提,如果id为null则按旧的方法参数走,有值则为走新的三参数
+        if (checkoutGroupId == null) {
+            idempotentRequestMapper.markSuccess(
+                    idempotentRequest.getId(),
+                    order.getId()
+            );
+        } else {
+            idempotentRequestMapper.markSuccessWithCheckoutGroup(
+                    idempotentRequest.getId(),
+                    order.getId(),
+                    checkoutGroupId
+            );
+        }
 
         return new CreateOrderVO(
                 order.getId(),
@@ -220,24 +256,19 @@ public class OrderService {
         int paid = commerceOrderMapper.markPaidByIdAndConsumerId(
                 orderId,
                 consumerId,
-                LocalDateTime.now()
+                LocalDateTime.now(applicationClock)
         );
 
-        if(paid != 1){
-            throw new BizException("订单不存在或状态不允许支付");
-        }
+        if(paid != 1){throw new BizException("订单不存在或状态不允许支付");}
 
         CommerceOrder order = commerceOrderMapper.selectByOrderIdAndConsumerId(orderId, consumerId);
 
-        if (order == null) {
-            throw new BizException("订单不存在");
-        }
+        if (order == null) {throw new BizException("订单不存在");}
 
         // 查询订单明细：支付成功后需要知道这笔订单买了哪些 SKU、每个 SKU 买了几个。
         List<CommerceOrderItem> items = commerceOrderItemMapper.selectByOrderId(orderId);
-        if (items.isEmpty()) {
-            throw new BizException("订单明细不存在");
-        }
+
+        if (items.isEmpty()) {throw new BizException("订单明细不存在");}
 
         for (CommerceOrderItem item : items) {
             //依次遍历订单从锁定库存中移出
@@ -246,21 +277,22 @@ public class OrderService {
                     item.getQuantity()
             );
             //一般一次就释放一个订单,所以这里如果不等于1就失败;通过@Transactional直接全部退回;
-            if (deducted != 1) {
-                throw new BizException("订单锁定库存异常");
-            }
+            if (deducted != 1) {throw new BizException("订单锁定库存异常");}
 
             ProductSku latestSku = productSkuMapper.selectByIdAndTenantId(
                     item.getSkuId(),
                     order.getTenantId()
             );
-            if (latestSku == null) {
-                throw new BizException("商品不存在");
-            }
+            if (latestSku == null) {throw new BizException("商品不存在");}
 
             //创建变化后的流水记录
             InventoryMovement movement = createOrderPaidMovement(item, order, latestSku);
             inventoryMovementMapper.insert(movement);
+        }
+        if (order.getCheckoutGroupId() != null) {
+            checkoutGroupService.markPaidIfAllChildrenPaid(
+                    order.getCheckoutGroupId()
+            );
         }
     }
 
@@ -272,6 +304,7 @@ public class OrderService {
                 .stream()
                 .map(order -> new OrderDetailVO(
                         order.getId(),
+                        order.getCheckoutGroupId(),
                         order.getOrderNo(),
                         order.getTenantId(),
                         order.getStatus(),
@@ -279,9 +312,10 @@ public class OrderService {
                         order.getExpireAt(),
                         order.getCreatedAt(),
 
-                        List.of()           //表示的是OrderDetailVO里的items
+                        List.of(),          //表示的是OrderDetailVO里的items
                         //这个是列表版。为什么 items 用 List.of()？
                         //订单列表通常只展示订单主信息，不把每笔订单的所有明细都查出来，避免以后订单多了以后列表接口很重。详情页再查明细
+                        null
                 ))
                 .toList();
     }
@@ -296,17 +330,23 @@ public class OrderService {
             throw new BizException("订单不存在");
         }
 
+        //订单明细
         List<OrderItemVO> items = commerceOrderItemMapper.selectItemVOByOrderId(orderId);
+
+        //地址明细
+        OrderAddressSnapshotVO shippingAddress = commerceOrderAddressService.getSnapshot(orderId);
 
         return new OrderDetailVO(
                 order.getId(),
+                order.getCheckoutGroupId(),
                 order.getOrderNo(),
                 order.getTenantId(),
                 order.getStatus(),
                 order.getTotalAmount(),
                 order.getExpireAt(),
                 order.getCreatedAt(),
-                items
+                items,
+                shippingAddress
         );
     }
 
@@ -345,20 +385,52 @@ public class OrderService {
             InventoryMovement movement = createOrderCancelMovement(item, order, latestSku);
             inventoryMovementMapper.insert(movement);
         }
+        if (order.getCheckoutGroupId() != null) {
+            checkoutGroupService.markCancelledIfAllChildrenCancelled(
+                    order.getCheckoutGroupId()
+            );
+        }
     }
 
+    //商家端返回订单列表
+    public List<OrderDetailVO> listMerchantOrders(Integer page, Integer size){
+        Long tenantId = CurrentUser.requiredMerchantTenantId();
+
+        int safePage = page == null||page < 1 ? 1: page;
+        int safeSize = size == null || size < 1 ? 10: Math.min(size, 50);
+        int offset =  (safePage - 1) * safeSize;
+
+        return commerceOrderMapper
+                .selectByTenantId(tenantId, safeSize, offset)
+                .stream()
+                .map(order -> new OrderDetailVO(
+                        order.getId(),
+                        order.getCheckoutGroupId(),
+                        order.getOrderNo(),
+                        order.getTenantId(),
+                        order.getStatus(),
+                        order.getTotalAmount(),
+                        order.getExpireAt(),
+                        order.getCreatedAt(),
+                        List.of(),
+                        null
+                ))
+                .toList();
+
+    }
 
     // ==================== 方法抽取 ==================== //
 
     //创建订单:
-    private @NonNull CommerceOrder createOrder(Long tenantId, Long consumerId, BigDecimal totalAmount) {
+    private @NonNull CommerceOrder createOrder(Long tenantId, Long consumerId, BigDecimal totalAmount,Long checkoutGroupId) {
         CommerceOrder order = new CommerceOrder();
         order.setOrderNo(generateOrderNo());            //生成业务订单号
         order.setTenantId(tenantId);                    //记录这笔订单属于哪个商家
         order.setConsumerId(consumerId);                //记录是谁买的
         order.setStatus("PENDING_PAYMENT");             //订单刚创建，还没支付，所以状态是“待支付”
         order.setTotalAmount(totalAmount);              //将上面算好的金额放进去
-        order.setExpireAt(LocalDateTime.now().plusMinutes(30)); //设置 30 分钟后过期。后面做超时关单时会用到。
+        order.setExpireAt(LocalDateTime.now(applicationClock).plusMinutes(30)); //设置 30 分钟后过期。后面做超时关单时会用到。
+        order.setCheckoutGroupId(checkoutGroupId);      //把group的id加进去
         return order;
     }
 
@@ -442,19 +514,23 @@ public class OrderService {
 
     //创建订单号码
     private String generateOrderNo() {
-        String datePart = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        String datePart = LocalDateTime.now(applicationClock).format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
         int randomPart = ThreadLocalRandom.current().nextInt(100000, 1000000);
         return "ORD" + datePart + randomPart;
     }
 
     // 创建下单请求的参数指纹：同一批购物车项会得到同一个字符串
     private String buildCreateOrderRequestHash(CreateOrderRequest request) {
-        return request.cartItemIds()
+        String cartItemPart = request.cartItemIds()
                 .stream()
                 .sorted()
-                .map(String :: valueOf)
+                .map(String::valueOf)
                 .reduce((left, right) -> left + "," + right)
                 .orElse("");
+
+        return cartItemPart
+                + "|addressId="
+                + (request.addressId() == null ? "" : request.addressId());
     }
 
     //写入订单时间消息
@@ -479,7 +555,7 @@ public class OrderService {
 
         event.setStatus("PENDING");
         event.setRetryCount(0);
-        event.setNextRetryAt(LocalDateTime.now());
+        event.setNextRetryAt(LocalDateTime.now(applicationClock));
 
         return event;
     }

@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 @Setter
 public class CommerceOrder {
     private Long id;
+    private Long checkoutGroupId;
     private String orderNo;
     private Long tenantId;
     private Long consumerId;

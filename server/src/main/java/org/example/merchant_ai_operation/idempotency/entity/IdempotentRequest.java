@@ -14,6 +14,7 @@ public class IdempotentRequest {
     private String requestHash;
     private String status;
     private Long orderId;
+    private Long checkoutGroupId;
     private String responseBody;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

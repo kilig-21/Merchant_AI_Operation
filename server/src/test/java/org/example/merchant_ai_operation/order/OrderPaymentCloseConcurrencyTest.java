@@ -6,22 +6,28 @@ import org.example.merchant_ai_operation.order.service.OrderService;
 import org.example.merchant_ai_operation.security.LoginPrincipal;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.RepeatedTest;
-import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.*;
-
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
+import java.time.Instant;
+import java.time.ZoneId;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+
+
+
 @SpringBootTest
+@Import(OrderPaymentCloseConcurrencyTest.TestClockConfig.class)
 class OrderPaymentCloseConcurrencyTest {
     private static final Long TEST_ORDER_ID = 9300000000000L;
     private static final Long TEST_ORDER_ITEM_ID = 9300000000001L;
@@ -34,6 +40,9 @@ class OrderPaymentCloseConcurrencyTest {
     private JdbcTemplate jdbcTemplate;
     @Autowired
     private OrderService orderService;
+
+    @Autowired
+    private MutableTestClock testClock;
 
     @Autowired
     private OrderCloseService orderCloseService;
@@ -61,6 +70,53 @@ class OrderPaymentCloseConcurrencyTest {
         assertPaidOrderAndInventoryConsistent(result.orderId());
     }
 
+    @RepeatedTest(10)
+    void paymentAndCloseAtTimeBoundaryShouldHaveOnlyOneWinner() throws Exception {
+        Instant expireInstant = Instant.now().plusSeconds(30);
+
+        LocalDateTime expireAt = LocalDateTime.ofInstant(
+                expireInstant,
+                testClock.getZone()
+        );
+
+        PaymentCloseResult result = runPaymentAndCloseAtBoundary(
+                expireAt,
+                expireInstant.minusSeconds(1),
+                expireInstant.plusSeconds(1)
+        );
+
+        String finalStatus = jdbcTemplate.queryForObject("""
+        SELECT status
+        FROM commerce_order
+        WHERE id = ?
+        """, String.class, result.orderId());
+
+        if ("PAID".equals(finalStatus)) {
+            assertEquals("PAID", result.payResult());
+            assertPaidOrderAndInventoryConsistent(result.orderId());
+        } else {
+            assertEquals("CLOSED", finalStatus);
+            assertEquals("PAY_REJECTED", result.payResult());
+
+            Integer closeMovementCount =
+                    assertClosedOrderAndGetCloseMovementCount(result.orderId());
+
+            assertEquals(1, closeMovementCount);
+        }
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class TestClockConfig {
+
+        @Bean
+        @Primary    //首要
+        MutableTestClock testClock() {
+            return new MutableTestClock(
+                    Instant.now(),
+                    ZoneId.systemDefault()
+            );
+        }
+    }
 
 
     @AfterEach
@@ -95,8 +151,9 @@ class OrderPaymentCloseConcurrencyTest {
         );
     }
 
-
-
+    /*
+    * 方法
+    * */
 
     //记录支付线程和关单线程的执行结果
     private record PaymentCloseResult(
@@ -106,7 +163,7 @@ class OrderPaymentCloseConcurrencyTest {
     ) {}
 
     //准备数据
-    private Long preparePendingOrder(boolean expired)  {
+    private Long preparePendingOrder(LocalDateTime expireAt) {
         jdbcTemplate.update(
                 "DELETE FROM inventory_movement WHERE business_no = ?",
                 TEST_ORDER_NO
@@ -135,10 +192,6 @@ class OrderPaymentCloseConcurrencyTest {
         );
 
         assertEquals(1, stockRows);
-
-        LocalDateTime expireAt = expired
-                ? LocalDateTime.now().minusSeconds(2)
-                : LocalDateTime.now().plusMinutes(10);
 
         int orderRows = jdbcTemplate.update("""
             INSERT INTO commerce_order (
@@ -281,8 +334,13 @@ class OrderPaymentCloseConcurrencyTest {
 
     //运行是支付和关闭的并发
     private PaymentCloseResult runPaymentAndClose(boolean expired) throws Exception {
-        Long orderId = preparePendingOrder(expired);
+        LocalDateTime testNow = LocalDateTime.now(testClock);
 
+        LocalDateTime expireAt = expired
+                ? testNow.minusSeconds(2)
+                : testNow.plusMinutes(10);
+
+        Long orderId = preparePendingOrder(expireAt);
         ExecutorService pool = Executors.newFixedThreadPool(2);
         CountDownLatch startLatch = new CountDownLatch(1);
 
@@ -312,6 +370,54 @@ class OrderPaymentCloseConcurrencyTest {
             String closeResult = closeFuture.get();
 
             return new PaymentCloseResult(orderId, payResult, closeResult);
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+    //辅助方法
+    private PaymentCloseResult runPaymentAndCloseAtBoundary(LocalDateTime expireAt, Instant paymentNow, Instant closeNow) throws Exception {
+        Long orderId = preparePendingOrder(expireAt);
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch startLatch = new CountDownLatch(1);
+
+        Future<String> payFuture = pool.submit(() -> {
+            mockConsumerLogin();
+            startLatch.await();
+            testClock.setForCurrentThread(paymentNow);
+
+            try {
+                orderService.mockPay(orderId);
+                return "PAID";
+            } catch (Exception ex) {
+                return "PAY_REJECTED";
+            } finally {
+                testClock.clearForCurrentThread();
+                clearLogin();
+            }
+        });
+
+        Future<String> closeFuture = pool.submit(() -> {
+            startLatch.await();
+            testClock.setForCurrentThread(closeNow);
+
+            try {
+                orderCloseService.closeExpiredOrder(orderId);
+                return "CLOSE_FINISHED";
+            } finally {
+                testClock.clearForCurrentThread();
+            }
+        });
+
+        startLatch.countDown();
+
+        try {
+            return new PaymentCloseResult(
+                    orderId,
+                    payFuture.get(),
+                    closeFuture.get()
+            );
         } finally {
             pool.shutdown();
         }

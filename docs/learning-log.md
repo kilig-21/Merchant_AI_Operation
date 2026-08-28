@@ -2029,6 +2029,12 @@ PAID --申请售后--> AFTER_SALE
    - 将重复的并发执行代码提取为 `runPaymentAndClose(boolean expired)`，用 `PaymentCloseResult` record 保存两个线程的结果。
    - 掌握等级：K2 会用，理解测试辅助方法为什么要返回结构化结果。
 
+4. 可控时间与真实临界点竞态
+   - 使用 `Clock` Bean 统一生产代码中的当前时间入口，`OrderService`、`OrderCloseService` 和 `OrderCloseRecoveryJob` 都通过 `LocalDateTime.now(applicationClock)` 获取时间。
+   - 使用测试专用的 `MutableTestClock`，支持共享时间推进和线程级时间覆盖。
+   - 支付线程观察过期前 1 秒，关单线程观察过期后 1 秒；3 个测试方法各重复 10 次，总计 30 次全部通过。
+   - 掌握等级：K2 会用，能够解释为什么测试环境需要可控时间，以及为什么最终仍由数据库条件更新裁决唯一胜者。
+
 ### 今天遇到的问题
 
 #### Q-020：IDEA 测试通过但终端运行失败
@@ -2042,7 +2048,7 @@ PAID --申请售后--> AFTER_SALE
 
 - 当前测试的 `expire_at` 分别设置为过去和未来，因此支付条件与关单条件是互斥的。
 - 这证明了两个边界分支和重复运行稳定，但还没有验证订单正好处于过期临界点时两个线程的唯一胜者。
-- 后续需要先设计可控时间入口，再决定是否补真正的时间竞态测试。
+- 通过 `Clock`、`MutableTestClock` 和线程级时间覆盖补齐了真正的临界点测试；支付和关单分别观察过期前后时间，最终状态和库存结果经过 10 次重复验证。
 
 ### 今天最重要的一条理解
 
@@ -2053,6 +2059,10 @@ PAID --申请售后--> AFTER_SALE
 - 新增 `server/src/test/java/org/example/merchant_ai_operation/order/OrderPaymentCloseConcurrencyTest.java`。
 - 测试覆盖过期关单、未过期支付、库存结果、库存流水和重复运行。
 - 提取 `runPaymentAndClose(boolean expired)` 与 `PaymentCloseResult`，删除误生成的空结果类文件。
+- 新增 `server/src/main/java/org/example/merchant_ai_operation/config/TimeConfig.java`，向 Spring 提供统一的 `Clock` Bean。
+- `OrderService`、`OrderCloseService` 和 `OrderCloseRecoveryJob` 统一使用 `applicationClock`。
+- 新增测试辅助类 `server/src/test/java/org/example/merchant_ai_operation/order/MutableTestClock.java`，支持线程级时间覆盖并在 `finally` 中清理。
+- 新增过期临界点支付/关单竞态测试；3 个测试方法总计 30 次全部通过。
 
 ### 侧边任务/对话补充记录
 
@@ -2060,13 +2070,528 @@ PAID --申请售后--> AFTER_SALE
 - 解释了 IDEA 环境变量和 PowerShell 环境变量是两个不同的进程配置来源。
 - 解释了 `ZipkinAutoConfiguration` 的条件报告只是启动诊断信息，不是每一条 `Did not match` 都代表错误。
 - 解释了 `record` 适合保存测试中的多个返回结果，但 record 的字段必须在组件列表中声明。
+- 解释了 `LocalDateTime.now()` 与 `LocalDateTime.now(applicationClock)` 的区别：生产环境仍读取真实时间，测试环境可以替换时间来源。
+- 解释了 `Clock.fixed` 是停住的测试时间，`Clock.offset` 是整体偏移但仍然流动的时间；本次业务代码不使用它们，只使用可控测试时钟。
+- 解释了 `TimeConfig` 只负责向 Spring 注册 `Clock`，业务服务只注入 `Clock`，不直接依赖配置类。
+- 解释了 `ThreadLocal` 时间必须在 `finally` 中清理，避免线程池复用导致测试污染。
 
 ### 今天还没完成
 
-- 尚未增加可控时间入口，因此未完成同一订单过期临界点的真实支付/关单竞态测试。
-- 尚未提交 Git，等待步骤 21 是否继续补真实时间竞态后统一收口。
+- 步骤 21 的代码与测试验收已完成；本次加餐尚未提交 Git。
 
 ### 明日优先
 
-- 评估引入 `Clock` 或时间提供器是否值得作为当前步骤的测试辅助。
-- 如果引入，先让支付和关单服务都使用统一时间入口，再写唯一胜者测试。
+- 检查本次代码与日志 diff，完成 Git 提交；步骤 22 暂不提前展开。
+
+## Day 21：2026-08-12 / 步骤 22
+
+### 今天学了什么
+
+- Flyway 已执行的版本文件不能直接修改：内容变化会导致 checksum mismatch。开发环境若确实要重做，需要先删除该版本创建的表和对应 `flyway_schema_history` 记录，再重新执行迁移；生产环境则必须新增更高版本迁移。
+- 促销库存不是 SKU 的普通可售库存。创建活动时，通过条件更新从 `product_sku.available_stock` 原子划拨到 `promotion_items.stock_total/stock_available`；取消时将未售出的活动可售库存归还。
+- 创建、库存划拨和库存流水必须处于一个 `@Transactional` 事务；取消、清空活动库存、归还 SKU 库存和归还流水也必须处于另一个完整事务。
+- “状态是 SCHEDULED”不等于“活动尚未开始”。取消 SQL 同时需要 `start_at > CURRENT_TIMESTAMP`，才能避免状态未被后台任务推进时误取消已开始活动。
+- 临时变量是否保留取决于后续是否继续使用它：只做一次影响行数校验可以直接提取校验；`PromotionItem` 后续需要写归还流水，因此让提取方法返回它是有业务含义的。
+
+### 今天完成
+
+- 完成 `V10__add_promotion_tables.sql` 并成功迁移：`promotion_activities`、`promotion_items`、`promotion_reservations` 三张表创建成功。
+- 完成商家创建促销接口和取消促销接口，覆盖活动时间、SKU 上架状态、活动价格、活动库存、时间重叠和租户边界。
+- 手工验证创建活动、库存划拨、重叠冲突、取消归还和重复取消拦截；数据库状态、活动库存、SKU 库存和库存流水均符合预期。
+- 完成促销状态单元测试，以及创建/冲突/取消归还三个促销服务集成测试；额外补充“开始时间已过不可取消”测试并完成 Maven 测试编译。
+
+### 今天遇到的问题
+
+| 问题 | 原因与解决 | 是否已理解 |
+|---|---|---|
+| Flyway V10 checksum mismatch | V10 已执行后又被修改；删除开发库的 V10 表和历史记录后重新执行当前版本文件 | 是 |
+| 取消接口返回系统异常 | 查询 SKU 时遗漏 `locked_stock`，写 `inventory_movement.locked_after` 得到 null，违反非空约束；补齐字段映射 | 是 |
+| API 页面显示 HTTP 200 但业务失败 | 项目把业务码放在统一响应体中；应以 `code: 409` 与 message 判断业务结果 | 是 |
+| 测试清理可能重复归还库存 | 已取消活动的库存已归还，清理时应只汇总 `stock_available`，并同时删除划拨/归还流水 | 是 |
+
+### 明日优先
+
+- 进入步骤 23 前先理解 Redis Key 设计、Lua 原子预扣、限购与幂等键，以及资格异步创建订单的边界。
+
+### 截图记录
+
+- 本次聊天附件已核对并保留：Flyway V10 checksum mismatch、删除开发库 V10 记录后重新迁移成功、促销活动/活动商品/普通 SKU/库存流水的 DataGrip 验收结果。
+- 本次聊天附件已核对并保留：创建促销成功、重叠活动返回业务码 `409`、取消活动成功、重复取消返回业务码 `409`。
+- 本次聊天附件已核对并保留：`PromotionStatusTest` 与 `PromotionServiceTest` 通过；后者包含创建划拨、重叠拦截和取消归还三个已运行的集成测试。
+- 截图当前留在聊天附件中，未复制到 `docs/images/`，因此不虚构归档文件名，也不提交本机临时目录内容。
+
+### 侧边任务/对话补充记录
+
+- 解释了 Flyway 校验失败的含义：已执行迁移的校验和与本地文件不一致；开发库可以在确认目标表仅由该版本创建后，删除表和对应历史记录重做，生产环境必须新建更高版本迁移。
+- 排查了 8080 端口占用；应用启动后出现的旧订单定时任务异常来自历史订单锁定库存与订单明细不一致，不属于本次促销功能，未直接篡改历史数据。
+- 解释了提取方法时 `record` 的取舍：若仅为传递中间变量会增加复杂度；取消流程提取为返回 `PromotionItem` 的方法，因为外层写归还流水仍需 SKU 和归还数量。
+- 解释了统一响应约定：业务失败读取 JSON 的 `code/message`，不能只依赖页面显示的 HTTP 状态。
+
+## Day 22：2026-08-13 / 步骤 23（进行中）
+
+### 今天学了什么
+
+- Redis Lua 的价值不是单独“扣库存”，而是把重复请求、活动时间、限购、库存和资格写入放在一次原子执行中；任一前置条件不满足都会在写库存之前返回。
+- `requestKey` 与用户购买数量 Key 解决不同问题：前者保证同一次网络重试返回同一个 `reservationId`，后者防止消费者换请求键绕过单用户限购。
+- 抢到资格不等于订单已创建。今天的接口只返回资格结果；资格落库、异步订单创建、结果查询与失败补偿仍是后续工作，不能提前称为下单成功。
+- 规则 Hash 使用 `startAt/endAt/limitPerUser`，库存独立为 String；四类 Key 统一包含 `{itemId}`，为 Redis Cluster 下 Lua 的同槽原子执行保留条件。
+- 活动可以在 `SCHEDULED` 状态提前预热，是否允许消费者抢购仍由 Lua 用服务端时间判断，而不是由前端电脑时间决定。
+
+### 今天遇到的问题
+
+| 问题 | 原因与解决 | 是否已理解 |
+|---|---|---|
+| 创建活动返回业务码 `400` | `startAt` 已早于服务器当前时间；改为未来时间后创建成功，响应 `data: 8` 即活动 ID | 是 |
+| 预热接口返回 HTTP `401` | 新接口没有带商家 JWT；在请求中配置 `Authorization: Bearer <商家 Token>` 后预热成功 | 是 |
+| Redis `HGETALL` 返回空数组 | 还未调用预热接口，且曾把 `<itemId>` 占位符原样输入；预热后以活动商品真实 ID `8` 查询成功 | 是 |
+| Redis CLI 报 unknown command | 直接输入了 Key，没有写 `GET` 命令；改用 `GET promotion:item:{8}:stock:v1` 后返回 `"1"` | 是 |
+| IDEA 提示 `result == null` 始终为 false | `@NonNull` 标注让静态分析认定私有方法不会返回空；删除误用标注，保留对 Lua 返回结构的防御校验 | 基本理解 |
+| 终端 Maven 编译不能启动 | Maven 下载父 POM 时被当前网络沙箱拒绝，报 `getsockopt: Permission denied`；未进入源码编译阶段，后续需在可联网环境复验 | 是 |
+
+### 侧边任务/对话补充记录
+
+- 用户追问“抢购是什么、是否过早做促销”：明确抢购是限量库存下的并发购买场景；当前按路线只继续步骤 23/24，不额外扩展无关组件。
+- 解释了统一响应体中 HTTP `200` 与业务 `code` 的差别：创建活动失败时页面可显示 HTTP `200`，但必须以 `code: 400` 和 `message` 判定业务失败。
+- 解释了 `activityId` 与 `promotion_items.id` 的区别：创建活动响应的 `data` 是活动 ID，用于预热；活动商品 ID 用于拼 Redis Key 和消费者抢购请求。
+- 提醒聊天截图中露出的 JWT 应重新登录更换，并避免在后续截图完整展示 Token。
+
+### 截图记录
+
+- 本次聊天附件已核对并保留：创建活动因开始时间已过返回 `code: 400`；重新创建活动成功并获得 `activityId=8`。
+- 本次聊天附件已核对并保留：预热接口先因缺少 Token 返回 `401`，配置商家 Bearer Token 后返回 `code: 0`。
+- 本次聊天附件已核对并保留：DataGrip 验证活动 `8` 为 `SCHEDULED`、活动商品 `id=8`、库存与限购均为 `1`；Redis 验证规则 Hash 和库存 Key。
+- 本次聊天附件已核对并保留：消费者抢购活动未开始时返回 `code: 409`、库存保持 `1`。
+- 截图仍位于聊天附件和本机临时目录，未复制到 `docs/images/`，因此不虚构归档文件名，也不纳入 Git 提交。
+
+### 明天开始前要复习
+
+- Lua 的 7 个返回码及其“先校验、后写入”的顺序。
+- `reservationId` 是资格的稳定编号，不是订单 ID；下一步需要解决资格落库和异步订单创建。
+
+## Day 23：2026-08-14～2026-08-15 / 步骤 23 主链验收
+
+### 今天学了什么
+
+- 一次促销抢购成功由两段组成：Lua 在 Redis 原子预扣资格，随后在 MySQL 中把资格和 Outbox 一起持久化；Outbox 发布事件后，RabbitMQ 消费者再异步创建订单。
+- `reservationId` 是跨 HTTP、Outbox 和 RabbitMQ 的稳定业务标识。HTTP 层使用 `requestKey` 防重复，消息消费层使用资格状态和 `reservationId` 防重复，两层都不能省。
+- Outbox 的 `PUBLISHED` 只表示消息已可靠发送给 RabbitMQ；队列 `messages = 0`、`consumers = 1` 与数据库订单结果一起，才能证明消息已被实际消费并完成建单。
+- 同一活动项的 MySQL `stock_available` 与 Redis Key 必须共同验收。两边均为 `0` 时，才能证明预扣结果没有只停留在缓存或数据库中的任一侧。
+
+### 今天完成的手工验收
+
+- 后端健康检查返回 `UP`。
+- 资格联查显示 `ORDER_CREATED`，且关联一笔 `PENDING_PAYMENT` 促销订单和正确的订单明细。
+- Redis 活动库存 Key 为 `0`，活动库存表也为 `0`。
+- Outbox 已发布促销建单事件，促销订单创建队列无积压且有一个消费者。
+- 同一个 `requestKey` 重复请求返回原 `reservationId` 与内部 `data.code = 2`；数据库数量仍为资格 `1`、订单 `1`。
+- 手工向 Exchange 发布相同 `reservationId` 的重复消息后，数据库数量仍为资格 `1`、订单 `1`，证明消费者幂等。
+- 库存耗尽后，新请求返回业务 `code: 409`、“活动库存不足或已售罄”。
+
+### 侧边任务/对话补充记录
+
+- 8080 端口已被监听并不等于用户自己的 IDEA 应用已经成功启动；先停止占用端口的临时进程，再由用户在 IDEA 中启动，并用 `/actuator/health` 确认当前验收对象。
+- RabbitMQ 的队列输出三列分别是队列名、待消费消息数和消费者数。`0 / 1` 表示当前无积压、一个消费者正在监听，不表示“没有消息链路”。
+- HTTP 重复请求与 MQ 重复消息是两种不同的故障模型：前者模拟客户端重试，后者模拟消息投递至少一次；本次分别验证了两层幂等。
+- 本项目的页面可能显示 HTTP `200`，但业务是否成功仍以响应体 `code` 和 `message` 判断。本次库存耗尽的 HTTP 请求页面为 200，业务码为 409，属于预期拒绝。
+- Lua 源码先校验用户限购、再校验库存。今天新请求得到“库存不足或已售罄”，说明本次登录用户在 Redis 中没有触发限购条件（可能使用了不同用户，或对应用户数量 Key 已不存在）；该截图只证明售罄分支，不能代替当前活动上的限购分支验收。高并发与完整分支仍需用新的可用活动补测。
+
+### 当前未完成
+
+- 未实现资格/订单结果查询接口。
+- 未实现消费者永久失败时的库存补偿、资格状态审计与失败恢复。
+- 未完成新的活动数据上的高并发抢购压测；因此步骤 23 不能整体标记完成。
+
+### 截图记录
+
+- `docs/images/day-23/health-up.png`：用户 IDEA 启动的后端健康检查返回 `{"status":"UP"}`。
+- `docs/images/day-23/async-order-db.png`：资格联查显示 `ORDER_CREATED`、`PENDING_PAYMENT` 订单和正确订单明细。
+- `docs/images/day-23/redis-stock-zero.png`：Redis 活动项 `8` 的库存 Key 返回 `0`。
+- `docs/images/day-23/outbox-published.png`：促销建单 Outbox 事件状态为 `PUBLISHED`。
+- `docs/images/day-23/rabbitmq-queue-consumed.png`：促销建单队列显示 `messages = 0`、`consumers = 1`。
+- `docs/images/day-23/http-idempotent-repeat.png`：相同 HTTP `requestKey` 返回内部 `data.code = 2` 与原资格编号。
+- `docs/images/day-23/stock-sold-out.png`：库存耗尽后接口返回业务码 `409`。
+- `docs/images/day-23/rabbitmq-duplicate-published.png`：RabbitMQ 管理页面确认重复促销建单消息已发布。
+- `docs/images/day-23/duplicate-message-counts.png`：重复消息处理后资格数、订单数仍为 `1 / 1`。
+
+## Day 24：2026-08-17 / 步骤 23 收口与提交准备
+
+### 今天学了什么
+
+- Redis 预扣和 MySQL 持久化不是一个事务：Redis Lua 成功后，资格落库或 Outbox 写入仍可能失败，因此必须准备独立的补偿记录。
+- 补偿记录的“写入”和“执行”要拆成两个独立事务。只有这样 Redis 补偿失败时，`PENDING` 记录才不会跟着当前业务事务一起回滚，定时任务才能继续重试。
+- 订单创建失败与资格持久化失败的共同点是 Redis 需要回滚；区别是后者的 `promotion_reservations` 记录可能不存在，因此不能无条件更新资格状态。
+- 预热接口不能在活动进行中把 MySQL 的旧库存重新写回 Redis，否则可能造成库存回升。当前实现只允许 `SCHEDULED` 活动预热。
+- 编译成功只能证明代码能够通过 Java 编译，不能替代高并发压测、故障演练和最终数据库对账。
+
+### 今天完成
+
+- 新增 `promotion_compensation_records` 表、V11 迁移和 Redis 补偿 Lua 脚本。
+- 新增补偿记录服务与 `PromotionCompensationRetryJob`，补偿记录支持 `PENDING → COMPLETED` 的恢复流程。
+- 促销订单异步创建失败时，补偿 Redis 活动库存和消费者限购数量；资格存在时再更新资格状态为 `COMPENSATED`。
+- 资格保存或 Outbox 写入失败时，先建立独立补偿记录，再执行 Redis 回滚；原始业务异常继续向上抛出。
+- 通过静态检查确认 Redis Key 使用同一 `{itemId}` 哈希标签，Lua 多 Key 操作具备 Redis Cluster 同槽条件。
+- 通过 Maven 编译：`mvn -DskipTests compile`，共编译 96 个源文件，结果为 `BUILD SUCCESS`。
+
+### 今天遇到的问题
+
+| 问题 | 原因与解决 | 是否已理解 |
+|---|---|---|
+| 为什么要把资格对象构建和保存拆开 | 失败补偿需要在数据库写入前就拿到 `reservationId`、商品、用户和数量快照 | 是 |
+| 为什么补偿不能直接复用更新资格状态的方法 | 资格持久化失败时，`promotion_reservations` 可能根本不存在 | 是 |
+| 为什么补偿记录要拆成两个事务 | Redis 执行失败时必须保留 `PENDING` 记录供定时任务重试 | 是 |
+| 为什么编译通过仍不能称为并发测试通过 | 编译只检查语法和类型，不能证明多请求下库存、订单和补偿账本最终一致 | 是 |
+
+### 当前未完成
+
+- 高并发抢购压测和故障演练尚未执行；本次按协作约定只做代码与并发逻辑静态审查。
+- 应用与 MySQL 的时间存储/查询时区仍需统一，之前的手工验收已经暴露过活动时间误判风险。
+- 多实例 Outbox 发布抢占和更完整的退避/失败队列策略仍可在步骤 24 继续加强。
+
+### 截图记录
+
+- `docs/images/day-24/promotion-step23-compile-success.png`：Maven 编译 96 个源文件并显示 `BUILD SUCCESS`。
+
+### Git 提交边界
+
+- 本次代码、迁移、Lua 脚本、补偿任务、文档和编译截图作为一个步骤 23 收口检查点提交。
+- 不把未执行的高并发压测写成已通过；后续步骤 24 继续做对账、压测和故障演练。
+
+## Day 25：2026-08-19 / 步骤 24 自动化验收
+
+### 今天学了什么
+
+- 并发测试不能依赖临时活动 ID、手工请求或等待固定时间。`MutableTestClock` 把服务端时间固定下来，活动开始和结束条件可以稳定复现。
+- `CountDownLatch` 是并发测试的“统一起跑线”：20 个测试线程先就绪，再同时执行 Lua 抢购逻辑，才有机会暴露超卖问题。
+- 促销成功链路的最终一致性要同时检查四本账：Redis 预扣库存、MySQL 抢购资格、促销订单、Outbox 发布状态；只看到 HTTP 成功或 Redis 扣库存都不够。
+- 自动化故障演练不需要破坏真实数据。测试仅把自己创建的活动商品 SKU 改为不存在值，使消费者在建单阶段失败，从而稳定进入补偿链路。
+- `promotion_compensate.lua` 会恢复活动库存、回退用户购买数量并写入补偿标记；所以补偿验收要同时检查资格 `COMPENSATED`、审计记录 `COMPLETED`、订单数为 0、Redis 库存恢复和用户数量为 0。
+
+### 今天完成
+
+- 完成 `PromotionReservationConcurrencyTest` 的真实集成测试环境：Spring Boot、MySQL、Redis、RabbitMQ 与测试时钟均成功加载。
+- 完成 20 并发抢购测试：库存为 10 时成功资格恰好为 10，未发生超卖；Outbox 发布后异步创建 10 笔订单，资格、订单、MySQL 库存、Redis 库存和 Outbox 状态一致。
+- 完成受控建单失败测试：不存在 SKU 导致订单创建回滚，补偿记录完成，资格改为 `COMPENSATED`，Redis 库存与用户限购数量正确回滚。
+
+### 今天遇到的问题
+
+| 问题 | 原因与解决 | 是否已理解 |
+|---|---|---|
+| 空测试显示 `Tests run: 0` | 测试类没有 `@Test` 方法，编译并不等于 Spring 测试实际执行；新增最小上下文断言后，确认真实组件可注入 | 是 |
+| 终端测试被 MySQL 拒绝登录 | IDEA 与终端不共享运行环境变量；在 IDEA 测试配置中临时设置 MySQL、RabbitMQ 与 JWT 变量后通过 | 是 |
+| 为什么不再等待 18:00 的手工活动 | 固定时间窗口只能偶然验证正常路径，不能稳定复现并发和故障；测试时钟与专用数据提供可重复证据 | 是 |
+| 为什么测试中直接触发 Outbox 发布器 | 生产仍由 5 秒任务触发；测试主动调用同一公开方法只是消除等待时间，消息仍经真实 RabbitMQ 消费 | 是 |
+
+### 侧边任务/对话补充记录
+
+- `@BeforeEach` 创建随机命名的专用活动与活动商品，`@AfterEach` 逆序删除 Outbox、补偿记录、订单明细、订单、资格、活动商品和活动，并清理 `promotion:item:{itemId}:*` Redis Key，避免污染历史活动 `8/9/14`。
+- 因为测试使用本地真实组件，不能连接共享或生产数据库；Outbox 发布器会扫描本地所有 `PENDING` 事件，运行前应保证没有需要保留的本地待发布事件。
+- 测试结果的绿色通过不只代表代码能编译：本次三条测试分别覆盖测试环境、并发正常闭环和故障补偿闭环。
+
+### 截图记录
+
+- `docs/images/day-25/promotion-concurrency-order-flow-tests.png`：并发抢购与异步建单测试通过。
+- `docs/images/day-25/promotion-compensation-tests-success.png`：测试类共 3 个测试通过，包含故障补偿演练。
+
+## Day 26：2026-08-21 / 前后端联调与部署副线 S1、S3、S4 阶段推进
+
+### 今天对应任务
+
+- 副线 S1：接口合同和分支集成策略阶段完成。
+- 副线 S3：店铺目录、跨店浏览与搜索的后端真实读取阶段完成。
+- 副线 S4：地址主数据和订单地址快照基础设施进行中。
+
+### 今天学了什么
+
+- `@WebMvcTest`、`@AutoConfigureMockMvc(addFilters = false)` 和 Spring 容器是三个不同层次：`addFilters = false` 只是不让 MockMvc 请求经过安全过滤器，但测试上下文仍可能创建 `JwtAuthentication`、`SecurityConfig` 等 Bean，所以缺失的 `JwtService` 仍要用 `@MockitoBean` 补齐。
+- 前后端联调不能只看 HTTP 状态。项目统一返回 `{ code, message, data }`，因此未登录要同时看到 HTTP 401 和 `code: 401`，无权限要同时看到 HTTP 403 和 `code: 403`。
+- `tenant_id` 是商家隔离字段，`consumer_id` 是消费者身份字段。公共店铺搜索按 tenant 查询；地址 CRUD 按当前 consumer 查询，两者不能混用。
+- 地址主数据记录“当前可修改的收货地址”，订单地址快照记录“下单当时不可变的收货信息”。订单历史不能随着消费者改地址而变化。
+- Flyway 的版本文件应由 Spring Boot 启动执行。V12 创建消费者地址表，V13 创建订单地址快照表；手动在数据库执行会绕过迁移历史管理。
+- `isDefault` 的空值语义要区分新增和修改：新增空值转成 `0`；修改空值应保留数据库原值。SQL 中分别对应 `COALESCE(参数, 0)` 和 `COALESCE(参数, is_default)`。
+- 从方法提取出来的代码要根据职责命名。快照对象只是被组装出来，还没有写数据库，所以 `buildOrderAddressSnapshot` 比 IDE 默认的 `extracted` 更准确。
+
+### 今天完成
+
+- 完成前后端接口合同 `docs/frontend-backend-contract.md`，记录 `feature/backend` 与 `feature/web-v2` 基线、统一响应、权限边界、真实接口和 Demo 缺口。
+- 修复 Spring Security 401/403 统一错误响应，并用 FoxAPI 验收未登录和消费者访问商家接口的边界。
+- 新增公开店铺目录与跨店商品搜索，完成编译、服务测试、控制器测试和 FoxAPI 读取验收。
+- 新增消费者地址表 V12、地址 DTO/VO/Mapper/Service/Controller，完成真实地址创建、列表、默认切换、修改和删除。
+- 新增订单地址快照表 V13、`CommerceOrderAddress` 实体、`CommerceOrderAddressMapper` 和快照服务；`CreateOrderRequest` 增加可选 `addressId`，并保留旧构造器以兼容已有订单测试。
+- 当前新增代码多次通过 Maven compile；本日代码未提交。
+
+### 今天遇到的问题
+
+| 问题 | 原因与解决 | 是否已理解 |
+|---|---|---|
+| `addFilters = false` 后测试仍需要 `JwtService` | 关闭的是请求过滤器，不是 Spring Bean 创建；用 `@MockitoBean JwtService` 让测试上下文启动 | 是 |
+| 地址修改 SQL 编译前发现逻辑错误 | `is_default =` 被误放到 INSERT 的 VALUES；检查后改回正确的 INSERT/UPDATE 两种 `COALESCE` 语义 | 是 |
+| Mapper、Service、Controller 之间的职责边界 | Mapper 只做数据库读写，Service 负责当前用户、事务和默认地址规则，Controller 负责 HTTP 参数与统一响应 | 是 |
+| 为什么地址快照不直接复用地址表 | 地址表会被消费者修改或删除；订单快照必须复制字段，不能依赖当前地址记录 | 是 |
+| 为什么当前还不能说 S4 完成 | 地址和快照基础设施已具备，但 `addressId` 尚未接入现有订单事务，跨店拆单、整体回滚和集成测试仍未完成 | 是 |
+
+### 侧边任务/对话补充记录
+
+- 用户明确要求继续使用 FoxAPI，不重复已经完成的基础接口验收；本日只对新增副线接口进行真实请求和结果核对。
+- 用户确认由自己逐步编写后端代码，助手负责根据真实代码给出下一小步、检查文件并执行编译/测试验收；未切换分支，也未默认合并。
+- 用户询问 `@Data` 是否可以替代 `@Getter/@Setter/@NoArgsConstructor/@AllArgsConstructor`；本日的快照实体使用 `@Data`，因未声明其他构造器仍保留无参构造器，编译通过。
+- 用户询问当前距离 S4 完成还有多少：已明确说明 S4 仍进行中，后续还要接入订单快照、返回订单地址、跨店拆单、整体回滚和集成测试。
+- 用户本日要求收工时写入日志、归档截图并只提供提交语句；因此本次不执行 `git add`、`git commit` 或 `git push`。
+
+### 今天还没完成
+
+- `addressId` 尚未接入 `OrderService.createOrderVO`，现有订单不会自动生成地址快照。
+- 订单详情还没有返回 `commerce_order_address` 的快照数据。
+- 跨店购物车按商家拆单、父结算编号、整体事务回滚和跨店幂等尚未完成。
+- S4 集成测试尚未覆盖两个商家成功、库存不足整体失败、同一幂等键重试、地址越权和空购物车。
+- `feature/web-v2` 前端尚未接入真实地址选择和跨店结算；分支隔离策略保持不变。
+
+### 截图记录
+
+- `docs/images/day-26-side-S4/flyway-v12-consumer-address-success.png`：Flyway 成功应用 V12，消费者地址表创建完成。
+- `docs/images/day-26-side-S4/flyway-v13-order-address-snapshot-success.png`：Flyway 成功应用 V13，订单地址快照表创建完成。
+- `docs/images/day-26-side-S4/address-create-success.png`：FoxAPI 新增地址成功。
+- `docs/images/day-26-side-S4/address-default-switch-success.png`：FoxAPI 新增第二个默认地址成功。
+- `docs/images/day-26-side-S4/address-update-success.png`：FoxAPI 修改地址成功。
+- `docs/images/day-26-side-S4/address-list-default-state.png`：FoxAPI 查询确认默认地址状态切换成功。
+- 删除接口成功截图和部分 GET 截图包含可见 JWT，因此不复制到仓库。
+
+### 明日优先
+
+- 将 `addressId` 接入现有订单事务，在库存锁定和订单写入的同一事务内创建订单地址快照。
+- 先补单店订单快照读取，再设计跨店拆单和整体回滚，不直接跳到前端 Demo 替换。
+
+## Day 27：2026-08-23 / 跨店结算副线 S4 阶段验收
+
+### 今天学了什么
+
+- `checkout_group` 是一次跨店结算的父记录，`commerce_order` 是按 `tenantId` 拆出的商家子订单；父子关联通过 `checkout_group_id` 完成。
+- 跨店结算不能使用前端传来的价格或商家编号，而要先查询当前消费者的购物车商品快照，再按可信快照分组并重新计算金额。
+- 保留单店 `createOrderVO(idempotencyKey, request)`，通过三参数重载增加 `checkoutGroupId`，可以在不破坏旧接口的情况下逐步扩展业务。
+- 业务验收要串起数据库迁移、单元测试、Controller、FoxAPI 创建结算组、FoxAPI 拆单、订单详情和订单列表；只看到某一层成功不能称为闭环。
+- 列表接口曾返回 `checkoutGroupId: null`，原因不是 SQL，而是 `OrderService.listMyOrders()` 调用了没有结算组参数的旧 `OrderDetailVO` 构造器；修正组装层后列表恢复正确。
+
+### 今天完成
+
+- 完成 V14 结算组数据模型、实体、Mapper、Service、DTO、VO、Controller 和测试。
+- 完成 `POST /api/checkouts/prepare`，真实创建结算组 `3`，总金额 `299.00`。
+- 完成 `POST /api/checkouts/3/orders`，真实创建子订单 `9300000000046`，状态为 `PENDING_PAYMENT`。
+- 订单详情返回 `checkoutGroupId`、商品明细和 `shippingAddress`；订单列表也已返回 `checkoutGroupId = 3`。
+- `CheckoutGroupServiceTest` 4 条、`CheckoutServiceTest` 7 条、`CheckoutControllerTest` 1 条，以及 Mapper/Service 集成验收均通过截图确认。
+
+### 遇到的问题与解决
+
+| 问题 | 原因与解决 | 是否已理解 |
+|---|---|---|
+| 不知道购物车项 ID 和地址 ID | 先调用 `GET /api/cart/items`、`GET /api/addresses` 查询当前消费者真实数据，不凭空填写 ID | 是 |
+| `OrderDetailVO` 列表构造报错 | 增加 `checkoutGroupId` 后完整构造器还需要 `shippingAddress`，列表补 `null` | 是 |
+| 详情有结算组 ID、列表却是 `null` | 列表使用旧兼容构造器，改为显式传 `order.getCheckoutGroupId()` | 是 |
+| 不清楚是否已经形成闭环 | 区分阶段性技术闭环与完整业务闭环；当前创建、拆单、关联、查询已完成，组级支付、回滚和父级幂等仍未完成 | 是 |
+
+### 侧边任务/对话补充记录
+
+- 用户坚持采用“助手给下一步代码、用户亲自输入、助手只读检查和解释”的学习方式；本日按此方式推进。
+- 用户准备每个闭环单独提交；已说明当前可以作为“结算组创建与跨商家拆单”阶段性提交点，但不能宣称完整结算业务全部完成。
+- 用户询问是否直接 `git add .`；已提醒工作区同时存在地址快照等既有改动，应先查看 `git status` 和暂存 diff，再由用户决定暂存范围。
+- 用户提供的侧边栏聊天记录主要用于确认任务顺序、错误修复和验收边界；文档只记录结论，不把聊天中的指令误当成项目需求。
+
+### 截图记录
+
+- `docs/images/day-27-side-S4/flyway-v14-checkout-group-success.png`：Flyway 成功验证 14 个迁移，数据库版本为 14。
+- `docs/images/day-27-side-S4/maven-compile-success.png`：IDEA/Maven 编译显示 `BUILD SUCCESS`。
+- `docs/images/day-27-side-S4/checkout-group-service-tests-4-pass.png`：结算组 Service 测试 4 条通过。
+- `docs/images/day-27-side-S4/checkout-group-mapper-integration-pass.png`：结算组 Mapper 集成测试通过。
+- `docs/images/day-27-side-S4/checkout-service-tests-7-pass.png`、`checkout-service-tests-6-pass.png`、`checkout-service-tests-5-pass.png`、`checkout-service-tests-4-pass.png`、`checkout-service-tests-3-pass.png`：结算编排 Service 分阶段测试通过，最终扩展到 7 条。
+- `docs/images/day-27-side-S4/checkout-controller-test-pass.png`：结算 Controller 测试通过。
+- `docs/images/day-27-side-S4/checkout-group-service-integration-pass.png`：结算组 Service 集成测试通过。
+- `docs/images/day-27-side-S4/checkout-group-mapper-integration-pass.png`：结算组 Mapper 集成测试通过。
+- `docs/images/day-27-side-S4/checkout-child-order-api-success.png`：FoxAPI 创建结算组子订单成功，返回订单 `9300000000046`。
+- `docs/images/day-27-side-S4/order-detail-checkout-group-success.png`：订单详情返回 `checkoutGroupId = 3`、明细和地址快照。
+- `docs/images/day-27-side-S4/order-list-checkout-group-success.png`：订单列表返回 `checkoutGroupId = 3`。
+
+### 当前未完成
+
+- 结算组详情查询接口尚未完成。
+- 结算组级别支付、整体取消/回滚和父级幂等重试尚未完成。
+- 两个真实商家的跨店集成测试和前端真实接入尚未完成。
+
+### Git 提交边界
+
+- 本日副线代码、V14 迁移、测试、文档和截图均待用户检查后自行提交。
+- 建议本阶段提交信息：`feat(order): support checkout group split`。
+
+## Day 28：2026-08-24 / 结算组详情查询与真实错误态验收
+
+### 今天学了什么
+
+- `CheckoutService` 负责创建结算组和拆单等写流程；`CheckoutGroupService` 负责结算组读取。Controller 可同时注入二者，但路由必须委托给职责匹配的 Service。
+- 越权保护不是只验证父结算组：查询子订单的 Mapper 也要带 `checkout_group_id` 和当前 `consumer_id`。
+- 统一 JSON 的 `code` 与 HTTP 状态是两个层次。`ApiResponse.error(404, ...)` 自身只改变响应体；`ResponseEntity.status(404)` 才会让客户端收到 HTTP 404。
+- 订单摘要和订单详情应明确区分：结算组详情当前只提供订单编号、金额、状态等摘要，不伪造 `items` 或地址快照数据。
+
+### 今天完成
+
+- 新增结算组详情 VO、子订单隔离查询和 `GET /api/checkouts/{checkoutGroupId}`。
+- 补齐结算组 Service 第 5 条测试及 Controller 第 2 条测试，分别通过。
+- 修复 `BizException` 的 HTTP 状态与业务码不一致问题，并完成存在、缺失、未登录三种真实请求验收。
+
+### 遇到的问题与解决
+
+| 问题 | 原因与解决 | 是否已理解 |
+|---|---|---|
+| 详情接口应该放在哪个 Service | 创建流程与读取流程职责不同；Controller 保留写服务，GET 委托给 `CheckoutGroupService` | 是 |
+| 不存在的结算组响应体是 404、HTTP 却是 200 | 旧 Handler 只返回 `ApiResponse`；改为 `ResponseEntity.status(ex.getCode())` 后真实 HTTP 为 404 | 是 |
+| 本地测试环境变量消失 | 恢复本地运行配置所需值并启动依赖；测试本身仍以 Mockito 单元测试为主，不把密钥写入日志 | 是 |
+| Maven 命令失败 | 单引号和命令前的误输入字符被 Windows/Maven 当作参数或路径；改为正确命令后测试、编译通过 | 是 |
+
+### 侧边任务/对话补充记录
+
+- 用户继续采用“讲一步、我写一步、验收一步”的后端学习方式；助手未代写本日业务代码。
+- Docker 依赖容器和后端应用均恢复后才进行真实 FoxAPI 验收。
+- 有 Bearer Token 的成功、404、401 截图不提交仓库；仅保存无敏感信息的测试和编译截图。
+
+### 截图记录
+
+- `docs/images/day-28-side-S4/checkout-group-service-tests-5-pass.png`
+- `docs/images/day-28-side-S4/checkout-controller-tests-2-pass.png`
+- `docs/images/day-28-side-S4/checkout-group-detail-compile-success.png`
+
+### 当前未完成
+
+- 两步结算仍需收敛为跨商家原子提交。
+- 父级幂等、全量回滚、组级支付/取消/超时状态机仍未完成。
+- 还需两个真实商家的集成验收与 `feature/web-v2` 的真实接口接入；AI 主线步骤 25～30 不受影响。
+
+## Day 28：2026-08-24 / S4 后端状态机与一键结算续记
+
+### 今天学了什么
+
+- “父结算组”不是把子订单状态简单复制过去：父组只有在所有子订单都到达同一个目标状态后才推进。支付、主动取消和超时关闭分别对应 `PAID`、`CANCELLED`、`CLOSED`，不能混用。
+- 一键结算的父级幂等键必须绑定“消费者 + 请求键 + 请求指纹”。同一键的成功重试应返回已有结算组；同一键携带不同购物车或地址必须拒绝，不能误复用旧结果。
+- `CheckoutService` 负责全组写流程编排，`OrderService` 和 `OrderCloseService` 仍各自负责单订单支付、取消、超时库存处理；它们在子订单动作完成后调用 `CheckoutGroupService` 同步父组。
+- `SELECT ... FOR UPDATE` 锁住父结算组，再统计尚未达到目标状态的子订单，最后执行 `status = 'PENDING_PAYMENT'` 的条件更新，能让多笔子订单并发完成时保持父组状态正确。
+
+### 今天完成
+
+- 完成 `POST /api/checkouts` 一键原子提交与父级幂等恢复逻辑；保留旧 `prepare`、`/{id}/orders` 入口以兼容此前阶段接口。
+- 完成结算组级模拟支付、整体取消和超时关闭的父状态同步，以及对应 Mapper 查询/条件更新。
+- 新增结算组取消接口；超时关单在库存释放和库存流水完成后才检查并同步父结算组。
+- 对本轮 `src/main` 改动执行静态差异检查，未发现空白错误；未运行或新增测试。
+
+### 今天遇到的问题与处理边界
+
+| 情况 | 结论 | 后续安排 |
+|---|---|---|
+| 测试运行配置中的环境变量丢失 | Spring 上下文测试受 MySQL/RabbitMQ 等真实依赖影响，当前报错不能直接证明结算逻辑错误 | 本轮不继续测试环境排障；明天用 ApiFox 做真实接口验收 |
+| 容易把“一个接口成功”当作 S4 完成 | Day 26 的地址快照、Day 27 的结算组拆单、Day 28 的详情查询和本次状态机是连续依赖 | 日志按“后端代码闭环完成 / 真实联调待完成”分开记录 |
+| 四个闭环连续完成却未分次提交 | 提交边界应由用户决定；本轮保留为一个后端 S4 检查点 | 本次只暂存主代码、文档和无敏感截图，不暂存测试文件 |
+
+### 侧边任务/对话补充记录
+
+- 用户明确从此轮开始不再把测试文件或测试环境恢复作为推进条件；助手只检查主代码，不将未执行的测试写成通过。
+- 侧边栏旧对话的关键交接已复核：Day 26 已验证“地址主数据修改不影响历史订单快照”，Day 27 已完成 V14 父结算组、拆单和查询基础；因此本次的父级幂等与状态机是在真实前置基础上扩展，而非重复造轮子。
+- 所有文档均保留副线 S4 标注；AI 主线步骤 25～30 未修改。
+
+### 截图记录
+
+- `docs/images/day-28-side-S4/checkout-atomic-submit-success.png`：一键结算真实请求成功。
+- `docs/images/day-28-side-S4/checkout-group-detail-after-submit-success.png`：一键结算后查询结算组详情成功。
+- 组级支付、取消、超时关闭和双商家失败路径的 ApiFox 截图待明天补齐；今天不虚构截图。
+
+### 明日优先
+
+- 用 ApiFox 验收父级幂等重试、组级支付、组级取消、超时关闭和双商家原子失败路径。
+- 验收完成后再进入 `feature/web-v2` 的真实结算页面接入；不默认切换或合并分支。
+
+## Day 29：2026-08-26 / S4 ApiFox 状态机验收收口
+
+### 今天学了什么
+
+- 父组状态必须等所有子订单达到目标状态后才推进；`PAID`、`CANCELLED`、`CLOSED` 不能混用。
+- 幂等验收要分别验证“同 Key 同参数复用”和“同 Key 参数变化返回 `409`”。
+- 结算组详情的 `items: []`、`shippingAddress: null` 是当前摘要模型边界，不代表支付或取消失败。
+
+### 今天完成
+
+- 真实 ApiFox 验收一键结算成功、父级幂等重试、幂等参数冲突、组级支付、组级取消和超时关闭。
+- 结算组 `5` 验证 `PAID`，结算组 `6` 验证 `CLOSED`，结算组 `7` 验证 `CANCELLED`。
+- 对已关闭组取消得到 `409`，确认非法状态动作被拒绝。
+- 归档 10 张不含可见 Token 的 ApiFox 截图到 `docs/images/day-29-side-S4/`。
+
+### 今天未完成与后续
+
+- 双商家库存不足整体回滚本次按用户决定暂缓，不能写成 ApiFox 已通过。
+- 当前进入 S5 的后端起点：售后主表、消费者申请边界、商家 tenant 隔离和状态转换。
+
+### 侧边任务/对话补充记录
+
+- 用户指出截图就是验收结果，后续以截图中的 HTTP 状态、`code`、业务 ID 和状态为准，不重复要求已经完成的步骤。
+- 截图中出现 Bearer Token 的画面不归档；本次只复制未显示 Token 的响应截图。
+
+## Day 30：2026-08-26 / S5 售后审核最小闭环
+
+### 今天学了什么
+
+- 售后申请必须同时保存订单、订单项、消费者和商家租户归属；身份和租户来自当前登录上下文，不能由请求体伪造。
+- 申请金额必须从订单项历史成交价和申请数量计算，不能信任前端传入金额。
+- 状态更新使用 `id + tenant_id + expected status` 条件，既完成商家隔离，也避免重复审核覆盖已有状态。
+- 主表保存当前状态，日志表保存状态历史；一次商家审核在事务内记录 `SUBMITTED → REVIEWING → APPROVED/REJECTED`。
+- “审核通过”只表示售后审核结果，不等于真实退款；真实资金动作留到后续阶段。
+
+### 今天完成
+
+- 新增 V15 售后申请主表和状态日志表。
+- 完成消费者查询可申请 `PAID` 订单项、提交申请、查询详情/列表。
+- 完成商家按租户查询、详情和审核接口。
+- 通过 ApiFox 完成两条真实申请的最终状态闭环：`SUBMITTED → REVIEWING → APPROVED` 和 `SUBMITTED → REVIEWING → REJECTED`。
+- 将消费者、商家接口返回从 Entity 收敛为 `AfterSaleRequestVO`，保留业务展示字段并隐藏租户、消费者和审核人内部字段。
+- 通过 DataGrip 确认 3 条状态日志，并通过跨租户和重复审核负向验收。
+
+### 遇到的问题与处理
+
+| 问题 | 原因与处理 | 是否已理解 |
+|---|---|---|
+| Service 编译通过但时间类型有风险 | 误导入 Micrometer 的 `Clock`；项目 Bean 实际是 `java.time.Clock`，改回 Java 时间类型并去掉强制转换 | 是 |
+| 刚插入对象的时间字段为空 | Mapper 返回的是内存中的插入对象，数据库默认时间需重新查询才能看到；不影响事务写入 | 是 |
+| 审核状态为什么有两段日志 | 通过 `SUBMITTED → REVIEWING → APPROVED/REJECTED` 表达审核过程，日志比只写最终状态更可审计 | 是 |
+| 为什么接口不能直接返回售后 Entity | Entity 包含 `tenantId`、`consumerId`、`decidedBy` 等内部字段 | 新增 `AfterSaleRequestVO`，由 Service 显式映射后再返回，避免把数据隔离字段泄露给消费者或商家客户端 | 是 |
+
+### 侧边聊天与截图记录
+
+- 本日继续遵守“讲一步、用户写一步、验收一步”；未直接替用户编写后端业务代码。
+- 本日截图统一归档到 `docs/images/day-30-side-S5/`，不含可见 Bearer Token 的图片才进入仓库。
+- 新增拒绝流程证据：消费者提交申请、商家拒绝审核、消费者查询最终拒绝结果；带有可见 Bearer Token 的原始截图不归档。
+
+### 下一步
+
+- 下一闭环进入 S6 商家订单真实读取；真实退款、退货物流和前端接入不在本次闭环内。
+
+## Day 31：2026-08-27 / S6 商家订单真实读取
+
+### 今天学了什么
+
+- 商家订单查询不能复用消费者的 `consumer_id` 条件，而要从当前登录上下文取得 `tenantId`，再用 `tenant_id` 做数据库边界。
+- 分页参数必须在 Service 层归一化：非法页码回到第 1 页，未传大小使用默认值，过大的大小被限制，避免接口一次返回过多数据。
+- 订单列表和订单详情的查询重量不同：列表只返回订单主信息并将 `items` 置为空，详情接口再查询订单项和收货地址。
+- “商家 Token 查询为空”仍然是成功的隔离结果；还需要用消费者 Token 验证角色边界，不能只看 HTTP 200。
+
+### 今天完成
+
+- 为 `CommerceOrderMapper` 增加按 `tenant_id`、`LIMIT`、`OFFSET` 查询订单的方法。
+- 为 `OrderService` 增加商家订单列表服务，统一使用 `CurrentUser.requiredMerchantTenantId()`。
+- 新增 `MerchantOrderController`，提供 `GET /api/merchant/orders`。
+- 通过 ApiFox 完成商家 A 成功读取、商家 B 空列表隔离和消费者访问 `403` 三项验收。
+- 通过 ApiFox 完成商家 A Dashboard 指标读取、商家 B 指标隔离、消费者 `403` 和倒序日期 `400` 四项验收；编译成功和商家 A 指标截图已安全归档，含可见 Authorization 的原始截图不归档。
+
+### 遇到的问题与处理
+
+| 问题 | 原因与处理 | 是否已理解 |
+|---|---|---|
+| 前端路径和后端路径为什么不同 | `/api/backend/merchant/orders` 是前端 BFF 约定，后端领域接口沿用 `/api/merchant/orders` | 是 |
+| 为什么商家订单列表不返回订单明细 | 列表先返回轻量主信息，避免每笔订单额外查询明细；详情继续使用消费者订单详情的明细组装方式 | 是 |
+| 为什么商家 B 返回空数组也算通过 | SQL 已带当前 `tenant_id` 条件；当前样例数据没有 B 的订单，空数组证明没有读到 A 的数据 | 是 |
+
+### 下一步
+
+- 当前完成的是 S6 后端范围：商家订单列表、最小经营指标和 Dashboard 只读数据约定；前端接入按用户约定暂缓。
+- 已通过 ApiFox 验证商家 A/B 租户隔离、消费者 `403` 和倒序日期 `400`；不把商家订单详情、发货、履约和状态修改误列为当前 S6 必做项。
+- 真实退款、退货物流、前端接入和 AI 主线步骤 25～30 均不在本轮范围内。
