@@ -11,7 +11,7 @@ export function SiteFooter() {
         </h2>
       </div>
       <nav>
-        <Link href="/stores/1001/products">浏览全部</Link>
+        <Link href="/stores">浏览全部</Link>
         <Link href="/journal">选物志</Link>
         <Link href="/merchant/login">商家入口</Link>
       </nav>

@@ -7,12 +7,14 @@ import { useEffect, useMemo, useState } from "react";
 import { DemoNotice } from "./DemoNotice";
 import { MerchantShell } from "./MerchantShell";
 import { StatusPill } from "./StatusPill";
+import { useSession } from "./SessionProvider";
 export function MerchantProducts() {
   const [products, setProducts] = useState<MerchantProduct[]>([]);
   const [query, setQuery] = useState("");
   const [demo, setDemo] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<number | null>(null);
+  const { user, loading } = useSession();
   async function load() {
     setError("");
     try {
@@ -28,6 +30,12 @@ export function MerchantProducts() {
     }
   }
   useEffect(() => {
+    if (loading) return;
+    if ((user?.id ?? 0) >= 99000) {
+      setProducts(demoMerchantProducts);
+      setDemo(true);
+      return;
+    }
     apiClient<MerchantProduct[]>("/api/backend/merchant/products?page=1&size=50")
       .then((result) => {
         setProducts(result);
@@ -37,7 +45,7 @@ export function MerchantProducts() {
         setProducts(demoMerchantProducts);
         setDemo(true);
       });
-  }, []);
+  }, [loading, user?.id]);
   const visible = useMemo(
     () => products.filter((p) => p.name.toLowerCase().includes(query.toLowerCase())),
     [products, query],
@@ -73,12 +81,12 @@ export function MerchantProducts() {
     >
       {demo && <DemoNotice>当前展示演示目录，演示条目不可执行上下架。</DemoNotice>}
       <div className="merchant-toolbar surface">
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索商品名称" />
+        <input aria-label="搜索商品名称" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索商品名称" />
         <span className="eyebrow">{visible.length} RESULTS</span>
       </div>
       {error && <p className="form-error">{error}</p>}
       <div className="table-scroll">
-        <table className="data-table">
+        <table className="data-table data-table--responsive">
           <thead>
             <tr>
               <th>商品</th>
@@ -92,18 +100,19 @@ export function MerchantProducts() {
           <tbody>
             {visible.map((product) => (
               <tr key={product.id}>
-                <td>
-                  <strong>{product.name}</strong>
-                  <br />
-                  <small>{product.description}</small>
+                <td data-label="商品">
+                  <div>
+                    <strong>{product.name}</strong>
+                    <small>{product.description}</small>
+                  </div>
                 </td>
-                <td>{currency(product.minSalePrice)}</td>
-                <td>{product.skuCount}</td>
-                <td>{product.totalAvailableStock}</td>
-                <td>
+                <td data-label="售价">{currency(product.minSalePrice)}</td>
+                <td data-label="SKU">{product.skuCount}</td>
+                <td data-label="库存">{product.totalAvailableStock}</td>
+                <td data-label="状态">
                   <StatusPill status={product.status} />
                 </td>
-                <td>
+                <td data-label="动作">
                   <button
                     disabled={demo || busy === product.id}
                     onClick={() => void toggle(product)}

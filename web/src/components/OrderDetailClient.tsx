@@ -1,10 +1,13 @@
 "use client";
 import { apiClient } from "@/lib/client-api";
+import { readDemoOrders, updateDemoOrderStatus } from "@/lib/demo-commerce";
 import { currency } from "@/lib/demo-data";
 import type { CreateOrderResult, OrderDetail } from "@/lib/types";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { StatusPill } from "./StatusPill";
+import { DemoNotice } from "./DemoNotice";
+import { useSession } from "./SessionProvider";
 const date = (value: string) =>
   value
     ? new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
@@ -15,6 +18,9 @@ export function OrderDetailClient({ id }: { id: number }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
+  const [demo, setDemo] = useState(false);
+  const { user, loading: sessionLoading } = useSession();
+  const demoSession = (user?.id ?? 0) >= 99000;
   async function load() {
     setLoading(true);
     setError("");
@@ -23,25 +29,36 @@ export function OrderDetailClient({ id }: { id: number }) {
       if (raw) setCreated(JSON.parse(raw));
       setOrder(await apiClient<OrderDetail>(`/api/backend/orders/${id}`));
     } catch (caught) {
-      if (!sessionStorage.getItem(`morrow_created_order_${id}`))
-        setError(caught instanceof Error ? caught.message : "订单读取失败。");
+      const local = readDemoOrders().find((entry) => entry.id === id);
+      if (local) { setOrder(local); setDemo(true); }
+      else if (!sessionStorage.getItem(`morrow_created_order_${id}`)) setError(caught instanceof Error ? caught.message : "订单读取失败。");
     } finally {
       setLoading(false);
     }
   }
   useEffect(() => {
+    if (sessionLoading) return;
     setLoading(true);
     setError("");
     const storageKey = `morrow_created_order_${id}`;
     const raw = sessionStorage.getItem(storageKey);
     if (raw) setCreated(JSON.parse(raw));
+    if (demoSession) {
+      const local = readDemoOrders().find((entry) => entry.id === id);
+      if (local) { setOrder(local); setDemo(true); }
+      else if (!raw) setError("没有找到这笔演示订单。");
+      setLoading(false);
+      return;
+    }
     apiClient<OrderDetail>(`/api/backend/orders/${id}`)
       .then(setOrder)
       .catch((caught) => {
-        if (!raw) setError(caught instanceof Error ? caught.message : "订单读取失败。");
+        const local = readDemoOrders().find((entry) => entry.id === id);
+        if (local) { setOrder(local); setDemo(true); }
+        else if (!raw) setError(caught instanceof Error ? caught.message : "订单读取失败。");
       })
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [demoSession, id, sessionLoading]);
   const status = order?.status ?? created?.status ?? "";
   const amount = order?.totalAmount ?? created?.totalAmount ?? 0;
   const no = order?.orderNo ?? created?.orderNo ?? "";
@@ -50,6 +67,11 @@ export function OrderDetailClient({ id }: { id: number }) {
     setBusy(kind);
     setError("");
     try {
+      if (demo) {
+        const updated = updateDemoOrderStatus(id, kind === "mock-pay" ? "PAID" : "CLOSED");
+        if (updated) setOrder(updated);
+        return;
+      }
       await apiClient<null>(`/api/backend/orders/${id}/${kind}`, { method: "POST" });
       if (order) setOrder({ ...order, status: kind === "mock-pay" ? "PAID" : "CLOSED" });
       if (created) setCreated({ ...created, status: kind === "mock-pay" ? "PAID" : "CLOSED" });
@@ -88,6 +110,7 @@ export function OrderDetailClient({ id }: { id: number }) {
         </div>
         <StatusPill status={status} />
       </header>
+      {demo && <DemoNotice>这是一笔本机演示订单；支付和取消只更新演示状态。</DemoNotice>}
       <section className="order-total surface">
         <span>订单合计</span>
         <strong>{currency(amount)}</strong>
@@ -127,6 +150,12 @@ export function OrderDetailClient({ id }: { id: number }) {
             <strong>{date(order?.expireAt || created?.expireAt || "")}</strong>
           </div>
         )}
+        {order && "storeName" in order ? (
+          <div className="info-row"><span>所属店铺</span><strong>{String(order.storeName)}</strong></div>
+        ) : null}
+        {order && "deliveryAddress" in order ? (
+          <div className="info-row"><span>收货信息</span><strong>{String(order.deliveryAddress)}</strong></div>
+        ) : null}
       </section>
       {pending && (
         <div className="order-actions">
@@ -141,6 +170,11 @@ export function OrderDetailClient({ id }: { id: number }) {
           <button className="button" disabled={!!busy} onClick={() => void action("cancel")} type="button">
             {busy === "cancel" ? "取消中…" : "取消订单"}
           </button>
+        </div>
+      )}
+      {status === "PAID" && demo && (
+        <div className="order-actions">
+          <Link className="button" href={`/after-sales/new?orderId=${id}`}>申请售后</Link>
         </div>
       )}
       {error && <p className="form-error">{error}</p>}

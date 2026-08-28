@@ -27,6 +27,26 @@ export interface ProductSummary {
   updatedAt: string;
 }
 
+export interface StoreSummary {
+  id: number;
+  name: string;
+  englishName: string;
+  tagline: string;
+  description: string;
+  location: string;
+  categories: string[];
+  productCount: number;
+  heroProductId: number;
+  tone: string;
+  accent: string;
+  badge: string;
+}
+
+export interface MarketplaceProduct extends ProductSummary {
+  storeId: number;
+  storeName: string;
+}
+
 export interface Sku {
   id: number;
   skuName: string;

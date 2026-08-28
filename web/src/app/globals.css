@@ -137,6 +137,7 @@ img {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   width: var(--page);
   margin: 18px auto;
   padding: 10px 13px;
@@ -145,8 +146,11 @@ img {
   background: color-mix(in srgb, var(--morrow-signal) 13%, var(--morrow-surface));
   font-family: var(--font-mono);
   font-size: 10px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 .demo-notice i {
+  flex: 0 0 auto;
   width: 7px;
   height: 7px;
   border-radius: 50%;
@@ -1312,21 +1316,44 @@ img {
 .account-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 0 28px;
 }
 .account-card {
-  min-height: 220px;
-  padding: 26px;
+  min-height: 190px;
+  padding: 28px 4px 32px;
+}
+.account-grid .account-card:not(.accent) {
+  border: 0;
+  border-top: 1px solid var(--morrow-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.account-card:first-child {
+  grid-column: 1 / -1;
+  min-height: 286px;
+  margin-bottom: 28px;
+  padding: 34px;
 }
 .account-card h2 {
-  margin: 40px 0 8px;
+  margin: 34px 0 8px;
   font: 400 30px var(--font-editorial);
 }
+.account-card:first-child h2 {
+  margin-top: auto;
+  font-size: clamp(42px, 5vw, 66px);
+}
 .account-card p {
+  max-width: 420px;
+  margin-bottom: 0;
   color: var(--morrow-muted);
   font-size: 13px;
+  line-height: 1.65;
 }
 .account-card.accent {
+  display: grid;
+  align-content: space-between;
   color: #171815;
   background: var(--morrow-signal);
 }
@@ -1433,27 +1460,71 @@ img {
 /* Journal */
 .journal-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 44px 24px;
 }
 .journal-card {
+  display: grid;
+  align-content: start;
   overflow: hidden;
+  border: 0;
+  border-top: 1px solid var(--morrow-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.journal-card:first-child,
+.journal-card:last-child {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr);
+  align-items: stretch;
+}
+.journal-card:first-child {
+  overflow: hidden;
+  border: 1px solid var(--morrow-line);
+  border-radius: 28px;
+  background: var(--morrow-surface);
+}
+.journal-card:last-child {
+  grid-template-columns: minmax(300px, .7fr) minmax(0, 1.3fr);
+  border-bottom: 1px solid var(--morrow-line);
 }
 .journal-card-media {
   position: relative;
   aspect-ratio: 16 / 9;
 }
+.journal-card:first-child .journal-card-media,
+.journal-card:last-child .journal-card-media {
+  min-height: 420px;
+  aspect-ratio: auto;
+}
+.journal-card:last-child .journal-card-media {
+  order: 2;
+}
 .journal-card-media img {
   object-fit: cover;
 }
 .journal-card-copy {
-  padding: 20px;
+  padding: 22px 2px 0;
+}
+.journal-card:first-child .journal-card-copy,
+.journal-card:last-child .journal-card-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: clamp(30px, 5vw, 64px);
 }
 .journal-card h2 {
-  margin: 11px 0 7px;
+  margin: 14px 0 8px;
   font: 400 28px / 1.1 var(--font-editorial);
 }
+.journal-card:first-child h2,
+.journal-card:last-child h2 {
+  font-size: clamp(34px, 4vw, 54px);
+}
 .journal-card p {
+  margin-bottom: 0;
   color: var(--morrow-muted);
   line-height: 1.6;
 }
@@ -1765,15 +1836,33 @@ img {
 }
 .empty-state {
   display: grid;
+  gap: 12px;
   min-height: 320px;
   place-content: center;
+  justify-items: center;
+  padding: 48px 20px;
   text-align: center;
 }
+.data-table td small {
+  display: block;
+  margin-top: 4px;
+  color: var(--morrow-muted);
+  line-height: 1.45;
+}
 .empty-state h2 {
+  max-width: 720px;
+  margin: 0;
   font: 400 32px var(--font-editorial);
 }
 .empty-state p {
+  max-width: 580px;
+  margin: 0;
   color: var(--morrow-muted);
+  line-height: 1.65;
+}
+.empty-state .button {
+  justify-self: center;
+  margin-top: 4px;
 }
 
 @media (max-width: 960px) {
@@ -1800,14 +1889,18 @@ img {
   }
   .merchant-sidebar {
     position: static;
+    min-width: 0;
+    width: 100%;
     height: auto;
     flex-direction: row;
     align-items: center;
+    overflow: hidden;
     border-right: 0;
     border-bottom: 1px solid var(--morrow-line);
   }
   .merchant-sidebar nav {
     display: flex;
+    min-width: 0;
     margin: 0 0 0 auto;
   }
   .merchant-account {
@@ -2022,7 +2115,7 @@ img {
   .detail-media {
     position: relative;
     top: auto;
-    height: 58svh;
+    height: 50svh;
   }
   .detail-copy {
     padding: 45px 12px;
@@ -2084,6 +2177,16 @@ img {
   }
   .account-grid {
     grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .account-card:first-child {
+    grid-column: auto;
+    min-height: 240px;
+    margin-bottom: 24px;
+    padding: 28px;
+  }
+  .account-card:not(:first-child) {
+    min-height: 150px;
   }
   .cart-layout {
     grid-template-columns: 1fr;
@@ -2092,16 +2195,55 @@ img {
     grid-row: 1;
   }
   .order-row {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 16px;
+    align-items: start;
+    min-height: 0;
+    padding: 22px 0;
   }
   .order-row > small {
     grid-column: 1;
+    line-height: 1.55;
+  }
+  .order-row > span {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+  .order-row h2 {
+    margin-top: 10px;
+  }
+  .order-row p {
+    margin: 5px 0 0;
   }
   .article-cover {
     margin: 35px 0;
   }
   .journal-grid {
     grid-template-columns: 1fr;
+    gap: 34px;
+  }
+  .journal-card:first-child,
+  .journal-card:last-child {
+    grid-column: auto;
+    grid-template-columns: 1fr;
+  }
+  .journal-card:first-child .journal-card-media,
+  .journal-card:last-child .journal-card-media {
+    min-height: 0;
+    aspect-ratio: 16 / 10;
+  }
+  .journal-card:last-child .journal-card-media {
+    order: 0;
+  }
+  .journal-card:first-child .journal-card-copy,
+  .journal-card:last-child .journal-card-copy {
+    padding: 26px 22px 30px;
+  }
+  .journal-card:last-child {
+    border: 1px solid var(--morrow-line);
+    border-radius: 22px;
+    background: var(--morrow-surface);
   }
   .site-footer {
     grid-template-columns: 1fr;
@@ -2114,7 +2256,13 @@ img {
     margin-top: 45px;
   }
   .merchant-sidebar nav {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 8px 16px;
     overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
   }
   .merchant-sidebar nav a {
     white-space: nowrap;
@@ -2123,7 +2271,38 @@ img {
     display: none;
   }
   .merchant-main {
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
     padding: 24px 16px 70px;
+  }
+  .merchant-main > *,
+  .merchant-head > *,
+  .create-grid > *,
+  .form-section,
+  .sku-card,
+  .panel {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .merchant-head h1 {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .metric {
+    min-width: 0;
+  }
+  .form-section input,
+  .form-section textarea,
+  .form-section select,
+  .sku-card input,
+  .sku-card textarea,
+  .sku-card select {
+    min-width: 0;
+    max-width: 100%;
   }
   .merchant-head {
     align-items: flex-start;
@@ -2144,10 +2323,59 @@ img {
     width: 100%;
   }
   .table-scroll {
-    overflow-x: auto;
+    overflow: visible;
   }
-  .data-table {
-    min-width: 720px;
+  .data-table--responsive {
+    min-width: 0;
+  }
+  .data-table--responsive thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .data-table--responsive,
+  .data-table--responsive tbody,
+  .data-table--responsive tr,
+  .data-table--responsive td {
+    display: block;
+    width: 100%;
+  }
+  .data-table--responsive tbody {
+    display: grid;
+    gap: 0;
+  }
+  .data-table--responsive tr {
+    padding: 12px 0;
+    border-top: 1px solid var(--morrow-line);
+    background: transparent;
+    box-shadow: none;
+  }
+  .data-table--responsive tr:last-child {
+    border-bottom: 1px solid var(--morrow-line);
+  }
+  .data-table--responsive td {
+    display: grid;
+    grid-template-columns: 88px minmax(0, 1fr);
+    align-items: start;
+    gap: 14px;
+    height: auto;
+    min-height: 0;
+    padding: 8px;
+    border-bottom: 0;
+  }
+  .data-table--responsive td::before {
+    content: attr(data-label);
+    color: var(--morrow-muted);
+    font-family: var(--font-mono), monospace;
+    font-size: 9px;
+    letter-spacing: .08em;
+  }
+  .data-table--responsive td:last-child {
+    border-bottom: 0;
   }
   .sku-fields {
     grid-template-columns: 1fr;

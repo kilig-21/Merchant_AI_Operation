@@ -22,10 +22,10 @@ export default function JournalPage() {
           <p>选物、空间和使用经验。推广或品牌合作内容会始终明确标识。</p>
         </header>
         <section className="journal-grid">
-          {entries.map((entry) => (
+          {entries.map((entry, index) => (
             <Link className="journal-card surface" href={`/journal/${entry.slug}`} key={entry.slug}>
               <div className="journal-card-media">
-                <Image src={entry.cover} alt={entry.title} fill sizes="50vw" />
+                <Image src={entry.cover} alt={entry.title} fill priority={index === 0} sizes="50vw" />
               </div>
               <div className="journal-card-copy">
                 {entry.sponsored && <span className="sponsored">推广 / {entry.sponsorName}</span>}

@@ -153,6 +153,24 @@ export function AuthForm({ audience, mode, submission = "live" }: AuthFormProps)
     }
   }
 
+  async function enterDemo() {
+    setLoading(true);
+    setError("");
+    try {
+      await apiClient<{ user: SessionUser }>("/api/session/demo", {
+        method: "POST",
+        body: JSON.stringify({ audience }),
+      });
+      await session.refresh();
+      router.push(isMerchant ? "/merchant/dashboard" : "/stores");
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "演示模式暂时无法进入。");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const switchHref = isMerchant
     ? isLogin
       ? "/merchant/register"
@@ -271,6 +289,11 @@ export function AuthForm({ audience, mode, submission = "live" }: AuthFormProps)
       <button className="button primary" disabled={loading} type="submit">
         {loading ? "处理中…" : spotlightCopy.submit}
       </button>
+      {isLogin ? (
+        <button className="button auth-demo-entry" disabled={loading} onClick={() => void enterDemo()} type="button">
+          {isMerchant ? "进入演示工作台" : "使用演示会员浏览"}
+        </button>
+      ) : null}
       <div className="auth-secure-note">
         <span>{submission === "demo" ? "DEMO FORM / NO REQUEST" : "SECURE MEMBER ACCESS"}</span>
         <p>

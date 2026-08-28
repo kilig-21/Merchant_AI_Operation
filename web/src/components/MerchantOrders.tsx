@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { DemoNotice } from "./DemoNotice";
 import { MerchantShell } from "./MerchantShell";
 import { StatusPill } from "./StatusPill";
+import { useSession } from "./SessionProvider";
 
 const previewOrders: OrderDetail[] = [
   {
@@ -34,14 +35,21 @@ const previewOrders: OrderDetail[] = [
 export function MerchantOrders() {
   const [orders, setOrders] = useState<OrderDetail[]>([]);
   const [preview, setPreview] = useState(false);
+  const { user, loading } = useSession();
   useEffect(() => {
+    if (loading) return;
+    if ((user?.id ?? 0) >= 99000) {
+      setOrders(previewOrders);
+      setPreview(true);
+      return;
+    }
     apiClient<OrderDetail[]>("/api/backend/merchant/orders?page=1&size=50")
       .then(setOrders)
       .catch(() => {
         setOrders(previewOrders);
         setPreview(true);
       });
-  }, []);
+  }, [loading, user?.id]);
   return (
     <MerchantShell title="订单预览" eyebrow="ORDERS / PREVIEW">
       {preview && <DemoNotice>后端暂未提供商家订单接口；这里仅呈现静态布局，不伪造履约操作。</DemoNotice>}
@@ -50,7 +58,7 @@ export function MerchantOrders() {
         <span className="eyebrow">{orders.length} RESULTS</span>
       </div>
       <div className="table-scroll">
-        <table className="data-table">
+        <table className="data-table data-table--responsive">
           <thead>
             <tr>
               <th>订单号</th>
@@ -63,15 +71,15 @@ export function MerchantOrders() {
           <tbody>
             {orders.map((order) => (
               <tr key={order.id}>
-                <td>
+                <td data-label="订单号">
                   <strong>{order.orderNo}</strong>
                 </td>
-                <td>{new Date(order.createdAt).toLocaleString("zh-CN")}</td>
-                <td>{currency(order.totalAmount)}</td>
-                <td>
+                <td data-label="创建时间">{new Date(order.createdAt).toLocaleString("zh-CN")}</td>
+                <td data-label="金额">{currency(order.totalAmount)}</td>
+                <td data-label="状态">
                   <StatusPill status={order.status} />
                 </td>
-                <td>
+                <td data-label="履约">
                   <button disabled type="button">
                     等待接口
                   </button>

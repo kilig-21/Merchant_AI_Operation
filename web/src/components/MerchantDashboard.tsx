@@ -8,17 +8,25 @@ import { DemoNotice } from "./DemoNotice";
 import { MerchantCharts } from "./MerchantCharts";
 import { MerchantShell } from "./MerchantShell";
 import { StatusPill } from "./StatusPill";
+import { useSession } from "./SessionProvider";
 export function MerchantDashboard() {
   const [products, setProducts] = useState<MerchantProduct[]>([]);
   const [demo, setDemo] = useState(false);
+  const { user, loading } = useSession();
   useEffect(() => {
+    if (loading) return;
+    if ((user?.id ?? 0) >= 99000) {
+      setProducts(demoMerchantProducts);
+      setDemo(true);
+      return;
+    }
     apiClient<MerchantProduct[]>("/api/backend/merchant/products?page=1&size=8")
       .then(setProducts)
       .catch(() => {
         setProducts(demoMerchantProducts);
         setDemo(true);
       });
-  }, []);
+  }, [loading, user?.id]);
   const onSale = useMemo(() => products.filter((p) => p.status === "ON_SALE").length, [products]);
   const stock = useMemo(() => products.reduce((sum, p) => sum + p.totalAvailableStock, 0), [products]);
   return (

@@ -10,7 +10,15 @@ export type SiteNavStoryMode = "default" | "hero" | "content";
 
 const items = [
   { href: "/", label: "首页", short: "首页" },
-  { href: "/stores/1001/products", label: "选购", short: "选购" },
+  { href: "/stores", label: "店铺", short: "店铺" },
+  { href: "/search", label: "搜索", short: "搜索" },
+  { href: "/journal", label: "选物志", short: "选物" },
+  { href: "/orders", label: "订单", short: "订单" },
+];
+
+const homeItems = [
+  { href: "/", label: "首页", short: "首页" },
+  { href: "/stores", label: "选购", short: "选购" },
   { href: "/journal", label: "选物志", short: "选物" },
   { href: "/orders", label: "订单", short: "订单" },
 ];
@@ -18,6 +26,7 @@ const items = [
 export function SiteNav({ storyMode = "default" }: { storyMode?: SiteNavStoryMode }) {
   const pathname = usePathname();
   const { user } = useSession();
+  const navItems = pathname === "/" ? homeItems : items;
   return (
     <>
       <header className="site-header">
@@ -34,7 +43,7 @@ export function SiteNav({ storyMode = "default" }: { storyMode?: SiteNavStoryMod
           blueOffset={2}
         >
           <nav className="nav-capsule" aria-label="消费者主导航">
-            {items.map((item) => (
+            {navItems.map((item) => (
               <Link
                 key={item.href}
                 className={
@@ -59,7 +68,7 @@ export function SiteNav({ storyMode = "default" }: { storyMode?: SiteNavStoryMod
         </div>
       </header>
       <nav className="mobile-dock" aria-label="移动端主导航">
-        {items.slice(0, 3).map((item, index) => (
+        {navItems.slice(0, 3).map((item, index) => (
           <Link
             key={item.href}
             className={
@@ -67,7 +76,7 @@ export function SiteNav({ storyMode = "default" }: { storyMode?: SiteNavStoryMod
             }
             href={item.href}
           >
-            <span>{["⌂", "◇", "≡"][index]}</span>
+            <span>{["⌂", "◇", pathname === "/" ? "≡" : "⌕"][index]}</span>
             {item.short}
           </Link>
         ))}
