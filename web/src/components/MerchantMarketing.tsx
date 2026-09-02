@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { DemoNotice } from "./DemoNotice";
 import { MerchantShell } from "./MerchantShell";
+import { useSession } from "./SessionProvider";
 
 const campaigns = [
   { id: "CMP-2608-01", name: "安静工作周", type: "满减", window: "08.20 — 08.27", status: "进行中", reach: "1,284" },
@@ -11,8 +12,11 @@ const campaigns = [
 ];
 
 export function MerchantMarketing() {
+  const { user, loading } = useSession();
   const [status, setStatus] = useState("全部");
   const visible = campaigns.filter((campaign) => status === "全部" || campaign.status === status);
+  if (loading) return <MerchantShell title="营销活动" eyebrow="GROWTH / CAMPAIGNS"><div className="empty-state"><p>正在确认会话状态…</p></div></MerchantShell>;
+  if (user?.isDemo !== true) return <MerchantShell title="营销活动" eyebrow="GROWTH / CAMPAIGNS"><div className="empty-state"><span className="eyebrow">LIVE SERVICE / PENDING</span><h2>真实营销活动尚未接入。</h2><p>当前不会展示或发布演示优惠活动。</p></div></MerchantShell>;
   return (
     <MerchantShell title="营销活动" eyebrow="GROWTH / CAMPAIGNS" actions={<button className="button primary" disabled type="button">＋ 创建活动</button>}>
       <DemoNotice>营销接口尚未接入；这里用于确认活动信息结构和工作流，不会发布真实优惠。</DemoNotice>

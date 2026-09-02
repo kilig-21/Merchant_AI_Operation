@@ -11,6 +11,8 @@ export interface SessionUser {
   username: string;
   userType: UserRole;
   tenantId: number | null;
+  /** 仅由 web 的会话路由写入；绝不根据用户 ID 推断演示身份。 */
+  isDemo?: boolean;
 }
 
 export interface LoginResult {
@@ -40,6 +42,13 @@ export interface StoreSummary {
   tone: string;
   accent: string;
   badge: string;
+}
+
+/** 公开店铺目录的真实接口合同。视觉素材不属于这份业务数据。 */
+export interface PublicStoreSummary {
+  id: number;
+  name: string;
+  productCount: number;
 }
 
 export interface MarketplaceProduct extends ProductSummary {

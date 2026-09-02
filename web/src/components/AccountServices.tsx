@@ -17,6 +17,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { DemoNotice } from "./DemoNotice";
 import { StatusPill } from "./StatusPill";
+import { useSession } from "./SessionProvider";
 
 const emptyAddress: Omit<DemoAddress, "id"> = { name: "", phone: "", city: "", detail: "", isDefault: false };
 
@@ -24,7 +25,12 @@ export function AddressBookClient() {
   const [addresses, setAddresses] = useState<DemoAddress[]>([]);
   const [draft, setDraft] = useState(emptyAddress);
   const [open, setOpen] = useState(false);
-  useEffect(() => setAddresses(readDemoAddresses()), []);
+  const { user, loading } = useSession();
+  useEffect(() => {
+    if (user?.isDemo === true) setAddresses(readDemoAddresses());
+  }, [user?.isDemo]);
+  if (loading) return <ServiceLoading />;
+  if (user?.isDemo !== true) return <LiveFeaturePending title="真实地址簿正在接入" detail="当前页面不会读取或修改本机演示地址。" backHref="/account" />;
   function submit(event: FormEvent) {
     event.preventDefault();
     const next = [...addresses.map((item) => ({ ...item, isDefault: draft.isDefault ? false : item.isDefault })), { ...draft, id: Date.now() }];
@@ -71,7 +77,12 @@ export function AddressBookClient() {
 
 export function FavoritesClient() {
   const [favorites, setFavorites] = useState<ReturnType<typeof readDemoFavorites>>([]);
-  useEffect(() => setFavorites(readDemoFavorites()), []);
+  const { user, loading } = useSession();
+  useEffect(() => {
+    if (user?.isDemo === true) setFavorites(readDemoFavorites());
+  }, [user?.isDemo]);
+  if (loading) return <ServiceLoading />;
+  if (user?.isDemo !== true) return <LiveFeaturePending title="真实喜欢清单尚未接入" detail="当前不会读取或修改本机演示收藏。" backHref="/account" />;
   return (
     <main className="page-shell account-service-shell">
       <Link className="eyebrow" href="/account">← 返回账户</Link>
@@ -86,7 +97,12 @@ export function FavoritesClient() {
 
 export function AfterSalesClient() {
   const [items, setItems] = useState<ReturnType<typeof readDemoAfterSales>>([]);
-  useEffect(() => setItems(readDemoAfterSales()), []);
+  const { user, loading } = useSession();
+  useEffect(() => {
+    if (user?.isDemo === true) setItems(readDemoAfterSales());
+  }, [user?.isDemo]);
+  if (loading) return <ServiceLoading />;
+  if (user?.isDemo !== true) return <LiveFeaturePending title="真实售后服务正在接入" detail="当前不会读取或创建本机演示售后申请。" backHref="/account" />;
   return (
     <main className="page-shell account-service-shell">
       <Link className="eyebrow" href="/account">← 返回账户</Link>
@@ -106,11 +122,15 @@ export function AfterSalesCreateClient() {
   const [type, setType] = useState<"RETURN" | "REFUND">("RETURN");
   const [reason, setReason] = useState("商品与预期不符");
   const [description, setDescription] = useState("");
+  const { user, loading } = useSession();
   useEffect(() => {
+    if (user?.isDemo !== true) return;
     const paid = readDemoOrders().filter((item) => item.status === "PAID");
     setOrders(paid);
     setOrderId(search.get("orderId") ?? String(paid[0]?.id ?? ""));
-  }, [search]);
+  }, [search, user?.isDemo]);
+  if (loading) return <ServiceLoading />;
+  if (user?.isDemo !== true) return <LiveFeaturePending title="真实售后申请正在接入" detail="当前不会使用演示订单创建售后申请。" backHref="/after-sales" />;
   function submit(event: FormEvent) {
     event.preventDefault();
     const order = orders.find((item) => item.id === Number(orderId));
@@ -135,7 +155,12 @@ export function AfterSalesCreateClient() {
 
 export function AfterSalesDetailClient({ id }: { id: number }) {
   const [item, setItem] = useState<ReturnType<typeof readDemoAfterSales>[number] | null | undefined>(undefined);
-  useEffect(() => setItem(readDemoAfterSales().find((entry) => entry.id === id) ?? null), [id]);
+  const { user, loading } = useSession();
+  useEffect(() => {
+    if (user?.isDemo === true) setItem(readDemoAfterSales().find((entry) => entry.id === id) ?? null);
+  }, [id, user?.isDemo]);
+  if (loading) return <ServiceLoading />;
+  if (user?.isDemo !== true) return <LiveFeaturePending title="真实售后详情正在接入" detail="当前不会读取本机演示售后记录。" backHref="/after-sales" />;
   if (item === undefined) return <main className="page-shell"><div className="empty-state"><p>正在读取售后申请…</p></div></main>;
   if (!item) return <main className="page-shell"><div className="empty-state"><h2>没有找到这笔售后申请。</h2><Link className="button" href="/after-sales">返回售后服务</Link></div></main>;
   return (
@@ -143,6 +168,23 @@ export function AfterSalesDetailClient({ id }: { id: number }) {
       <Link className="eyebrow" href="/after-sales">← 返回售后服务</Link>
       <header className="page-intro compact-intro"><div><span className="eyebrow">SERVICE / {item.id}</span><h1>申请已提交</h1></div><StatusPill status={item.status} /></header>
       <section className="service-detail surface"><span className="eyebrow">CURRENT STEP / 01</span><h2>等待商家审核</h2><p>商家会在演示流程中查看申请信息。真实系统接入后，这里将展示协商、寄回与退款节点。</p><dl><div><dt>所属店铺</dt><dd>{item.storeName}</dd></div><div><dt>关联订单</dt><dd>{item.orderNo}</dd></div><div><dt>申请类型</dt><dd>{item.type === "RETURN" ? "退货退款" : "仅退款"}</dd></div><div><dt>申请原因</dt><dd>{item.reason}</dd></div><div><dt>补充说明</dt><dd>{item.description}</dd></div></dl></section>
+    </main>
+  );
+}
+
+function ServiceLoading() {
+  return <main className="page-shell"><div className="empty-state"><p>正在确认会话状态…</p></div></main>;
+}
+
+function LiveFeaturePending({ title, detail, backHref }: { title: string; detail: string; backHref: string }) {
+  return (
+    <main className="page-shell account-service-shell">
+      <div className="empty-state">
+        <span className="eyebrow">LIVE SERVICE / PENDING</span>
+        <h2>{title}</h2>
+        <p>{detail}</p>
+        <Link className="button primary" href={backHref}>返回</Link>
+      </div>
     </main>
   );
 }

@@ -6,27 +6,31 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { DemoNotice } from "./DemoNotice";
 import { MerchantCharts } from "./MerchantCharts";
+import { RequestFailure } from "./RequestFailure";
 import { MerchantShell } from "./MerchantShell";
 import { StatusPill } from "./StatusPill";
 import { useSession } from "./SessionProvider";
 export function MerchantDashboard() {
   const [products, setProducts] = useState<MerchantProduct[]>([]);
   const [demo, setDemo] = useState(false);
+  const [failure, setFailure] = useState<unknown>(null);
   const { user, loading } = useSession();
   useEffect(() => {
     if (loading) return;
-    if ((user?.id ?? 0) >= 99000) {
+    setFailure(null);
+    if (user?.isDemo === true) {
       setProducts(demoMerchantProducts);
       setDemo(true);
       return;
     }
     apiClient<MerchantProduct[]>("/api/backend/merchant/products?page=1&size=8")
       .then(setProducts)
-      .catch(() => {
-        setProducts(demoMerchantProducts);
-        setDemo(true);
+      .catch((caught) => {
+        setProducts([]);
+        setDemo(false);
+        setFailure(caught);
       });
-  }, [loading, user?.id]);
+  }, [loading, user?.isDemo]);
   const onSale = useMemo(() => products.filter((p) => p.status === "ON_SALE").length, [products]);
   const stock = useMemo(() => products.reduce((sum, p) => sum + p.totalAvailableStock, 0), [products]);
   return (
@@ -40,6 +44,8 @@ export function MerchantDashboard() {
       }
     >
       {demo && <DemoNotice>服务未连接，经营概览显示演示数据。</DemoNotice>}
+      {failure ? <RequestFailure error={failure} loginHref="/merchant/login?redirect=/merchant/dashboard" onRetry={() => window.location.reload()} title="经营概览暂时无法读取" /> : null}
+      {!failure ? <>
       <section className="metrics">
         <article className="metric">
           <span>商品总数</span>
@@ -91,6 +97,7 @@ export function MerchantDashboard() {
           ))}
         </article>
       </section>
+      </> : null}
     </MerchantShell>
   );
 }

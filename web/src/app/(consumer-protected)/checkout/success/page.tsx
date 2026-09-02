@@ -1,6 +1,10 @@
 import Link from "next/link";
+import { getSessionState } from "@/lib/session";
+import { redirect } from "next/navigation";
 
 export default async function CheckoutSuccessPage({ searchParams }: { searchParams: Promise<{ ids?: string }> }) {
+  const session = await getSessionState();
+  if (session.status === "authenticated" && session.user.isDemo !== true) redirect("/orders");
   const ids = ((await searchParams).ids ?? "").split(",").filter(Boolean);
   return (
     <main className="page-shell checkout-success">

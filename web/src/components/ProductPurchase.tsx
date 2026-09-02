@@ -6,6 +6,7 @@ import { currency } from "@/lib/demo-data";
 import type { CartItem, ProductDetail, Sku } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { useSession } from "./SessionProvider";
 
 export function ProductPurchase({
   product,
@@ -23,9 +24,11 @@ export function ProductPurchase({
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { user } = useSession();
+  const isDemo = demo || user?.isDemo === true;
   const canAdd = useMemo(() => sku.availableStock >= quantity && sku.availableStock > 0, [sku, quantity]);
   async function add() {
-    if (demo) {
+    if (isDemo) {
       addDemoCartLine({ storeId, storeName, productId: product.id, productName: product.name, sku, quantity });
       setMessage("已加入演示购物袋；结算时会按店铺拆分订单。");
       return;
@@ -93,7 +96,7 @@ export function ProductPurchase({
       <p className="feedback">库存 {sku.availableStock} 件 · 下单前会再次确认价格与库存</p>
       {message && (
         <output className="feedback">
-          {message} {demo && <a href="/cart">查看购物袋 ↗</a>}
+          {message} {isDemo && <a href="/cart">查看购物袋 ↗</a>}
         </output>
       )}
     </>

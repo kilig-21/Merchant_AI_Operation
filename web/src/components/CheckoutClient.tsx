@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { DemoNotice } from "./DemoNotice";
+import { useSession } from "./SessionProvider";
 
 export function CheckoutClient() {
   const [lines, setLines] = useState<DemoCartLine[]>([]);
@@ -15,11 +16,14 @@ export function CheckoutClient() {
   const [address, setAddress] = useState("浙江省杭州市西湖区明日路 26 号");
   const [note, setNote] = useState("");
   const router = useRouter();
+  const { user, loading: sessionLoading } = useSession();
+  const demoSession = user?.isDemo === true;
 
   useEffect(() => {
-    setLines(readDemoCart());
+    if (sessionLoading) return;
+    setLines(demoSession ? readDemoCart() : []);
     setReady(true);
-  }, []);
+  }, [demoSession, sessionLoading]);
 
   const grouped = useMemo(() => {
     const groups = new Map<number, typeof lines>();
@@ -42,6 +46,19 @@ export function CheckoutClient() {
           <span className="eyebrow">CHECKOUT / PREPARING</span>
           <h2>正在整理结算信息。</h2>
           <p>马上就好。</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!demoSession) {
+    return (
+      <main className="page-shell checkout-page-shell">
+        <div className="empty-state">
+          <span className="eyebrow">CHECKOUT / LIVE PENDING</span>
+          <h2>真实结算正在接入。</h2>
+          <p>当前不会读取或创建演示订单。请先返回购物袋，真实结算会在购物车详情接口完成后接入。</p>
+          <Link className="button primary" href="/cart">返回购物袋</Link>
         </div>
       </main>
     );

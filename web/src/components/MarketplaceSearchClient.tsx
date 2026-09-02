@@ -1,66 +1,52 @@
 "use client";
 
-import { ProductCard } from "@/components/ProductCard";
-import { demoStores, visualFor } from "@/lib/demo-data";
-import type { MarketplaceProduct } from "@/lib/types";
-import { useMemo, useState } from "react";
+import { apiClient } from "@/lib/client-api";
+import type { MarketplaceProduct, PublicStoreSummary } from "@/lib/types";
+import { useEffect, useState } from "react";
+import { ProductCard } from "./ProductCard";
+import { RequestFailure } from "./RequestFailure";
 
-export function MarketplaceSearchClient({ products, initialQuery = "" }: { products: MarketplaceProduct[]; initialQuery?: string }) {
+export function MarketplaceSearchClient({ stores, initialQuery = "", initialStoreId = "all" }: { stores: PublicStoreSummary[]; initialQuery?: string; initialStoreId?: string }) {
   const [query, setQuery] = useState(initialQuery);
-  const [storeId, setStoreId] = useState("all");
-  const [category, setCategory] = useState("全部");
-  const categories = ["全部", ...new Set(products.map((product) => visualFor(product.id).category))];
-  const visible = useMemo(
-    () =>
-      products.filter(
-        (product) =>
-          (storeId === "all" || product.storeId === Number(storeId)) &&
-          (category === "全部" || visualFor(product.id).category === category) &&
-          `${product.name}${product.description ?? ""}${product.storeName}`.toLowerCase().includes(query.trim().toLowerCase()),
-      ),
-    [category, products, query, storeId],
-  );
+  const [storeId, setStoreId] = useState(initialStoreId);
+  const [products, setProducts] = useState<MarketplaceProduct[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [failure, setFailure] = useState<unknown>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setFailure(null);
+      const params = new URLSearchParams({ keyword: query.trim(), page: "1", size: "48" });
+      if (storeId !== "all") params.set("storeId", storeId);
+      try {
+        const result = await apiClient<MarketplaceProduct[]>(`/api/backend/public/stores/products/search?${params.toString()}`);
+        if (!cancelled) setProducts(result);
+      } catch (caught) {
+        if (!cancelled) {
+          setProducts([]);
+          setFailure(caught);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    const timer = window.setTimeout(() => void load(), 180);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [query, storeId]);
 
   return (
     <>
       <section className="market-search-panel">
-        <label className="market-search-panel__input">
-          <span>搜索整个 Morrow 市集</span>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="商品、店铺或生活场景" />
-        </label>
-        <label>
-          <span>店铺</span>
-          <select value={storeId} onChange={(event) => setStoreId(event.target.value)}>
-            <option value="all">全部店铺</option>
-            {demoStores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}
-          </select>
-        </label>
-        <label>
-          <span>分类</span>
-          <select value={category} onChange={(event) => setCategory(event.target.value)}>
-            {categories.map((item) => <option value={item} key={item}>{item}</option>)}
-          </select>
-        </label>
+        <label className="market-search-panel__input"><span>搜索整个 Morrow 市集</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="商品或店铺名称" /></label>
+        <label><span>店铺</span><select value={storeId} onChange={(event) => setStoreId(event.target.value)}><option value="all">全部店铺</option>{stores.map((store) => <option value={store.id} key={store.id}>{store.name}</option>)}</select></label>
       </section>
-      <div className="market-results-head">
-        <span className="eyebrow">{visible.length} OBJECTS / {storeId === "all" ? "ALL STORES" : `STORE ${storeId}`}</span>
-        {(query || storeId !== "all" || category !== "全部") && (
-          <button type="button" onClick={() => { setQuery(""); setStoreId("all"); setCategory("全部"); }}>清除条件</button>
-        )}
-      </div>
-      {visible.length ? (
-        <div className="product-grid market-product-grid">
-          {visible.map((product) => (
-            <ProductCard key={`${product.storeId}-${product.id}`} product={product} storeId={product.storeId} storeName={product.storeName} />
-          ))}
-        </div>
-      ) : (
-        <div className="market-empty">
-          <span className="eyebrow">0 RESULTS</span>
-          <h2>没有找到相符的物件。</h2>
-          <p>试试更短的关键词，或清除店铺与分类条件。</p>
-        </div>
-      )}
+      <div className="market-results-head"><span className="eyebrow">{loading ? "SEARCHING" : `${products.length} OBJECTS`} / {storeId === "all" ? "ALL STORES" : `STORE ${storeId}`}</span>{(query || storeId !== "all") ? <button type="button" onClick={() => { setQuery(""); setStoreId("all"); }}>清除条件</button> : null}</div>
+      {loading ? <div className="market-empty"><p>正在搜索公开商品…</p></div> : null}
+      {!loading && failure ? <RequestFailure error={failure} onRetry={() => window.location.reload()} title="公开搜索暂时不可用" /> : null}
+      {!loading && !failure && products.length ? <div className="product-grid market-product-grid">{products.map((product) => <ProductCard key={`${product.storeId}-${product.id}`} product={product} storeId={product.storeId} storeName={product.storeName} />)}</div> : null}
+      {!loading && !failure && !products.length ? <div className="market-empty"><span className="eyebrow">0 RESULTS</span><h2>没有找到相符的物件。</h2><p>试试更短的关键词，或清除店铺条件。</p></div> : null}
     </>
   );
 }

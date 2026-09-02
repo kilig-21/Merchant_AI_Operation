@@ -15,19 +15,21 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { DemoNotice } from "./DemoNotice";
+import { RequestFailure } from "./RequestFailure";
 import { useSession } from "./SessionProvider";
 
-type CartMode = "loading" | "live" | "demo";
+type CartMode = "loading" | "live" | "demo" | "error";
 
 export function CartClient() {
   const [mode, setMode] = useState<CartMode>("loading");
   const [items, setItems] = useState<CartItem[]>([]);
   const [demoItems, setDemoItems] = useState<DemoCartLine[]>([]);
   const [error, setError] = useState("");
+  const [failure, setFailure] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const router = useRouter();
   const { user, loading: sessionLoading } = useSession();
-  const demoSession = (user?.id ?? 0) >= 99000;
+  const demoSession = user?.isDemo === true;
   const count = useMemo(
     () =>
       mode === "demo"
@@ -51,6 +53,7 @@ export function CartClient() {
     async function load() {
       setMode("loading");
       setError("");
+      setFailure(null);
       if (demoSession) {
         setDemoItems(readDemoCart());
         setMode("demo");
@@ -62,10 +65,11 @@ export function CartClient() {
           setItems(nextItems);
           setMode("live");
         }
-      } catch {
+      } catch (caught) {
         if (!cancelled) {
-          setDemoItems(readDemoCart());
-          setMode("demo");
+          setItems([]);
+          setFailure(caught);
+          setMode("error");
         }
       }
     }
@@ -141,6 +145,8 @@ export function CartClient() {
       {mode === "demo" && <DemoNotice>当前使用演示购物袋；数据仅保存在本机浏览器，不会提交真实订单。</DemoNotice>}
       {mode === "loading" ? (
         <div className="empty-state"><p>正在读取购物袋…</p></div>
+      ) : mode === "error" ? (
+        <RequestFailure error={failure} loginHref="/consumer/login?redirect=/cart" onRetry={() => window.location.reload()} title="购物袋暂时无法读取" />
       ) : hasItems ? (
         <div className="cart-layout">
           <section className="cart-groups">
