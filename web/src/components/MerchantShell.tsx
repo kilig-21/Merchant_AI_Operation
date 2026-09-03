@@ -7,6 +7,7 @@ const nav = [
   { href: "/merchant/dashboard", label: "经营概览" },
   { href: "/merchant/products", label: "商品管理" },
   { href: "/merchant/orders", label: "订单管理" },
+  { href: "/merchant/after-sales", label: "售后审核" },
   { href: "/merchant/marketing", label: "营销活动" },
   { href: "/merchant/customers", label: "顾客洞察" },
   { href: "/merchant/settings", label: "店铺设置" },

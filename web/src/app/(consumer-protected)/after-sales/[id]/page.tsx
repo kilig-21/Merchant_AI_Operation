@@ -1,4 +1,4 @@
-import { AfterSalesDetailClient } from "@/components/AccountServices";
+import { AfterSalesDetailClient } from "@/components/AfterSales";
 
 export default async function AfterSalesDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

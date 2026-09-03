@@ -274,7 +274,7 @@ export function FavoritesClient() {
   );
 }
 
-export function AfterSalesClient() {
+export function DemoAfterSalesClient() {
   const [items, setItems] = useState<ReturnType<typeof readDemoAfterSales>>([]);
   const { user, loading } = useSession();
   useEffect(() => {
@@ -293,7 +293,7 @@ export function AfterSalesClient() {
   );
 }
 
-export function AfterSalesCreateClient() {
+export function DemoAfterSalesCreateClient() {
   const router = useRouter();
   const search = useSearchParams();
   const [orders, setOrders] = useState<ReturnType<typeof readDemoOrders>>([]);
@@ -332,7 +332,7 @@ export function AfterSalesCreateClient() {
   );
 }
 
-export function AfterSalesDetailClient({ id }: { id: number }) {
+export function DemoAfterSalesDetailClient({ id }: { id: number }) {
   const [item, setItem] = useState<ReturnType<typeof readDemoAfterSales>[number] | null | undefined>(undefined);
   const { user, loading } = useSession();
   useEffect(() => {
