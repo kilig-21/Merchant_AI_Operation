@@ -1,7 +1,15 @@
 import Link from "next/link";
+import { CheckoutSuccessClient } from "@/components/CheckoutSuccessClient";
+import { getSessionState } from "@/lib/session";
 
-export default async function CheckoutSuccessPage({ searchParams }: { searchParams: Promise<{ ids?: string }> }) {
-  const ids = ((await searchParams).ids ?? "").split(",").filter(Boolean);
+export default async function CheckoutSuccessPage({ searchParams }: { searchParams: Promise<{ ids?: string; checkoutGroupId?: string }> }) {
+  const session = await getSessionState();
+  const params = await searchParams;
+  if (session.status === "authenticated" && session.user.isDemo !== true) {
+    const checkoutGroupId = Number(params.checkoutGroupId);
+    if (Number.isSafeInteger(checkoutGroupId) && checkoutGroupId > 0) return <CheckoutSuccessClient checkoutGroupId={checkoutGroupId} />;
+  }
+  const ids = (params.ids ?? "").split(",").filter(Boolean);
   return (
     <main className="page-shell checkout-success">
       <span className="eyebrow">ORDER SPLIT / COMPLETE</span>

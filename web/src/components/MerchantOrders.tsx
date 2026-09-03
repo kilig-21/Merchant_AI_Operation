@@ -6,6 +6,7 @@ import type { OrderDetail } from "@/lib/types";
 import { useEffect, useState } from "react";
 import { DemoNotice } from "./DemoNotice";
 import { MerchantShell } from "./MerchantShell";
+import { RequestFailure } from "./RequestFailure";
 import { StatusPill } from "./StatusPill";
 import { useSession } from "./SessionProvider";
 
@@ -35,24 +36,29 @@ const previewOrders: OrderDetail[] = [
 export function MerchantOrders() {
   const [orders, setOrders] = useState<OrderDetail[]>([]);
   const [preview, setPreview] = useState(false);
+  const [failure, setFailure] = useState<unknown>(null);
   const { user, loading } = useSession();
   useEffect(() => {
     if (loading) return;
-    if ((user?.id ?? 0) >= 99000) {
+    setFailure(null);
+    if (user?.isDemo === true) {
       setOrders(previewOrders);
       setPreview(true);
       return;
     }
     apiClient<OrderDetail[]>("/api/backend/merchant/orders?page=1&size=50")
       .then(setOrders)
-      .catch(() => {
-        setOrders(previewOrders);
-        setPreview(true);
+      .catch((caught) => {
+        setOrders([]);
+        setPreview(false);
+        setFailure(caught);
       });
-  }, [loading, user?.id]);
+  }, [loading, user?.isDemo]);
   return (
     <MerchantShell title="订单预览" eyebrow="ORDERS / PREVIEW">
-      {preview && <DemoNotice>后端暂未提供商家订单接口；这里仅呈现静态布局，不伪造履约操作。</DemoNotice>}
+      {preview && <DemoNotice>当前显示演示订单；履约操作不会发送真实请求。</DemoNotice>}
+      {failure ? <RequestFailure error={failure} loginHref="/merchant/login?redirect=/merchant/orders" onRetry={() => window.location.reload()} title="商家订单暂时无法读取" /> : null}
+      {!failure ? <>
       <div className="merchant-toolbar surface">
         <span className="eyebrow">LATEST ORDERS</span>
         <span className="eyebrow">{orders.length} RESULTS</span>
@@ -89,6 +95,7 @@ export function MerchantOrders() {
           </tbody>
         </table>
       </div>
+      </> : null}
     </MerchantShell>
   );
 }

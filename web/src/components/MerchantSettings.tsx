@@ -5,7 +5,9 @@ import { MerchantShell } from "./MerchantShell";
 import { useSession } from "./SessionProvider";
 
 export function MerchantSettings() {
-  const { user } = useSession();
+  const { user, loading } = useSession();
+  if (loading) return <MerchantShell title="店铺设置" eyebrow="STORE / SETTINGS"><div className="empty-state"><p>正在确认会话状态…</p></div></MerchantShell>;
+  if (user?.isDemo !== true) return <MerchantShell title="店铺设置" eyebrow="STORE / SETTINGS"><div className="empty-state"><span className="eyebrow">LIVE SERVICE / PENDING</span><h2>真实店铺资料尚未接入。</h2><p>当前不会显示或保存演示店铺资料。</p></div></MerchantShell>;
   return (
     <MerchantShell title="店铺设置" eyebrow="STORE / SETTINGS">
       <DemoNotice>当前后端没有店铺资料写入接口；以下信息仅作静态界面预留。</DemoNotice>

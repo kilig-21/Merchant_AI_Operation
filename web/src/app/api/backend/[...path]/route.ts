@@ -28,10 +28,14 @@ async function forward(request: Request, context: Context) {
       body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer(),
       cache: "no-store",
     });
-    return new NextResponse(response.body, {
+    const forwarded = new NextResponse(response.body, {
       status: response.status,
       headers: { "content-type": response.headers.get("content-type") || "application/json" },
     });
+    if (response.status === 401) {
+      forwarded.cookies.set(SESSION_COOKIE, "", { httpOnly: true, expires: new Date(0), path: "/" });
+    }
+    return forwarded;
   } catch {
     return NextResponse.json({ code: 503, message: "服务暂时无法连接。", data: null }, { status: 503 });
   }

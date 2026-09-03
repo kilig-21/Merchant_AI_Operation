@@ -9,22 +9,34 @@ import {
   saveDemoAddresses,
   saveDemoFavorites,
 } from "@/lib/demo-account";
+import { apiClient } from "@/lib/client-api";
 import { readDemoOrders } from "@/lib/demo-commerce";
 import { currency, visualFor } from "@/lib/demo-data";
+import type { ConsumerAddress } from "@/lib/types";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { DemoNotice } from "./DemoNotice";
+import { RequestFailure } from "./RequestFailure";
 import { StatusPill } from "./StatusPill";
+import { useSession } from "./SessionProvider";
 
 const emptyAddress: Omit<DemoAddress, "id"> = { name: "", phone: "", city: "", detail: "", isDefault: false };
 
 export function AddressBookClient() {
+  const { user, loading } = useSession();
+  if (loading) return <ServiceLoading />;
+  return user?.isDemo ? <DemoAddressBook /> : <LiveAddressBook />;
+}
+
+function DemoAddressBook() {
   const [addresses, setAddresses] = useState<DemoAddress[]>([]);
   const [draft, setDraft] = useState(emptyAddress);
   const [open, setOpen] = useState(false);
-  useEffect(() => setAddresses(readDemoAddresses()), []);
+  useEffect(() => {
+    setAddresses(readDemoAddresses());
+  }, []);
   function submit(event: FormEvent) {
     event.preventDefault();
     const next = [...addresses.map((item) => ({ ...item, isDefault: draft.isDefault ? false : item.isDefault })), { ...draft, id: Date.now() }];
@@ -69,9 +81,187 @@ export function AddressBookClient() {
   );
 }
 
+type AddressDraft = Pick<
+  ConsumerAddress,
+  "receiverName" | "receiverPhone" | "province" | "city" | "district" | "detailAddress" | "isDefault"
+>;
+
+const emptyLiveAddress: AddressDraft = {
+  receiverName: "",
+  receiverPhone: "",
+  province: "",
+  city: "",
+  district: "",
+  detailAddress: "",
+  isDefault: false,
+};
+
+function draftFromAddress(address: ConsumerAddress): AddressDraft {
+  return {
+    receiverName: address.receiverName,
+    receiverPhone: address.receiverPhone,
+    province: address.province,
+    city: address.city,
+    district: address.district,
+    detailAddress: address.detailAddress,
+    isDefault: address.isDefault,
+  };
+}
+
+function LiveAddressBook() {
+  const [addresses, setAddresses] = useState<ConsumerAddress[]>([]);
+  const [draft, setDraft] = useState<AddressDraft>(emptyLiveAddress);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"loading" | "ready" | "error">("loading");
+  const [failure, setFailure] = useState<unknown>(null);
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [actionId, setActionId] = useState<number | null>(null);
+
+  const reload = useCallback(async () => {
+    setMode("loading");
+    setFailure(null);
+    try {
+      const next = await apiClient<ConsumerAddress[]>("/api/backend/addresses");
+      setAddresses(next);
+      setMode("ready");
+    } catch (caught) {
+      setFailure(caught);
+      setMode("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  function startCreate() {
+    setDraft(emptyLiveAddress);
+    setEditingId(null);
+    setMessage("");
+    setOpen(true);
+  }
+
+  function startEdit(address: ConsumerAddress) {
+    setDraft(draftFromAddress(address));
+    setEditingId(address.id);
+    setMessage("");
+    setOpen(true);
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage("");
+    try {
+      if (editingId === null) {
+        await apiClient<null>("/api/backend/addresses", {
+          method: "POST",
+          body: JSON.stringify(draft),
+        });
+      } else {
+        await apiClient<null>(`/api/backend/addresses/${editingId}`, {
+          method: "PUT",
+          body: JSON.stringify(draft),
+        });
+      }
+      await reload();
+      setDraft(emptyLiveAddress);
+      setEditingId(null);
+      setOpen(false);
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : "地址未能保存，请稍后重试。");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function makeDefault(address: ConsumerAddress) {
+    setActionId(address.id);
+    setMessage("");
+    try {
+      await apiClient<null>(`/api/backend/addresses/${address.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ ...draftFromAddress(address), isDefault: true }),
+      });
+      await reload();
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : "默认地址切换失败，请稍后重试。");
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  async function remove(address: ConsumerAddress) {
+    setActionId(address.id);
+    setMessage("");
+    try {
+      await apiClient<null>(`/api/backend/addresses/${address.id}`, { method: "DELETE" });
+      await reload();
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : "地址删除失败，请稍后重试。");
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  return (
+    <main className="page-shell account-service-shell">
+      <Link className="eyebrow" href="/account">← 返回账户</Link>
+      <header className="page-intro compact-intro"><div><span className="eyebrow">DELIVERY / ADDRESS BOOK</span><h1>收货信息</h1></div><p>保存的地址来自你的真实账户，可在刷新或其他浏览器会话中继续使用。</p></header>
+      {mode === "error" ? (
+        <RequestFailure error={failure} loginHref="/consumer/login?redirect=/account/addresses" onRetry={() => void reload()} title="地址簿暂时无法读取" />
+      ) : (
+        <>
+          <div className="account-service-actions"><button className="button primary" type="button" onClick={startCreate}>{open ? "新增另一地址" : "新增地址"}</button></div>
+          {open && (
+            <form className="account-form surface" onSubmit={(event) => void submit(event)}>
+              <label><span>收货人</span><input required value={draft.receiverName} onChange={(event) => setDraft({ ...draft, receiverName: event.target.value })} /></label>
+              <label><span>手机号码</span><input required value={draft.receiverPhone} onChange={(event) => setDraft({ ...draft, receiverPhone: event.target.value })} /></label>
+              <label><span>省份</span><input required value={draft.province} onChange={(event) => setDraft({ ...draft, province: event.target.value })} /></label>
+              <label><span>城市</span><input required value={draft.city} onChange={(event) => setDraft({ ...draft, city: event.target.value })} /></label>
+              <label><span>区县</span><input required value={draft.district} onChange={(event) => setDraft({ ...draft, district: event.target.value })} /></label>
+              <label className="wide"><span>详细地址</span><input required value={draft.detailAddress} onChange={(event) => setDraft({ ...draft, detailAddress: event.target.value })} /></label>
+              <label className="account-check"><input type="checkbox" checked={draft.isDefault} onChange={(event) => setDraft({ ...draft, isDefault: event.target.checked })} /><span>设为默认地址</span></label>
+              <button className="button primary" disabled={saving} type="submit">{saving ? "保存中…" : editingId === null ? "保存地址" : "保存修改"}</button>
+              {message && <p className="form-error" role="alert">{message}</p>}
+            </form>
+          )}
+          {mode === "loading" ? (
+            <div className="empty-state"><p>正在读取真实地址簿…</p></div>
+          ) : addresses.length ? (
+            <section className="address-grid">
+              {addresses.map((address, index) => (
+                <article className="address-card surface" key={address.id}>
+                  <header><span className="eyebrow">ADDRESS / {String(index + 1).padStart(2, "0")}</span>{address.isDefault && <b>默认</b>}</header>
+                  <h2>{address.receiverName}</h2><p>{address.receiverPhone}</p><p>{address.province}{address.city}{address.district}<br />{address.detailAddress}</p>
+                  <footer>
+                    <button disabled={actionId === address.id} type="button" onClick={() => startEdit(address)}>编辑</button>
+                    {!address.isDefault && <button disabled={actionId === address.id} type="button" onClick={() => void makeDefault(address)}>设为默认</button>}
+                    <button disabled={actionId === address.id} type="button" onClick={() => void remove(address)}>{actionId === address.id ? "处理中…" : "删除"}</button>
+                  </footer>
+                </article>
+              ))}
+            </section>
+          ) : (
+            <div className="empty-state"><h2>还没有保存收货地址。</h2><p>新增后，地址会保存到你的真实账户。</p><button className="button primary" type="button" onClick={startCreate}>新增地址</button></div>
+          )}
+          {!open && message && <p className="form-error" role="alert">{message}</p>}
+        </>
+      )}
+    </main>
+  );
+}
+
 export function FavoritesClient() {
   const [favorites, setFavorites] = useState<ReturnType<typeof readDemoFavorites>>([]);
-  useEffect(() => setFavorites(readDemoFavorites()), []);
+  const { user, loading } = useSession();
+  useEffect(() => {
+    if (user?.isDemo === true) setFavorites(readDemoFavorites());
+  }, [user?.isDemo]);
+  if (loading) return <ServiceLoading />;
+  if (user?.isDemo !== true) return <LiveFeaturePending title="真实喜欢清单尚未接入" detail="当前不会读取或修改本机演示收藏。" backHref="/account" />;
   return (
     <main className="page-shell account-service-shell">
       <Link className="eyebrow" href="/account">← 返回账户</Link>
@@ -86,7 +276,12 @@ export function FavoritesClient() {
 
 export function AfterSalesClient() {
   const [items, setItems] = useState<ReturnType<typeof readDemoAfterSales>>([]);
-  useEffect(() => setItems(readDemoAfterSales()), []);
+  const { user, loading } = useSession();
+  useEffect(() => {
+    if (user?.isDemo === true) setItems(readDemoAfterSales());
+  }, [user?.isDemo]);
+  if (loading) return <ServiceLoading />;
+  if (user?.isDemo !== true) return <LiveFeaturePending title="真实售后服务正在接入" detail="当前不会读取或创建本机演示售后申请。" backHref="/account" />;
   return (
     <main className="page-shell account-service-shell">
       <Link className="eyebrow" href="/account">← 返回账户</Link>
@@ -106,11 +301,15 @@ export function AfterSalesCreateClient() {
   const [type, setType] = useState<"RETURN" | "REFUND">("RETURN");
   const [reason, setReason] = useState("商品与预期不符");
   const [description, setDescription] = useState("");
+  const { user, loading } = useSession();
   useEffect(() => {
+    if (user?.isDemo !== true) return;
     const paid = readDemoOrders().filter((item) => item.status === "PAID");
     setOrders(paid);
     setOrderId(search.get("orderId") ?? String(paid[0]?.id ?? ""));
-  }, [search]);
+  }, [search, user?.isDemo]);
+  if (loading) return <ServiceLoading />;
+  if (user?.isDemo !== true) return <LiveFeaturePending title="真实售后申请正在接入" detail="当前不会使用演示订单创建售后申请。" backHref="/after-sales" />;
   function submit(event: FormEvent) {
     event.preventDefault();
     const order = orders.find((item) => item.id === Number(orderId));
@@ -135,7 +334,12 @@ export function AfterSalesCreateClient() {
 
 export function AfterSalesDetailClient({ id }: { id: number }) {
   const [item, setItem] = useState<ReturnType<typeof readDemoAfterSales>[number] | null | undefined>(undefined);
-  useEffect(() => setItem(readDemoAfterSales().find((entry) => entry.id === id) ?? null), [id]);
+  const { user, loading } = useSession();
+  useEffect(() => {
+    if (user?.isDemo === true) setItem(readDemoAfterSales().find((entry) => entry.id === id) ?? null);
+  }, [id, user?.isDemo]);
+  if (loading) return <ServiceLoading />;
+  if (user?.isDemo !== true) return <LiveFeaturePending title="真实售后详情正在接入" detail="当前不会读取本机演示售后记录。" backHref="/after-sales" />;
   if (item === undefined) return <main className="page-shell"><div className="empty-state"><p>正在读取售后申请…</p></div></main>;
   if (!item) return <main className="page-shell"><div className="empty-state"><h2>没有找到这笔售后申请。</h2><Link className="button" href="/after-sales">返回售后服务</Link></div></main>;
   return (
@@ -143,6 +347,23 @@ export function AfterSalesDetailClient({ id }: { id: number }) {
       <Link className="eyebrow" href="/after-sales">← 返回售后服务</Link>
       <header className="page-intro compact-intro"><div><span className="eyebrow">SERVICE / {item.id}</span><h1>申请已提交</h1></div><StatusPill status={item.status} /></header>
       <section className="service-detail surface"><span className="eyebrow">CURRENT STEP / 01</span><h2>等待商家审核</h2><p>商家会在演示流程中查看申请信息。真实系统接入后，这里将展示协商、寄回与退款节点。</p><dl><div><dt>所属店铺</dt><dd>{item.storeName}</dd></div><div><dt>关联订单</dt><dd>{item.orderNo}</dd></div><div><dt>申请类型</dt><dd>{item.type === "RETURN" ? "退货退款" : "仅退款"}</dd></div><div><dt>申请原因</dt><dd>{item.reason}</dd></div><div><dt>补充说明</dt><dd>{item.description}</dd></div></dl></section>
+    </main>
+  );
+}
+
+function ServiceLoading() {
+  return <main className="page-shell"><div className="empty-state"><p>正在确认会话状态…</p></div></main>;
+}
+
+function LiveFeaturePending({ title, detail, backHref }: { title: string; detail: string; backHref: string }) {
+  return (
+    <main className="page-shell account-service-shell">
+      <div className="empty-state">
+        <span className="eyebrow">LIVE SERVICE / PENDING</span>
+        <h2>{title}</h2>
+        <p>{detail}</p>
+        <Link className="button primary" href={backHref}>返回</Link>
+      </div>
     </main>
   );
 }
