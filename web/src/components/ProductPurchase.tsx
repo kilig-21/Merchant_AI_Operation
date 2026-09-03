@@ -3,7 +3,7 @@
 import { apiClient } from "@/lib/client-api";
 import { addDemoCartLine } from "@/lib/demo-commerce";
 import { currency } from "@/lib/demo-data";
-import type { CartItem, ProductDetail, Sku } from "@/lib/types";
+import type { CartItemMutation, ProductDetail, Sku } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useSession } from "./SessionProvider";
@@ -43,7 +43,7 @@ export function ProductPurchase({
         setMessage(availability.message || "库存不足。");
         return;
       }
-      await apiClient<CartItem>("/api/backend/cart/items", {
+      await apiClient<CartItemMutation>("/api/backend/cart/items", {
         method: "POST",
         body: JSON.stringify({ skuId: sku.id, quantity }),
       });

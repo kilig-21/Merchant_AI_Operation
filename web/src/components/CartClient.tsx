@@ -9,7 +9,7 @@ import {
 } from "@/lib/demo-commerce";
 import { currency, visualFor } from "@/lib/demo-data";
 import { checkoutKey, getIdempotencyKey } from "@/lib/idempotency";
-import type { CartItem, CreateOrderResult } from "@/lib/types";
+import type { CartItem, CartItemMutation, CreateOrderResult } from "@/lib/types";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -19,6 +19,24 @@ import { RequestFailure } from "./RequestFailure";
 import { useSession } from "./SessionProvider";
 
 type CartMode = "loading" | "live" | "demo" | "error";
+
+type LiveCartStoreGroup = {
+  storeId: number | null;
+  storeName: string | null;
+  items: CartItem[];
+};
+
+function currentSubtotal(items: CartItem[]) {
+  let hasPrice = false;
+  let total = 0;
+  for (const item of items) {
+    if (item.salePrice !== null) {
+      hasPrice = true;
+      total += item.salePrice * item.quantity;
+    }
+  }
+  return hasPrice ? total : null;
+}
 
 export function CartClient() {
   const [mode, setMode] = useState<CartMode>("loading");
@@ -46,6 +64,22 @@ export function CartClient() {
     for (const item of demoItems) groups.set(item.storeId, [...(groups.get(item.storeId) ?? []), item]);
     return [...groups.entries()];
   }, [demoItems]);
+  const groupedLive = useMemo(() => {
+    const groups = new Map<string, LiveCartStoreGroup>();
+    for (const item of items) {
+      const key = item.storeId === null ? `unavailable-${item.id}` : String(item.storeId);
+      const group = groups.get(key) ?? {
+        storeId: item.storeId,
+        storeName: item.storeName,
+        items: [],
+      };
+      group.items.push(item);
+      groups.set(key, group);
+    }
+    return [...groups.values()];
+  }, [items]);
+  const liveReferenceTotal = useMemo(() => currentSubtotal(items), [items]);
+  const liveCheckoutBlocked = items.some((item) => !item.purchasable);
 
   useEffect(() => {
     if (sessionLoading) return;
@@ -84,10 +118,13 @@ export function CartClient() {
     const previous = item.quantity;
     setItems((current) => current.map((entry) => (entry.id === item.id ? { ...entry, quantity: value } : entry)));
     try {
-      await apiClient<CartItem>(`/api/backend/cart/items/${item.id}`, {
+      const updated = await apiClient<CartItemMutation>(`/api/backend/cart/items/${item.id}`, {
         method: "PUT",
         body: JSON.stringify({ quantity: value }),
       });
+      setItems((current) =>
+        current.map((entry) => (entry.id === item.id ? { ...entry, quantity: updated.quantity } : entry)),
+      );
     } catch (caught) {
       setItems((current) => current.map((entry) => (entry.id === item.id ? { ...entry, quantity: previous } : entry)));
       setError(caught instanceof Error ? caught.message : "更新失败。");
@@ -184,37 +221,70 @@ export function CartClient() {
                     <footer><span>店铺小计</span><strong>{currency(lines.reduce((sum, item) => sum + item.salePrice * item.quantity, 0))}</strong></footer>
                   </section>
                 ))
-              : items.map((item) => {
-                  const visual = visualFor(Math.floor(item.skuId / 100));
-                  return (
-                    <article className="cart-item" key={item.id}>
-                      <div className="cart-thumb"><Image src={visual.image} alt="购物袋商品" fill sizes="100px" /></div>
+              : groupedLive.map((group) => (
+                  <section className="cart-store-group" key={group.storeId ?? `unavailable-${group.items[0].id}`}>
+                    <header>
                       <div>
-                        <span className="eyebrow">SKU {item.skuId}</span>
-                        <h2>商品 SKU {item.skuId}</h2>
-                        <p>价格将在下单时确认</p>
-                        <button onClick={() => void liveRemove(item)} type="button">移除</button>
+                        <span className="eyebrow">{group.storeId === null ? "UNAVAILABLE ITEM" : `STORE ${group.storeId}`}</span>
+                        <h2>{group.storeName ?? "商品信息暂不可用"}</h2>
                       </div>
-                      <div className="stepper">
-                        <button aria-label={`减少 SKU ${item.skuId} 数量`} onClick={() => void liveQuantity(item, item.quantity - 1)} type="button">−</button>
-                        <span>{item.quantity}</span>
-                        <button aria-label={`增加 SKU ${item.skuId} 数量`} onClick={() => void liveQuantity(item, item.quantity + 1)} type="button">+</button>
-                      </div>
-                    </article>
-                  );
-                })}
+                      {group.storeId !== null && <Link href={`/stores/${group.storeId}`}>查看店铺 ↗</Link>}
+                    </header>
+                    {group.items.map((item) => {
+                      const visual = visualFor(item.productId ?? item.skuId);
+                      const controlsDisabled = !item.purchasable || item.availableStock === null;
+                      return (
+                        <article className="cart-item" key={item.id}>
+                          <div className="cart-thumb" style={{ background: visual.tone }}>
+                            <Image src={visual.image} alt={item.productName ?? "已失效商品"} fill sizes="100px" />
+                          </div>
+                          <div>
+                            <span className="eyebrow">{item.skuName ?? `SKU ${item.skuId}`}</span>
+                            <h2>{item.productName ?? "商品已不可用"}</h2>
+                            <p>{currency(item.salePrice)} / 件 · 当前库存 {item.availableStock ?? "—"} 件</p>
+                            {!item.purchasable && <p className="form-error">{item.unavailableReason ?? "当前商品不可购买"}</p>}
+                            <button onClick={() => void liveRemove(item)} type="button">移除</button>
+                          </div>
+                          <div className="cart-line-price">
+                            <strong>{currency(item.salePrice === null ? null : item.salePrice * item.quantity)}</strong>
+                            <div className="stepper">
+                              <button
+                                aria-label={`减少 ${item.productName ?? `SKU ${item.skuId}`} 数量`}
+                                disabled={controlsDisabled || item.quantity <= 1}
+                                onClick={() => void liveQuantity(item, item.quantity - 1)}
+                                type="button"
+                              >
+                                −
+                              </button>
+                              <span>{item.quantity}</span>
+                              <button
+                                aria-label={`增加 ${item.productName ?? `SKU ${item.skuId}`} 数量`}
+                                disabled={controlsDisabled || (item.availableStock !== null && item.quantity >= item.availableStock)}
+                                onClick={() => void liveQuantity(item, item.quantity + 1)}
+                                type="button"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                    <footer><span>店铺参考小计</span><strong>{currency(currentSubtotal(group.items))}</strong></footer>
+                  </section>
+                ))}
           </section>
           <aside className="cart-summary surface">
             <span className="eyebrow">ORDER SUMMARY</span>
             <h2>订单摘要</h2>
             <div className="summary-row"><span>商品数量</span><strong>{count} 件</strong></div>
-            <div className="summary-row"><span>店铺数量</span><strong>{mode === "demo" ? groupedDemo.length : 1} 家</strong></div>
+            <div className="summary-row"><span>店铺数量</span><strong>{mode === "demo" ? groupedDemo.length : groupedLive.length} 家</strong></div>
             <div className="summary-row"><span>配送</span><strong>免运费</strong></div>
-            <div className="summary-row total"><span>订单总额</span><strong>{mode === "demo" ? currency(demoTotal) : "提交后确认"}</strong></div>
-            <button className="button primary" disabled={busy} onClick={() => void checkout()} type="button">
-              {busy ? "正在提交…" : "继续结算"}
+            <div className="summary-row total"><span>{mode === "demo" ? "订单总额" : "商品参考合计"}</span><strong>{mode === "demo" ? currency(demoTotal) : currency(liveReferenceTotal)}</strong></div>
+            <button className="button primary" disabled={busy || (mode === "live" && liveCheckoutBlocked)} onClick={() => void checkout()} type="button">
+              {busy ? "正在提交…" : mode === "live" && liveCheckoutBlocked ? "请先处理不可购买商品" : "继续结算"}
             </button>
-            <p>跨店商品将在提交后拆分为 {mode === "demo" ? groupedDemo.length : 1} 笔订单。</p>
+            <p>{mode === "demo" ? `跨店商品将在提交后拆分为 ${groupedDemo.length} 笔订单。` : "参考金额仅用于展示；提交时由服务端再次确认价格、库存与订单拆分。"}</p>
             {error && <p className="form-error">{error}</p>}
           </aside>
         </div>

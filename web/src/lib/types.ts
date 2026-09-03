@@ -74,6 +74,22 @@ export interface ProductDetail {
 export interface CartItem {
   id: number;
   skuId: number;
+  productId: number | null;
+  productName: string | null;
+  skuName: string | null;
+  storeId: number | null;
+  storeName: string | null;
+  salePrice: number | null;
+  availableStock: number | null;
+  quantity: number;
+  purchasable: boolean;
+  unavailableReason: string | null;
+}
+
+/** 购物车写接口的轻量响应；完整展示信息统一由 GET /api/cart/items 读取。 */
+export interface CartItemMutation {
+  id: number;
+  skuId: number;
   quantity: number;
 }
 
