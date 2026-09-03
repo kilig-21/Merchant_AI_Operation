@@ -5,6 +5,7 @@ import org.example.merchant_ai_operation.cart.dto.AddCartItemRequest;
 import org.example.merchant_ai_operation.cart.dto.UpdateCartItemRequest;
 import org.example.merchant_ai_operation.cart.entity.CartItem;
 import org.example.merchant_ai_operation.cart.mapper.CartItemMapper;
+import org.example.merchant_ai_operation.cart.vo.CartItemDetailVO;
 import org.example.merchant_ai_operation.cart.vo.CartItemVO;
 import org.example.merchant_ai_operation.common.BizException;
 import org.example.merchant_ai_operation.publicapi.product.mapper.PublicProductMapper;
@@ -80,20 +81,13 @@ public class CartService {
         return new CartItemVO(saved.getId(), saved.getSkuId(), saved.getQuantity());
     }
 
-    //列出购物车的列表
-    public List<CartItemVO> listItems(){
-        Long  consumerId = CurrentUser.requiredConsumerId();
-        return cartItemMapper.selectByConsumerId(consumerId)
-                .stream()
-                .map(item -> new CartItemVO(
-                        item.getId(),
-                        item.getSkuId(),
-                        item.getQuantity()
-                ))
-                .toList();
-
+    //列出购物车的列表(详情)
+    public List<CartItemDetailVO> listItems() {
+        Long consumerId = CurrentUser.requiredConsumerId();
+        return cartItemMapper.selectDetailsByConsumerId(consumerId);
     }
 
+    //返回购物车商品VO
     public CartItemVO updateQuantity(Long id, UpdateCartItemRequest request){
         Long consumerId = CurrentUser.requiredConsumerId();
 

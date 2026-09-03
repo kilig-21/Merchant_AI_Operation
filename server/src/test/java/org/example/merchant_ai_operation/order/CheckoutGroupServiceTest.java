@@ -2,8 +2,12 @@ package org.example.merchant_ai_operation.order;
 
 import org.example.merchant_ai_operation.order.entity.CheckoutGroup;
 import org.example.merchant_ai_operation.order.mapper.CheckoutGroupMapper;
+import org.example.merchant_ai_operation.order.mapper.CommerceOrderItemMapper;
 import org.example.merchant_ai_operation.order.mapper.CommerceOrderMapper;
 import org.example.merchant_ai_operation.order.service.CheckoutGroupService;
+import org.example.merchant_ai_operation.order.service.CommerceOrderAddressService;
+import org.example.merchant_ai_operation.order.vo.OrderAddressSnapshotVO;
+import org.example.merchant_ai_operation.order.vo.OrderItemVO;
 import org.example.merchant_ai_operation.security.LoginPrincipal;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,6 +40,12 @@ import static org.mockito.Mockito.*;
 class CheckoutGroupServiceTest {
 
     @Mock
+    private CommerceOrderItemMapper commerceOrderItemMapper;
+
+    @Mock
+    private CommerceOrderAddressService commerceOrderAddressService;
+
+    @Mock
     private CheckoutGroupMapper checkoutGroupMapper;
 
     @Mock
@@ -53,7 +63,9 @@ class CheckoutGroupServiceTest {
         checkoutGroupService = new CheckoutGroupService(
                 checkoutGroupMapper,
                 clock,
-                commerceOrderMapper
+                commerceOrderMapper,
+                commerceOrderItemMapper,
+                commerceOrderAddressService
         );
 
         LoginPrincipal principal =
@@ -147,6 +159,13 @@ class CheckoutGroupServiceTest {
         childOrder.setExpireAt(createdAt.plusMinutes(30));
         childOrder.setCreatedAt(createdAt);
 
+        OrderItemVO item = new OrderItemVO(
+                1L, 1001L, "测试 SKU", new BigDecimal("299.00"), 1
+        );
+        OrderAddressSnapshotVO address = new OrderAddressSnapshotVO(
+                "张三", "13800138000", "四川省", "成都市", "武侯区", "测试街道 1 号"
+        );
+
         when(checkoutGroupMapper.selectByIdAndConsumerId(7L, 5001L))
                 .thenReturn(group);
         when(commerceOrderMapper.selectByCheckoutGroupIdAndConsumerId(7L, 5001L))
@@ -159,9 +178,12 @@ class CheckoutGroupServiceTest {
         assertEquals(1, result.orders().size());
         assertEquals(701L, result.orders().get(0).id());
         assertEquals(7L, result.orders().get(0).checkoutGroupId());
-        assertTrue(result.orders().get(0).items().isEmpty());
-        assertNull(result.orders().get(0).shippingAddress());
+        assertEquals(1, result.orders().get(0).items().size());
+        assertEquals("测试 SKU", result.orders().get(0).items().getFirst().skuNameSnapshot());
+        assertEquals("张三", result.orders().get(0).shippingAddress().receiverName());
 
+        verify(commerceOrderItemMapper).selectItemVOByOrderId(701L);
+        verify(commerceOrderAddressService).getSnapshot(701L);
         verify(checkoutGroupMapper).selectByIdAndConsumerId(7L, 5001L);
         verify(commerceOrderMapper)
                 .selectByCheckoutGroupIdAndConsumerId(7L, 5001L);

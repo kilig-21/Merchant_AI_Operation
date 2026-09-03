@@ -5,6 +5,7 @@ import jakarta.validation.Valid;
 import org.example.merchant_ai_operation.cart.dto.AddCartItemRequest;
 import org.example.merchant_ai_operation.cart.dto.UpdateCartItemRequest;
 import org.example.merchant_ai_operation.cart.service.CartService;
+import org.example.merchant_ai_operation.cart.vo.CartItemDetailVO;
 import org.example.merchant_ai_operation.cart.vo.CartItemVO;
 import org.example.merchant_ai_operation.common.ApiResponse;
 import org.springframework.web.bind.annotation.*;
@@ -27,7 +28,7 @@ public class CartController {
 
     //列出购物车列表
     @GetMapping
-    public ApiResponse<List<CartItemVO>> listItems() {
+    public ApiResponse<List<CartItemDetailVO>> listItems() {
         return ApiResponse.ok(cartService.listItems());
     }
 

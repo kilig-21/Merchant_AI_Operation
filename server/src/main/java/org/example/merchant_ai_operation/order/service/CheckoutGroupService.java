@@ -4,6 +4,7 @@ package org.example.merchant_ai_operation.order.service;
 import org.example.merchant_ai_operation.common.BizException;
 import org.example.merchant_ai_operation.order.entity.CheckoutGroup;
 import org.example.merchant_ai_operation.order.mapper.CheckoutGroupMapper;
+import org.example.merchant_ai_operation.order.mapper.CommerceOrderItemMapper;
 import org.example.merchant_ai_operation.order.mapper.CommerceOrderMapper;
 import org.example.merchant_ai_operation.order.vo.CheckoutGroupDetailVO;
 import org.example.merchant_ai_operation.order.vo.OrderDetailVO;
@@ -25,14 +26,20 @@ public class CheckoutGroupService {
     private final CheckoutGroupMapper checkoutGroupMapper;
     private final Clock applicationClock;
     private final CommerceOrderMapper commerceOrderMapper;
+    private final CommerceOrderItemMapper commerceOrderItemMapper;
+    private final CommerceOrderAddressService commerceOrderAddressService;
     public CheckoutGroupService(
             CheckoutGroupMapper checkoutGroupMapper,
             Clock applicationClock,
-            CommerceOrderMapper commerceOrderMapper
+            CommerceOrderMapper commerceOrderMapper,
+            CommerceOrderItemMapper commerceOrderItemMapper,
+    CommerceOrderAddressService commerceOrderAddressService
     ) {
         this.checkoutGroupMapper = checkoutGroupMapper;
         this.applicationClock = applicationClock;
         this.commerceOrderMapper = commerceOrderMapper;
+        this.commerceOrderItemMapper = commerceOrderItemMapper;
+        this.commerceOrderAddressService = commerceOrderAddressService;
     }
 
     //创建自己的结算组
@@ -151,8 +158,8 @@ public class CheckoutGroupService {
                         order.getTotalAmount(),
                         order.getExpireAt(),
                         order.getCreatedAt(),
-                        List.of(),
-                        null
+                        commerceOrderItemMapper.selectItemVOByOrderId(order.getId()),
+                        commerceOrderAddressService.getSnapshot(order.getId())
                 ))
                 .toList();
 
