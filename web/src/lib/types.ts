@@ -174,6 +174,35 @@ export interface CreateCheckoutGroupResult {
   orders: CreateOrderResult[];
 }
 
+export type AfterSaleStatus = "SUBMITTED" | "REVIEWING" | "APPROVED" | "REJECTED" | string;
+
+/** 消费者与商家共用的售后读取模型；不含内部租户、消费者和审核人字段。 */
+export interface AfterSaleRequest {
+  id: number;
+  requestNo: string;
+  orderId: number;
+  orderItemId: number;
+  quantity: number;
+  requestedAmount: number;
+  reason: string;
+  status: AfterSaleStatus;
+  merchantRemark: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 消费者可申请售后的已支付订单项上下文。 */
+export interface AfterSaleEligibleOrderItem {
+  orderId: number;
+  orderItemId: number;
+  tenantId: number;
+  consumerId: number;
+  orderStatus: string;
+  salePrice: number;
+  purchasedQuantity: number;
+}
+
 export interface MerchantProduct {
   id: number;
   name: string;
