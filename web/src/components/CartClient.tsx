@@ -8,8 +8,7 @@ import {
   updateDemoCartLine,
 } from "@/lib/demo-commerce";
 import { currency, visualFor } from "@/lib/demo-data";
-import { checkoutKey, getIdempotencyKey } from "@/lib/idempotency";
-import type { CartItem, CartItemMutation, CreateOrderResult } from "@/lib/types";
+import type { CartItem, CartItemMutation } from "@/lib/types";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -42,6 +41,7 @@ export function CartClient() {
   const [mode, setMode] = useState<CartMode>("loading");
   const [items, setItems] = useState<CartItem[]>([]);
   const [demoItems, setDemoItems] = useState<DemoCartLine[]>([]);
+  const [selectedLiveIds, setSelectedLiveIds] = useState<number[]>([]);
   const [error, setError] = useState("");
   const [failure, setFailure] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
@@ -78,8 +78,16 @@ export function CartClient() {
     }
     return [...groups.values()];
   }, [items]);
-  const liveReferenceTotal = useMemo(() => currentSubtotal(items), [items]);
-  const liveCheckoutBlocked = items.some((item) => !item.purchasable);
+  const selectedLiveItems = useMemo(
+    () => items.filter((item) => selectedLiveIds.includes(item.id)),
+    [items, selectedLiveIds],
+  );
+  const selectedLiveCount = useMemo(
+    () => selectedLiveItems.reduce((sum, item) => sum + item.quantity, 0),
+    [selectedLiveItems],
+  );
+  const selectedLiveTotal = useMemo(() => currentSubtotal(selectedLiveItems), [selectedLiveItems]);
+  const liveCheckoutBlocked = !selectedLiveItems.length || selectedLiveItems.some((item) => !item.purchasable);
 
   useEffect(() => {
     if (sessionLoading) return;
@@ -97,6 +105,7 @@ export function CartClient() {
         const nextItems = await apiClient<CartItem[]>("/api/backend/cart/items");
         if (!cancelled) {
           setItems(nextItems);
+          setSelectedLiveIds(nextItems.filter((item) => item.purchasable).map((item) => item.id));
           setMode("live");
         }
       } catch (caught) {
@@ -133,11 +142,14 @@ export function CartClient() {
 
   async function liveRemove(item: CartItem) {
     const previous = items;
+    const wasSelected = selectedLiveIds.includes(item.id);
     setItems((current) => current.filter((entry) => entry.id !== item.id));
+    setSelectedLiveIds((current) => current.filter((id) => id !== item.id));
     try {
       await apiClient<null>(`/api/backend/cart/items/${item.id}`, { method: "DELETE" });
     } catch (caught) {
       setItems(previous);
+      if (wasSelected) setSelectedLiveIds((current) => [...new Set([...current, item.id])]);
       setError(caught instanceof Error ? caught.message : "移除失败。");
     }
   }
@@ -148,24 +160,12 @@ export function CartClient() {
       router.push("/checkout");
       return;
     }
-    setBusy(true);
-    setError("");
-    const ids = items.map((item) => item.id);
-    const idempotency = getIdempotencyKey(ids);
-    try {
-      const order = await apiClient<CreateOrderResult>("/api/backend/orders", {
-        method: "POST",
-        headers: { "Idempotency-Key": idempotency },
-        body: JSON.stringify({ cartItemIds: ids }),
-      });
-      sessionStorage.removeItem(checkoutKey(ids));
-      sessionStorage.setItem(`morrow_created_order_${order.orderId}`, JSON.stringify(order));
-      router.push(`/orders/${order.orderId}?created=1`);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "下单失败。");
-    } finally {
-      setBusy(false);
-    }
+    const ids = selectedLiveItems.map((item) => item.id);
+    router.push(`/checkout?cartItemIds=${ids.join(",")}`);
+  }
+
+  function toggleLiveSelection(id: number) {
+    setSelectedLiveIds((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]);
   }
 
   const hasItems = mode === "demo" ? demoItems.length > 0 : items.length > 0;
@@ -234,7 +234,16 @@ export function CartClient() {
                       const visual = visualFor(item.productId ?? item.skuId);
                       const controlsDisabled = !item.purchasable || item.availableStock === null;
                       return (
-                        <article className="cart-item" key={item.id}>
+                        <article className="cart-item cart-item--live" key={item.id}>
+                          <label className="cart-select">
+                            <input
+                              checked={selectedLiveIds.includes(item.id)}
+                              disabled={!item.purchasable}
+                              onChange={() => toggleLiveSelection(item.id)}
+                              type="checkbox"
+                            />
+                            <span className="sr-only">选择 {item.productName ?? `SKU ${item.skuId}`}</span>
+                          </label>
                           <div className="cart-thumb" style={{ background: visual.tone }}>
                             <Image src={visual.image} alt={item.productName ?? "已失效商品"} fill sizes="100px" />
                           </div>
@@ -277,12 +286,12 @@ export function CartClient() {
           <aside className="cart-summary surface">
             <span className="eyebrow">ORDER SUMMARY</span>
             <h2>订单摘要</h2>
-            <div className="summary-row"><span>商品数量</span><strong>{count} 件</strong></div>
-            <div className="summary-row"><span>店铺数量</span><strong>{mode === "demo" ? groupedDemo.length : groupedLive.length} 家</strong></div>
+            <div className="summary-row"><span>商品数量</span><strong>{mode === "demo" ? count : selectedLiveCount} 件</strong></div>
+            <div className="summary-row"><span>店铺数量</span><strong>{mode === "demo" ? groupedDemo.length : new Set(selectedLiveItems.map((item) => item.storeId)).size} 家</strong></div>
             <div className="summary-row"><span>配送</span><strong>免运费</strong></div>
-            <div className="summary-row total"><span>{mode === "demo" ? "订单总额" : "商品参考合计"}</span><strong>{mode === "demo" ? currency(demoTotal) : currency(liveReferenceTotal)}</strong></div>
+            <div className="summary-row total"><span>{mode === "demo" ? "订单总额" : "商品参考合计"}</span><strong>{mode === "demo" ? currency(demoTotal) : currency(selectedLiveTotal)}</strong></div>
             <button className="button primary" disabled={busy || (mode === "live" && liveCheckoutBlocked)} onClick={() => void checkout()} type="button">
-              {busy ? "正在提交…" : mode === "live" && liveCheckoutBlocked ? "请先处理不可购买商品" : "继续结算"}
+              {busy ? "正在提交…" : mode === "live" && !selectedLiveItems.length ? "请选择结算商品" : mode === "live" && liveCheckoutBlocked ? "请先处理不可购买商品" : "继续结算"}
             </button>
             <p>{mode === "demo" ? `跨店商品将在提交后拆分为 ${groupedDemo.length} 笔订单。` : "参考金额仅用于展示；提交时由服务端再次确认价格、库存与订单拆分。"}</p>
             {error && <p className="form-error">{error}</p>}

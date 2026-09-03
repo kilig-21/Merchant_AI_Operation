@@ -106,7 +106,7 @@ export interface ConsumerAddress {
   updatedAt: string;
 }
 
-export type OrderStatus = "PENDING_PAYMENT" | "PAID" | "CLOSED" | string;
+export type OrderStatus = "PENDING_PAYMENT" | "PAID" | "CANCELLED" | "CLOSED" | string;
 
 export interface OrderItem {
   id: number;
@@ -133,6 +133,45 @@ export interface CreateOrderResult {
   status: OrderStatus;
   totalAmount: number;
   expireAt: string;
+}
+
+export interface ShippingAddress {
+  receiverName: string;
+  receiverPhone: string;
+  province: string;
+  city: string;
+  district: string;
+  detailAddress: string;
+}
+
+export interface CheckoutOrder {
+  id: number;
+  checkoutGroupId: number;
+  orderNo: string;
+  tenantId: number;
+  status: OrderStatus;
+  totalAmount: number;
+  expireAt: string;
+  createdAt: string;
+  items: OrderItem[];
+  shippingAddress: ShippingAddress | null;
+}
+
+export interface CheckoutGroup {
+  checkoutGroupId: number;
+  checkoutNo: string;
+  status: OrderStatus;
+  totalAmount: number;
+  createdAt: string;
+  orders: CheckoutOrder[];
+}
+
+export interface CreateCheckoutGroupResult {
+  checkoutGroupId: number;
+  checkoutNo: string;
+  status: OrderStatus;
+  totalAmount: number;
+  orders: CreateOrderResult[];
 }
 
 export interface MerchantProduct {
