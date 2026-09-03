@@ -8,25 +8,70 @@
 | 项目 | 进度 |
 |---|---|
 | 原主线步骤 | `████████████████████████` 24 / 36（步骤 24 已完成） |
-| 新主线开发 | `██░░░░░░░░░░░░░` 2 / 15（R1、R2 已完成；R3～R9、A1～A6 待推进） |
+| 新主线开发 | `█████░░░░░░░░░░` 5 / 15（R1～R5 已完成；R6～R9、A1～A6 待推进） |
 | 当前阶段 | 真实电商联调、AI 与版本演进 |
 | 周验收 | 已通过 |
-| 最近提交 | `1fccdfa feat(web): 完成 R1/R2 真实接口联调` |
+| 最近提交 | 后端：`3415ae9 feat(checkout): return order details in checkout group`；前端：`61191b8 feat(web): connect real checkout flow` |
 
 ## 进度看板
 | 项目     | 当前状态                         |
 | ------ | ---------------------------- |
 | 当前阶段   | 真实电商联调、AI 与版本演进 |
 | 当前文档   | `D:\ALLAPPS\Note_Apps\Document\Coding\真实电商联调、AI与版本演进开发链.md` |
-| 当前步骤   | R3：补齐真实购物车展示数据（待开始；后端由用户逐步编写） |
-| 本周目标   | 完成真实购物车详情接口合同与第一轮后端实现，再由前端接线 |
-| 今日目标   | R1、R2 已完成真实接口接线与关键失败态验收；整理结果后进入 R3 接口盘点 |
+| 当前步骤   | R5 已完成：等待后端与前端分支合并到集成分支后进行浏览器级真实联调 |
+| 本周目标   | 完成真实购物车、地址选择与跨店结算页面接线，并验证创建、取消、库存失败与支付闭环 |
+| 今日目标   | R3～R5：真实购物车详情、地址选择、跨店结算及前端接线 |
 | 昨日完成   | R1：真实/Demo 模式边界；R2：真实店铺目录、店铺商品与全站搜索 |
-| 当前卡点   | 真实购物车列表仍缺少前端完整展示所需的商品、SKU、店铺、价格、库存和可售状态快照字段 |
-| 最近一次提交 | 前端分支：`1fccdfa feat(web): 完成 R1/R2 真实接口联调`；后端分支文档：`adfddfd daily文档修改:新路线开发启动` |
-| 明日优先   | 先确认 R3 `CartItemDetailVO` 接口合同，再由用户完成后端 Join 查询与消费者隔离测试 |
+| 当前卡点   | 两个功能分支尚未合并；真实浏览器端到端验收必须在集成分支完成，不能在任一单独分支上宣称已完成 |
+| 最近一次提交 | 后端：`5fe0766`、`3415ae9`；前端：`61191b8` |
+| 明日优先   | 创建集成分支，合并 `feature/backend` 与 `feature/web-v2`，用真实消费者会话完成浏览器级结算验收 |
 
 ## 每日任务
+
+## Day 33：2026-09-03 / R3～R5 真实购物车与跨店结算闭环
+
+### 今日阶段
+
+- 当前步骤：R3 真实购物车详情、R4 地址选择、R5 跨店结算与前端接线。
+- 协作边界：后端业务代码由用户在 `feature/backend` 编写；前端由 Agent 在 `feature/web-v2` 实现；提交和推送均由用户执行。
+
+### 今天完成
+
+- [x] R3：`GET /api/cart/items` 改为返回 `CartItemDetailVO`。查询从当前消费者的 `cart_item` 出发，关联 SKU、SPU 和店铺，返回商品名、SKU 名、店铺、成交价、可用库存、数量、`purchasable` 与不可购买原因。
+- [x] R3：真实购物车已能展示两个商家的商品；库存为 `0` 时返回 `purchasable: false` 与“库存不足”，不再把本地 Demo 数据伪装成真实结果。
+- [x] R4：复用现有 `GET /api/addresses`，结算时读取当前消费者地址并默认选中默认地址；没有地址时前端引导用户去地址簿补充。
+- [x] R5：通过 `POST /api/checkouts` 用两个购物车项创建跨店结算组 `8`，返回两笔待支付子订单，总金额 `398.00`。
+- [x] R5：同一 `Idempotency-Key` 携带不同结算参数返回 HTTP/body `409`；幂等键不允许跨参数复用。
+- [x] R5：取消结算组 `8` 后父组和两笔子订单均为 `CANCELLED`，两条 SKU 库存恢复为 `16`、`5`，`locked_stock` 回到 `0`。
+- [x] R5：补齐结算组详情子订单的 `items` 与 `shippingAddress`；`GET /api/checkouts/8` 不再只返回空数组和 `null`。
+- [x] R5：构造一个 SKU 库存为 `0` 的失败路径，跨店提交返回 HTTP/body `409`“商品库存不足”；购物车仍保留，库存/锁定库存未变化，未产生结算组、子订单或幂等记录。
+- [x] R5：库存恢复后用新的幂等键成功创建结算组 `10`，调用 `POST /api/checkouts/10/mock-pay` 后父组和两笔子订单均为 `PAID`；两个 SKU 的可用库存为 `15`、`4`，锁定库存均为 `0`。
+- [x] 前端：`feature/web-v2` 已完成勾选真实购物车商品、地址选择、创建结算组、详情页、刷新、模拟支付、取消和错误提示，用户已提交 `61191b8 feat(web): connect real checkout flow`。
+
+### 今日验收
+
+- [x] ApiFox：真实购物车详情、跨店创建、幂等冲突、取消后详情、库存不足失败、支付后详情均得到预期 HTTP 状态和业务状态。
+- [x] DataGrip：取消后库存恢复、失败提交后库存未变、支付后库存扣减且锁定库存归零。
+- [x] 前端分支：`npm run check`、`npm test`（4 项通过）和 `npm run build` 已通过；生产构建路由包含 `/cart`、`/checkout`、`/checkout/success`。
+- [ ] 尚未进行合并后的浏览器级真实验收；单独的后端/前端分支各自只包含本分支的代码快照，这是 Git 分支隔离的正常行为。
+
+### 今日截图记录
+
+- `docs/images/day-33-r3-r5/cart-live-details-two-stores.png`：真实购物车返回两个商家的详细商品数据。
+- `docs/images/day-33-r3-r5/checkout-group-8-submit-success.png`：跨店结算组 `8` 创建成功，返回两笔子订单和总额 `398.00`。
+- `docs/images/day-33-r3-r5/checkout-idempotency-conflict.png`：同一幂等键用于不同结算参数被 `409` 拒绝。
+- `docs/images/day-33-r3-r5/checkout-group-8-cancelled-detail.png`：取消后详情包含 `CANCELLED` 状态、订单项和收货地址快照。
+- `docs/images/day-33-r3-r5/inventory-restored-after-cancel.png`：取消后两个 SKU 的库存恢复、锁定库存清零。
+- `docs/images/day-33-r3-r5/cart-out-of-stock-state.png`：库存不足商品在真实购物车中明确标记为不可购买。
+- `docs/images/day-33-r3-r5/inventory-unchanged-after-failed-checkout.png`：失败提交后库存与锁定库存未被污染。
+- `docs/images/day-33-r3-r5/checkout-group-10-paid-detail.png`：结算组 `10` 支付后父组和子订单均为 `PAID`。
+- `docs/images/day-33-r3-r5/inventory-deducted-after-payment.png`：支付后库存扣减，两个 SKU 的锁定库存均为 `0`。
+
+### 当前边界与下一步
+
+- 后端提交 `5fe0766`、`3415ae9` 和前端提交 `61191b8` 仍位于不同分支；这不是代码缺失，而是两个独立快照。
+- 下一步应新建集成分支，先合并 `feature/backend` 与 `feature/web-v2`，再在浏览器用真实消费者会话复验：勾选商品、选地址、创建、刷新详情、支付、取消与库存不足提示。
+- 本日不自动合并、不自动提交或推送文档；由用户检查后自行提交。
 
 ## Day 32：2026-09-02 / R1、R2 真实前端联调验收
 
