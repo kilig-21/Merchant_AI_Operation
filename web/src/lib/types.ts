@@ -93,6 +93,19 @@ export interface CartItemMutation {
   quantity: number;
 }
 
+export interface ConsumerAddress {
+  id: number;
+  receiverName: string;
+  receiverPhone: string;
+  province: string;
+  city: string;
+  district: string;
+  detailAddress: string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type OrderStatus = "PENDING_PAYMENT" | "PAID" | "CLOSED" | string;
 
 export interface OrderItem {

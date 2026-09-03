@@ -9,28 +9,34 @@ import {
   saveDemoAddresses,
   saveDemoFavorites,
 } from "@/lib/demo-account";
+import { apiClient } from "@/lib/client-api";
 import { readDemoOrders } from "@/lib/demo-commerce";
 import { currency, visualFor } from "@/lib/demo-data";
+import type { ConsumerAddress } from "@/lib/types";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { DemoNotice } from "./DemoNotice";
+import { RequestFailure } from "./RequestFailure";
 import { StatusPill } from "./StatusPill";
 import { useSession } from "./SessionProvider";
 
 const emptyAddress: Omit<DemoAddress, "id"> = { name: "", phone: "", city: "", detail: "", isDefault: false };
 
 export function AddressBookClient() {
+  const { user, loading } = useSession();
+  if (loading) return <ServiceLoading />;
+  return user?.isDemo ? <DemoAddressBook /> : <LiveAddressBook />;
+}
+
+function DemoAddressBook() {
   const [addresses, setAddresses] = useState<DemoAddress[]>([]);
   const [draft, setDraft] = useState(emptyAddress);
   const [open, setOpen] = useState(false);
-  const { user, loading } = useSession();
   useEffect(() => {
-    if (user?.isDemo === true) setAddresses(readDemoAddresses());
-  }, [user?.isDemo]);
-  if (loading) return <ServiceLoading />;
-  if (user?.isDemo !== true) return <LiveFeaturePending title="真实地址簿正在接入" detail="当前页面不会读取或修改本机演示地址。" backHref="/account" />;
+    setAddresses(readDemoAddresses());
+  }, []);
   function submit(event: FormEvent) {
     event.preventDefault();
     const next = [...addresses.map((item) => ({ ...item, isDefault: draft.isDefault ? false : item.isDefault })), { ...draft, id: Date.now() }];
@@ -71,6 +77,179 @@ export function AddressBookClient() {
           </article>
         ))}
       </section>
+    </main>
+  );
+}
+
+type AddressDraft = Pick<
+  ConsumerAddress,
+  "receiverName" | "receiverPhone" | "province" | "city" | "district" | "detailAddress" | "isDefault"
+>;
+
+const emptyLiveAddress: AddressDraft = {
+  receiverName: "",
+  receiverPhone: "",
+  province: "",
+  city: "",
+  district: "",
+  detailAddress: "",
+  isDefault: false,
+};
+
+function draftFromAddress(address: ConsumerAddress): AddressDraft {
+  return {
+    receiverName: address.receiverName,
+    receiverPhone: address.receiverPhone,
+    province: address.province,
+    city: address.city,
+    district: address.district,
+    detailAddress: address.detailAddress,
+    isDefault: address.isDefault,
+  };
+}
+
+function LiveAddressBook() {
+  const [addresses, setAddresses] = useState<ConsumerAddress[]>([]);
+  const [draft, setDraft] = useState<AddressDraft>(emptyLiveAddress);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"loading" | "ready" | "error">("loading");
+  const [failure, setFailure] = useState<unknown>(null);
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [actionId, setActionId] = useState<number | null>(null);
+
+  const reload = useCallback(async () => {
+    setMode("loading");
+    setFailure(null);
+    try {
+      const next = await apiClient<ConsumerAddress[]>("/api/backend/addresses");
+      setAddresses(next);
+      setMode("ready");
+    } catch (caught) {
+      setFailure(caught);
+      setMode("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  function startCreate() {
+    setDraft(emptyLiveAddress);
+    setEditingId(null);
+    setMessage("");
+    setOpen(true);
+  }
+
+  function startEdit(address: ConsumerAddress) {
+    setDraft(draftFromAddress(address));
+    setEditingId(address.id);
+    setMessage("");
+    setOpen(true);
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage("");
+    try {
+      if (editingId === null) {
+        await apiClient<null>("/api/backend/addresses", {
+          method: "POST",
+          body: JSON.stringify(draft),
+        });
+      } else {
+        await apiClient<null>(`/api/backend/addresses/${editingId}`, {
+          method: "PUT",
+          body: JSON.stringify(draft),
+        });
+      }
+      await reload();
+      setDraft(emptyLiveAddress);
+      setEditingId(null);
+      setOpen(false);
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : "地址未能保存，请稍后重试。");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function makeDefault(address: ConsumerAddress) {
+    setActionId(address.id);
+    setMessage("");
+    try {
+      await apiClient<null>(`/api/backend/addresses/${address.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ ...draftFromAddress(address), isDefault: true }),
+      });
+      await reload();
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : "默认地址切换失败，请稍后重试。");
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  async function remove(address: ConsumerAddress) {
+    setActionId(address.id);
+    setMessage("");
+    try {
+      await apiClient<null>(`/api/backend/addresses/${address.id}`, { method: "DELETE" });
+      await reload();
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : "地址删除失败，请稍后重试。");
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  return (
+    <main className="page-shell account-service-shell">
+      <Link className="eyebrow" href="/account">← 返回账户</Link>
+      <header className="page-intro compact-intro"><div><span className="eyebrow">DELIVERY / ADDRESS BOOK</span><h1>收货信息</h1></div><p>保存的地址来自你的真实账户，可在刷新或其他浏览器会话中继续使用。</p></header>
+      {mode === "error" ? (
+        <RequestFailure error={failure} loginHref="/consumer/login?redirect=/account/addresses" onRetry={() => void reload()} title="地址簿暂时无法读取" />
+      ) : (
+        <>
+          <div className="account-service-actions"><button className="button primary" type="button" onClick={startCreate}>{open ? "新增另一地址" : "新增地址"}</button></div>
+          {open && (
+            <form className="account-form surface" onSubmit={(event) => void submit(event)}>
+              <label><span>收货人</span><input required value={draft.receiverName} onChange={(event) => setDraft({ ...draft, receiverName: event.target.value })} /></label>
+              <label><span>手机号码</span><input required value={draft.receiverPhone} onChange={(event) => setDraft({ ...draft, receiverPhone: event.target.value })} /></label>
+              <label><span>省份</span><input required value={draft.province} onChange={(event) => setDraft({ ...draft, province: event.target.value })} /></label>
+              <label><span>城市</span><input required value={draft.city} onChange={(event) => setDraft({ ...draft, city: event.target.value })} /></label>
+              <label><span>区县</span><input required value={draft.district} onChange={(event) => setDraft({ ...draft, district: event.target.value })} /></label>
+              <label className="wide"><span>详细地址</span><input required value={draft.detailAddress} onChange={(event) => setDraft({ ...draft, detailAddress: event.target.value })} /></label>
+              <label className="account-check"><input type="checkbox" checked={draft.isDefault} onChange={(event) => setDraft({ ...draft, isDefault: event.target.checked })} /><span>设为默认地址</span></label>
+              <button className="button primary" disabled={saving} type="submit">{saving ? "保存中…" : editingId === null ? "保存地址" : "保存修改"}</button>
+              {message && <p className="form-error" role="alert">{message}</p>}
+            </form>
+          )}
+          {mode === "loading" ? (
+            <div className="empty-state"><p>正在读取真实地址簿…</p></div>
+          ) : addresses.length ? (
+            <section className="address-grid">
+              {addresses.map((address, index) => (
+                <article className="address-card surface" key={address.id}>
+                  <header><span className="eyebrow">ADDRESS / {String(index + 1).padStart(2, "0")}</span>{address.isDefault && <b>默认</b>}</header>
+                  <h2>{address.receiverName}</h2><p>{address.receiverPhone}</p><p>{address.province}{address.city}{address.district}<br />{address.detailAddress}</p>
+                  <footer>
+                    <button disabled={actionId === address.id} type="button" onClick={() => startEdit(address)}>编辑</button>
+                    {!address.isDefault && <button disabled={actionId === address.id} type="button" onClick={() => void makeDefault(address)}>设为默认</button>}
+                    <button disabled={actionId === address.id} type="button" onClick={() => void remove(address)}>{actionId === address.id ? "处理中…" : "删除"}</button>
+                  </footer>
+                </article>
+              ))}
+            </section>
+          ) : (
+            <div className="empty-state"><h2>还没有保存收货地址。</h2><p>新增后，地址会保存到你的真实账户。</p><button className="button primary" type="button" onClick={startCreate}>新增地址</button></div>
+          )}
+          {!open && message && <p className="form-error" role="alert">{message}</p>}
+        </>
+      )}
     </main>
   );
 }
