@@ -2707,3 +2707,38 @@ PAID --申请售后--> AFTER_SALE
 ### 下一步
 
 - 进入 R7 前，用户先按“讲一步、写一步、验收一步”完成商家 Dashboard 的按日趋势接口、指标字典、日期范围限制与租户隔离测试；Agent 再接入真实商家订单和经营概览页面。
+
+## Day 33：2026-09-04 / R7 商家经营概览真实数据
+
+### 今天学了什么
+
+- Dashboard 的“汇总”和“趋势”不是两份随意的 SQL。有效订单数与按日订单数都排除 `CANCELLED`、`CLOSED`；已支付营业额与按日营业额都只统计当前 `PAID` 的 `total_amount`。统一口径才能让图表合计和顶部数字可复算。
+- 前端传来的日期是自然日，数据库查询应转为 `[startDate 00:00:00, endDate + 1 day 00:00:00)`。这样既覆盖结束日全天，也不会依赖 `23:59:59` 的精度假设。
+- Mapper 只返回实际有订单的日期；Service 再按请求日期范围补齐 `0`。SQL 专注聚合，Service 负责接口“每个自然日都有一个点”的合同，前端就不必猜缺失日期。
+- `CurrentUser.requiredMerchantTenantId()` 是 A/B 隔离的核心边界。Dashboard、订单和低库存都只能从安全上下文取租户，不能接受 `tenantId` 查询参数。
+
+### 今天完成
+
+- 用户完成趋势 VO、Mapper 聚合、Service 参数限制/补零、Controller 的 `GET /api/merchant/dashboard/trends`；后端提交 `cefecad`。
+- 建立 `docs/metrics-dictionary.md`，作为页面、后端查询和 DataGrip SQL 的同一口径来源。
+- Agent 完成真实商家订单、四项汇总、日期筛选和趋势图接线；真实会话失败时展示错误或空态，而不是生成 Demo 趋势。前端提交 `50a5dd4`。
+- `feature/integration` 先合入后端 `902fb90`，再合入前端 `be4ccd9`，并已推送。
+- 通过前端 HttpOnly 会话和 BFF 验收商家 A 的 `2 / 487.00`、商家 B 的 `2 / 198.00`、四日补零趋势、32 天 `400` 与消费者 `403`。
+
+### 遇到的问题与处理
+
+| 问题 | 原因与处理 | 是否已理解 |
+|---|---|---|
+| 400/403 在脚本里一度被记录为“成功” | PowerShell 的 `Invoke-WebRequest -SkipHttpErrorCheck` 会把非 2xx 作为正常响应返回；验收脚本必须读取 `StatusCode` 和 JSON `code`，不能只看是否抛异常 | 是 |
+| 为什么先合后端、再合前端 | `feature/integration` 用来组合独立功能分支。先让接口合同存在，再接页面更容易定位问题；最终仍要以集合分支的真实会话/BFF 链路为准 | 是 |
+| `mvn -DskipTests spring-boot:run` 仍触发测试编译 | `-DskipTests` 跳过测试执行，不一定跳过 `testCompile`；本仓库既有 `CheckoutServiceTest` 调用了已收紧为 `private` 的方法。该问题独立于 R7，按本轮范围不修改 | 是 |
+
+### 侧边任务/对话补充记录
+
+- `git merge --no-ff feature/backend -m "..."` 中的 `-m` 只是新建合并提交的说明文字，不会只合并一条提交。合并提交同时保留集合分支原 HEAD 和 `feature/backend` HEAD 两个父提交；后端头提交的祖先提交也不会丢失。
+- Apifox 截图若可见 Authorization/Bearer 值，即使只是验收图也不能入库。R7 只归档无凭据的编译、商家 A 汇总和 31 天范围错误截图；其余结果以脱敏文字记录。
+- 启动 Next.js 开发服务可能临时把 `web/next-env.d.ts` 指向 `.next/dev`。停止服务后应还原为 `.next/types`，提交前必须用 `git status --short` 排除该生成改动。
+
+### 下一步
+
+- R8 先补公开限量促销活动列表、活动详情与“我的资格/订单结果”的后端读取接口；消费者页面必须区分“获得资格”和“订单已创建”。

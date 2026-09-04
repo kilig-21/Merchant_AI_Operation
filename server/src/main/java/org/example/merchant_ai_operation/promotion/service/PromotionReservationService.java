@@ -152,6 +152,18 @@ public class PromotionReservationService {
         return result;
     }
 
+    // 查询当前消费者在指定活动中的历史抢购资格及异步订单结果。
+    @Transactional(readOnly = true)
+    public List<PromotionReservationDetailVO> listMyReservationDetails(Long activityId) {
+        Long consumerId = CurrentUser.requiredConsumerId();
+
+        return promotionReservationMapper
+                .selectDetailsByActivityIdAndConsumerId(
+                        activityId,
+                        consumerId
+                );
+    }
+
 
     //<-------------提取方法-------------->
 
