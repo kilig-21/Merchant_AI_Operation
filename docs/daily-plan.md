@@ -1668,3 +1668,30 @@
 - R7 不新增订单履约、发货、退款或支付完成时间字段；当前营业额仍按订单创建时间和当前 `PAID` 状态计算，详见指标字典。
 - 路线原计划中的固定预期自动测试，本轮按用户约定未新增。另有既有 `CheckoutServiceTest` 调用已改为 `private` 的方法，导致 `spring-boot:run` 的 `testCompile` 失败；它不是本次 R7 改动，也未在本轮修改。
 - 下一步进入 R8：先由用户完成公开促销活动列表/详情和资格结果的后端读取接口，再由 Agent 接入商家营销与消费者活动页面。
+
+## Day 33：2026-09-04 / R8 限量促销真实联调与集成验收（加餐）
+
+### 今日完成
+
+- [x] 用户在 `feature/backend` 完成公开活动读取：`GET /api/public/promotions` 与 `GET /api/public/promotions/{activityId}`；列表返回服务端时间与可见活动，详情对不存在活动返回 `404`。
+- [x] 复用既有商家活动创建、预热、取消和消费者资格申请/详情能力；新增的读取接口让前端可以恢复“我的资格”状态，而不是只停留在提交按钮。
+- [x] Agent 在 `feature/web-v2` 完成真实商家营销页与消费者限量活动列表、详情页：创建活动、预热、取消、公开列表/详情、资格申请和资格状态轮询均走 BFF，不使用伪造活动数据。
+- [x] 消费者页面明确区分“获得抢购资格”和“订单已创建”：资格申请成功不被展示为下单成功。
+- [x] 后端提交为 `b19e3c1 feat(promotion): add R8 promotion read APIs`；前端提交为 `f2ff70d feat(web): add promotion campaign flows`。
+- [x] `feature/integration` 先合入后端得到 `eae1b9c`，再合入前端得到 `07a7535`；合并后工作区干净。
+
+### 集成验收
+
+- [x] 后端 `mvn compile` 通过。
+- [x] 前端 `npm run check`、`npm run test`（4 项）和 `npm run build` 通过；生产构建包含 `/promotions` 与 `/promotions/[activityId]`。
+- [x] 已启动后端真实返回活动 `25`：公开活动列表与详情均为 HTTP `200`，字段包含活动、商品、SKU、活动价、时间、活动状态、库存提示和单人限额。
+- [x] 前端 BFF `/api/backend/public/promotions` 已实际转发到 `localhost:8080` 并返回同一份活动数据；`/promotions` 与 `/promotions/25` 页面均返回 HTTP `200`。
+- [x] 未登录访问资格恢复接口返回 HTTP/body `401`、`请先登录`，鉴权边界符合预期。
+- [ ] 未以真实消费者登录态提交新的资格申请：本轮按用户要求避免写入新的测试数据。因此这不是“成功抢购资格”的手工写入验收；公开读取、BFF 转发、鉴权拒绝和构建级验收均已完成。
+
+### 截图与交付边界
+
+- R8 的无凭据公开接口截图待补：当前终端未注入 `JWT_SECRET`，后端无法重新启动，因此不把失败画面或无关桌面截图归档为验收证据。后续应从已配置运行环境启动服务后，只截取公开活动 JSON 响应。
+- 不归档任何可能泄露 Authorization/Bearer 值的页面或终端画面。
+- 集成分支当时比 `origin/feature/integration` 超前 5 个本地提交；本轮未执行 `push` 或合并 `main`，由用户决定后续交付动作。
+- 下一阶段开始前，应先决定是否推送 `feature/integration`，再按路线文档进入下一项真实业务闭环。
