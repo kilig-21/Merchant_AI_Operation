@@ -3,7 +3,7 @@
 import { apiClient } from "@/lib/client-api";
 import { currency } from "@/lib/demo-data";
 import type { OrderDetail } from "@/lib/types";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { DemoNotice } from "./DemoNotice";
 import { MerchantShell } from "./MerchantShell";
 import { RequestFailure } from "./RequestFailure";
@@ -36,66 +36,92 @@ const previewOrders: OrderDetail[] = [
 export function MerchantOrders() {
   const [orders, setOrders] = useState<OrderDetail[]>([]);
   const [preview, setPreview] = useState(false);
+  const [loadingOrders, setLoadingOrders] = useState(true);
   const [failure, setFailure] = useState<unknown>(null);
   const { user, loading } = useSession();
-  useEffect(() => {
+
+  const loadOrders = useCallback(async () => {
     if (loading) return;
+
     setFailure(null);
+    setLoadingOrders(true);
+
     if (user?.isDemo === true) {
       setOrders(previewOrders);
       setPreview(true);
+      setLoadingOrders(false);
       return;
     }
-    apiClient<OrderDetail[]>("/api/backend/merchant/orders?page=1&size=50")
-      .then(setOrders)
-      .catch((caught) => {
-        setOrders([]);
-        setPreview(false);
-        setFailure(caught);
-      });
+
+    try {
+      const nextOrders = await apiClient<OrderDetail[]>("/api/backend/merchant/orders?page=1&size=50");
+      setOrders(nextOrders);
+      setPreview(false);
+    } catch (caught) {
+      setOrders([]);
+      setPreview(false);
+      setFailure(caught);
+    } finally {
+      setLoadingOrders(false);
+    }
   }, [loading, user?.isDemo]);
+
+  useEffect(() => {
+    void loadOrders();
+  }, [loadOrders]);
+
   return (
-    <MerchantShell title="订单预览" eyebrow="ORDERS / PREVIEW">
-      {preview && <DemoNotice>当前显示演示订单；履约操作不会发送真实请求。</DemoNotice>}
-      {failure ? <RequestFailure error={failure} loginHref="/merchant/login?redirect=/merchant/orders" onRetry={() => window.location.reload()} title="商家订单暂时无法读取" /> : null}
-      {!failure ? <>
-      <div className="merchant-toolbar surface">
-        <span className="eyebrow">LATEST ORDERS</span>
-        <span className="eyebrow">{orders.length} RESULTS</span>
-      </div>
-      <div className="table-scroll">
-        <table className="data-table data-table--responsive">
-          <thead>
-            <tr>
-              <th>订单号</th>
-              <th>创建时间</th>
-              <th>金额</th>
-              <th>状态</th>
-              <th>履约</th>
-            </tr>
-          </thead>
-          <tbody>
-            {orders.map((order) => (
-              <tr key={order.id}>
-                <td data-label="订单号">
-                  <strong>{order.orderNo}</strong>
-                </td>
-                <td data-label="创建时间">{new Date(order.createdAt).toLocaleString("zh-CN")}</td>
-                <td data-label="金额">{currency(order.totalAmount)}</td>
-                <td data-label="状态">
-                  <StatusPill status={order.status} />
-                </td>
-                <td data-label="履约">
-                  <button disabled type="button">
-                    等待接口
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      </> : null}
+    <MerchantShell title="本店订单" eyebrow="ORDERS / LIVE READ">
+      {preview ? <DemoNotice>当前为显式演示会话；订单与金额仅用于展示，不会触发真实操作。</DemoNotice> : null}
+      {failure ? (
+        <RequestFailure
+          error={failure}
+          loginHref="/merchant/login?redirect=/merchant/orders"
+          onRetry={loadOrders}
+          title="商家订单暂时无法读取"
+        />
+      ) : null}
+      {!failure ? (
+        <>
+          <div className="merchant-toolbar surface">
+            <span className="eyebrow">LATEST ORDERS</span>
+            <span className="eyebrow">{loadingOrders ? "LOADING" : `${orders.length} RESULTS`}</span>
+          </div>
+          {loadingOrders ? <div className="empty-state"><p>正在读取本店真实订单…</p></div> : null}
+          {!loadingOrders && !orders.length ? (
+            <div className="empty-state">
+              <h2>当前没有订单。</h2>
+              <p>这里仅显示当前商家店铺的真实订单；空列表不代表请求失败。</p>
+            </div>
+          ) : null}
+          {!loadingOrders && orders.length ? (
+            <div className="table-scroll">
+              <table className="data-table data-table--responsive">
+                <thead>
+                  <tr>
+                    <th>订单号</th>
+                    <th>创建时间</th>
+                    <th>金额</th>
+                    <th>状态</th>
+                    <th>履约</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map((order) => (
+                    <tr key={order.id}>
+                      <td data-label="订单号"><strong>{order.orderNo}</strong></td>
+                      <td data-label="创建时间">{new Date(order.createdAt).toLocaleString("zh-CN")}</td>
+                      <td data-label="金额">{currency(order.totalAmount)}</td>
+                      <td data-label="状态"><StatusPill status={order.status} /></td>
+                      <td data-label="履约"><span className="table-note">履约接口待后续版本提供</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </MerchantShell>
   );
 }
