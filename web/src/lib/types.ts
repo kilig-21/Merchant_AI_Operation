@@ -214,6 +214,68 @@ export interface MerchantProduct {
   updatedAt: string;
 }
 
+/** 商家自己的限量促销活动；精确库存仅在商家工作台展示。 */
+export interface MerchantPromotionActivity {
+  activityId: number;
+  activityItemId: number;
+  name: string;
+  productName: string;
+  skuId: number;
+  skuName: string;
+  activityPrice: number;
+  stockTotal: number;
+  stockAvailable: number;
+  limitPerUser: number;
+  startAt: string;
+  endAt: string;
+  status: "SCHEDULED" | "ACTIVE" | "ENDED" | "CANCELLED" | string;
+}
+
+/** 消费者公开活动读取模型；不包含商家内部库存和租户字段。 */
+export interface PublicPromotionActivity {
+  activityId: number;
+  activityItemId: number;
+  name: string;
+  productName: string;
+  skuName: string;
+  activityPrice: number;
+  startAt: string;
+  endAt: string;
+  status: "SCHEDULED" | "ACTIVE" | string;
+  stockStatus: "AVAILABLE" | "SOLD_OUT" | string;
+  limitPerUser: number;
+}
+
+export interface PublicPromotionList {
+  serverTime: string;
+  activities: PublicPromotionActivity[];
+}
+
+export interface PublicPromotionDetail {
+  serverTime: string;
+  activity: PublicPromotionActivity;
+}
+
+export interface PromotionReservationResult {
+  code: number;
+  reservationId: string;
+}
+
+export interface PromotionReservationDetail {
+  reservationId: string;
+  activityItemId: number;
+  quantity: number;
+  unitPriceSnapshot: number;
+  reservationStatus: "PENDING_ORDER" | "ORDER_CREATED" | "FAILED" | "COMPENSATED" | string;
+  orderId: number | null;
+  orderNo: string | null;
+  orderStatus: OrderStatus | null;
+  totalAmount: number | null;
+  expireAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** 商家经营概览的区间汇总；金额单位为人民币元。 */
 export interface MerchantDashboardMetrics {
   validOrderCount: number;

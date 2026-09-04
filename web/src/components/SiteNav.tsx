@@ -11,6 +11,7 @@ export type SiteNavStoryMode = "default" | "hero" | "content";
 const items = [
   { href: "/", label: "首页", short: "首页" },
   { href: "/stores", label: "店铺", short: "店铺" },
+  { href: "/promotions", label: "限量活动", short: "活动" },
   { href: "/search", label: "搜索", short: "搜索" },
   { href: "/journal", label: "选物志", short: "选物" },
   { href: "/orders", label: "订单", short: "订单" },
@@ -19,6 +20,7 @@ const items = [
 const homeItems = [
   { href: "/", label: "首页", short: "首页" },
   { href: "/stores", label: "选购", short: "选购" },
+  { href: "/promotions", label: "限量活动", short: "活动" },
   { href: "/journal", label: "选物志", short: "选物" },
   { href: "/orders", label: "订单", short: "订单" },
 ];
