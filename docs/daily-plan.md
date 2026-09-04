@@ -8,23 +8,23 @@
 | 项目 | 进度 |
 |---|---|
 | 原主线步骤 | `████████████████████████` 24 / 36（步骤 24 已完成） |
-| 新主线开发 | `██████░░░░░░░░░` 6 / 15（R1～R6 已完成；R7～R9、A1～A6 待推进） |
+| 新主线开发 | `███████░░░░░░░░` 7 / 15（R1～R7 已完成；R8～R9、A1～A6 待推进） |
 | 当前阶段 | 真实电商联调、AI 与版本演进 |
 | 周验收 | 已通过 |
-| 最近提交 | 前端：`1fde4f2 feat: implement R6 after-sales workflow`；集成：`f5e1185 merge: integrate R6 after-sales web` |
+| 最近提交 | 后端：`cefecad feat(dashboard): add tenant-isolated daily trends`；前端：`50a5dd4 feat(web): connect merchant dashboard to live metrics`；集成：`be4ccd9 merge: integrate R7 merchant dashboard web` |
 
 ## 进度看板
 | 项目     | 当前状态                         |
 | ------ | ---------------------------- |
 | 当前阶段   | 真实电商联调、AI 与版本演进 |
 | 当前文档   | `D:\ALLAPPS\Note_Apps\Document\Coding\真实电商联调、AI与版本演进开发链.md` |
-| 当前步骤   | R6 已完成：真实售后申请与商家审核已合并到集成分支并完成浏览器验收 |
-| 本周目标   | 完成真实购物车、地址、跨店结算与售后审核的前端接线及集成验收 |
-| 今日目标   | R6：消费者售后与商家审核真实流程 |
-| 昨日完成   | R3～R5：真实购物车详情、地址选择、跨店结算及浏览器级集成验收 |
-| 当前卡点   | 无 R6 代码卡点；下一步进入 R7 前先确认商家 Dashboard 趋势接口的后端范围 |
-| 最近一次提交 | 后端：`5fe0766`、`3415ae9`；前端：`1fde4f2`；集成：`f5e1185` |
-| 明日优先   | R7：先设计商家 Dashboard 按日趋势接口、指标字典与租户隔离验收，再由 Agent 接真实商家页面 |
+| 当前步骤   | R7 已完成：商家订单、经营汇总与按日趋势已接真实数据，并完成集合分支验收 |
+| 本周目标   | 完成 R7 经营概览真实联调，并进入 R8 限量促销的消费者入口 |
+| 今日目标   | R7：按日趋势、指标字典、真实 Dashboard 接线与集合分支验收 |
+| 昨日完成   | R6：真实售后申请与商家审核已合并并完成浏览器验收 |
+| 当前卡点   | 无 R7 功能卡点；后续统一处理既有 `CheckoutServiceTest` 的测试编译可见性问题，不混入 R7 |
+| 最近一次提交 | 后端：`cefecad`；前端：`50a5dd4`；集成：`902fb90`、`be4ccd9` |
+| 明日优先   | R8：先补公开限量促销活动列表/详情与“我的资格/订单结果”后端读取接口，再接消费者页面 |
 
 ## 每日任务
 
@@ -1636,3 +1636,35 @@
 - R6 的消费者与商家真实接线、状态回显和跨商家隔离均已完成；测试产生的售后申请仅保留在本地测试数据库。
 - R7 需要由用户先完成 Dashboard 按日订单/营业额趋势、指标字典和隔离验收；不要把现有四项汇总误写成已具备真实趋势数据。
 - 本次文档记录位于 `feature/backend`，由用户检查后自行提交和推送；未修改 `server/` 业务代码。
+
+## Day 33：2026-09-04 / R7 商家 Dashboard 真实趋势与集成验收
+
+### 今日完成
+
+- [x] 用户在 `feature/backend` 实现 `GET /api/merchant/dashboard/trends`：返回 `date`、`orderCount`、`paidRevenue`，使用当前安全上下文的 `tenantId`，而非客户端传入的租户。
+- [x] 趋势日期采用包含首尾日期的自然日输入、数据库左闭右开查询；服务限制最大 31 天，并把没有订单的日期补为 `0`。
+- [x] 已新增并落实 `docs/metrics-dictionary.md`：四项汇总、两项按日趋势、状态口径、金额单位、时区、空数据与 DataGrip 对照 SQL 均有定义。
+- [x] Agent 在 `feature/web-v2` 将商家订单、Dashboard 四项指标与趋势图接至真实 BFF；真实会话发生加载、空数据或失败时不回退为 Demo 数据。前端提交为 `50a5dd4 feat(web): connect merchant dashboard to live metrics`。
+- [x] 集合分支先合后端得到 `902fb90 merge: integrate R7 merchant dashboard backend`，再合前端得到 `be4ccd9 merge: integrate R7 merchant dashboard web`；两条提交均已推送至 `origin/feature/integration`。
+
+### 真实验收结果
+
+- [x] `mvn -DskipTests compile` 成功。
+- [x] 商家 A 在 `2026-09-01` 至 `2026-09-04`：汇总为有效订单 `2`、已支付营业额 `487.00`；趋势仅 `2026-09-03` 为订单 `2`、营业额 `487.00`，其余三日均补 `0`。
+- [x] 商家 B 同一日期范围：汇总为有效订单 `2`、已支付营业额 `198.00`；趋势仅 `2026-09-03` 为订单 `2`、营业额 `198.00`。A/B 数字不同，未发生租户串读。
+- [x] 通过前端 `/api/session/login` 建立 HttpOnly 会话后，BFF `/api/backend/merchant/dashboard/**` 能正确转发真实后端响应；不是直接在浏览器内伪造 JSON。
+- [x] 商家请求 32 天趋势返回 HTTP/body `400`、`趋势查询最多支持31天`；消费者请求商家趋势返回 HTTP/body `403`、`没有权限访问该资源`。
+- [x] 真实模式的 Dashboard 图表和商家订单页不使用营业额、订单趋势或商品的 Demo 回退数据。
+
+### 截图记录
+
+- `docs/images/day-34-r7/maven-r7-dashboard-compile-success.png`：后端编译成功。
+- `docs/images/day-34-r7/apifox-r7-dashboard-metrics-merchant-a.png`：商家 A 四项经营汇总成功返回。
+- `docs/images/day-34-r7/apifox-r7-dashboard-trends-range-limit.png`：趋势日期范围超过 31 天的 `400` 响应。
+- 未归档任何展示 Authorization/Bearer 值的截图；商家 B 和消费者权限结果以本节无凭据文字验收记录为准。
+
+### 当前边界与下一步
+
+- R7 不新增订单履约、发货、退款或支付完成时间字段；当前营业额仍按订单创建时间和当前 `PAID` 状态计算，详见指标字典。
+- 路线原计划中的固定预期自动测试，本轮按用户约定未新增。另有既有 `CheckoutServiceTest` 调用已改为 `private` 的方法，导致 `spring-boot:run` 的 `testCompile` 失败；它不是本次 R7 改动，也未在本轮修改。
+- 下一步进入 R8：先由用户完成公开促销活动列表/详情和资格结果的后端读取接口，再由 Agent 接入商家营销与消费者活动页面。
