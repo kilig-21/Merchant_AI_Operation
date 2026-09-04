@@ -170,6 +170,10 @@ class CheckoutGroupServiceTest {
                 .thenReturn(group);
         when(commerceOrderMapper.selectByCheckoutGroupIdAndConsumerId(7L, 5001L))
                 .thenReturn(List.of(childOrder));
+        when(commerceOrderItemMapper.selectItemVOByOrderId(701L))
+                .thenReturn(List.of(item));
+        when(commerceOrderAddressService.getSnapshot(701L))
+                .thenReturn(address);
 
         CheckoutGroupDetailVO result = checkoutGroupService.getMyDetail(7L);
 

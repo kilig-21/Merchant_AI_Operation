@@ -1,7 +1,8 @@
-package org.example.merchant_ai_operation.order;
+package org.example.merchant_ai_operation.order.service;
 
 import org.example.merchant_ai_operation.common.BizException;
 import org.example.merchant_ai_operation.merchant.product.mapper.ProductSkuMapper;
+import org.example.merchant_ai_operation.idempotency.mapper.IdempotentRequestMapper;
 import org.example.merchant_ai_operation.order.dto.CreateOrderRequest;
 import org.example.merchant_ai_operation.order.service.CheckoutGroupService;
 import org.example.merchant_ai_operation.order.service.CheckoutService;
@@ -41,6 +42,9 @@ class CheckoutServiceTest {
     @Mock
     private OrderService orderService;
 
+    @Mock
+    private IdempotentRequestMapper idempotentRequestMapper;
+
     private CheckoutService checkoutService;
 
     @BeforeEach
@@ -49,7 +53,7 @@ class CheckoutServiceTest {
                 productSkuMapper,
                 checkoutGroupService,
                 orderService,
-                null
+                idempotentRequestMapper
         );
 
         LoginPrincipal principal =
@@ -263,6 +267,13 @@ class CheckoutServiceTest {
         CreateCheckoutRequest request =
                 new CreateCheckoutRequest(cartItemIds, 88L);
 
+        when(idempotentRequestMapper.selectByConsumerIdAndRequestKey(5001L, "checkout-key"))
+                .thenReturn(null);
+        when(idempotentRequestMapper.insert(any()))
+                .thenReturn(1);
+        when(idempotentRequestMapper.markCheckoutGroupSuccess(nullable(Long.class), eq(3L)))
+                .thenReturn(1);
+
         when(productSkuMapper.selectOrderSkuSnapshots(5001L, cartItemIds))
                 .thenReturn(List.of(
                         snapshot(11L, 101L),
@@ -329,6 +340,11 @@ class CheckoutServiceTest {
         List<Long> cartItemIds = List.of(11L, 22L, 33L);
         CreateCheckoutRequest request =
                 new CreateCheckoutRequest(cartItemIds, 88L);
+
+        when(idempotentRequestMapper.selectByConsumerIdAndRequestKey(5001L, "checkout-key"))
+                .thenReturn(null);
+        when(idempotentRequestMapper.insert(any()))
+                .thenReturn(1);
 
         when(productSkuMapper.selectOrderSkuSnapshots(5001L, cartItemIds))
                 .thenReturn(List.of(
