@@ -1662,6 +1662,43 @@ img {
   border-radius: 20px;
   overflow: hidden;
 }
+.dashboard-range {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto auto auto;
+  gap: 12px;
+  align-items: end;
+  padding: 14px 16px;
+  border: 1px solid var(--morrow-line);
+  border-radius: 16px;
+}
+.dashboard-range > div {
+  display: grid;
+  gap: 5px;
+}
+.dashboard-range strong {
+  font: 600 13px var(--font-mono);
+  letter-spacing: .04em;
+}
+.dashboard-range label {
+  display: grid;
+  gap: 6px;
+  color: var(--morrow-muted);
+  font: 600 9px var(--font-mono);
+  letter-spacing: .06em;
+}
+.dashboard-range input {
+  min-width: 140px;
+  padding: 8px 9px;
+  border: 1px solid var(--morrow-line);
+  border-radius: 8px;
+  color: var(--morrow-ink);
+  background: var(--morrow-surface);
+  font: 500 12px var(--font-mono);
+}
+.dashboard-range .button {
+  min-height: 38px;
+  white-space: nowrap;
+}
 .metric {
   min-height: 145px;
   padding: 22px;
@@ -1705,6 +1742,18 @@ img {
 .merchant-row small {
   display: block;
   color: var(--morrow-muted);
+}
+.merchant-row--link {
+  color: inherit;
+  text-decoration: none;
+  transition: color 160ms ease;
+}
+.merchant-row--link:hover {
+  color: #43593b;
+}
+.table-note {
+  color: var(--morrow-muted);
+  font-size: 11px;
 }
 .status-pill {
   display: inline-flex;
@@ -2657,7 +2706,8 @@ img {
   font: 400 clamp(30px, 3vw, 46px) / 1.02 var(--font-editorial);
   letter-spacing: -.045em;
 }
-.demo-chart-label {
+.demo-chart-label,
+.data-source-label {
   flex: 0 0 auto;
   padding: 8px 10px;
   border: 1px solid rgba(120, 152, 32, 0.26);
@@ -2896,6 +2946,15 @@ img {
 .chart-empty {
   color: var(--morrow-muted);
 }
+.chart-empty--panel {
+  display: grid;
+  min-height: 190px;
+  place-items: center;
+  margin-top: 18px;
+  border: 1px dashed var(--morrow-line);
+  border-radius: 12px;
+  text-align: center;
+}
 .chart-note-panel {
   display: flex;
   min-height: 270px;
@@ -2991,6 +3050,15 @@ img {
   .merchant-chart-grid--lower {
     grid-template-columns: 1fr;
   }
+  .dashboard-range {
+    grid-template-columns: 1fr 1fr;
+  }
+  .dashboard-range > div {
+    grid-column: 1 / -1;
+  }
+  .dashboard-range .button {
+    justify-self: start;
+  }
 }
 
 @media (max-width: 680px) {
@@ -3044,6 +3112,13 @@ img {
   .merchant-analytics-head {
     align-items: start;
     flex-direction: column;
+  }
+  .dashboard-range {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-range label,
+  .dashboard-range .button {
+    width: 100%;
   }
   .chart-heading h3 {
     font-size: 25px;

@@ -214,6 +214,21 @@ export interface MerchantProduct {
   updatedAt: string;
 }
 
+/** 商家经营概览的区间汇总；金额单位为人民币元。 */
+export interface MerchantDashboardMetrics {
+  validOrderCount: number;
+  paidRevenue: number;
+  pendingPaymentCount: number;
+  lowStockProductCount: number;
+}
+
+/** 商家 Dashboard 的单日真实趋势点；日期由后端按业务自然日返回。 */
+export interface MerchantDashboardTrendPoint {
+  date: string;
+  orderCount: number;
+  paidRevenue: number;
+}
+
 export interface JournalMetadata {
   slug: string;
   title: string;
