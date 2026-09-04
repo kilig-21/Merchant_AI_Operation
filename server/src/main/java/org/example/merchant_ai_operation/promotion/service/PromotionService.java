@@ -11,9 +11,12 @@ import org.example.merchant_ai_operation.promotion.entity.PromotionActivity;
 import org.example.merchant_ai_operation.promotion.entity.PromotionItem;
 import org.example.merchant_ai_operation.promotion.mapper.PromotionActivityMapper;
 import org.example.merchant_ai_operation.promotion.mapper.PromotionItemMapper;
+import org.example.merchant_ai_operation.promotion.vo.MerchantPromotionActivityVO;
 import org.example.merchant_ai_operation.security.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @Service
 public class PromotionService {
@@ -96,6 +99,14 @@ public class PromotionService {
         }
 
         recordPromotionReleaseMovement(activityId, tenantId, item, latestSku);
+    }
+
+    // 查询当前登录商家租户的全部促销活动。
+    @Transactional(readOnly = true)
+    public List<MerchantPromotionActivityVO> listMyPromotionActivities() {
+        Long tenantId = CurrentUser.requiredMerchantTenantId();
+
+        return promotionActivityMapper.selectActivitiesByTenantId(tenantId);
     }
 
 

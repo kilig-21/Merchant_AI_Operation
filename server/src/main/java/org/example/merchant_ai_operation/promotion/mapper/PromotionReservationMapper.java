@@ -4,6 +4,8 @@ import org.apache.ibatis.annotations.*;
 import org.example.merchant_ai_operation.promotion.entity.PromotionReservation;
 import org.example.merchant_ai_operation.promotion.vo.PromotionReservationDetailVO;
 
+import java.util.List;
+
 @Mapper
 public interface PromotionReservationMapper {
     @Insert("""
@@ -96,6 +98,34 @@ public interface PromotionReservationMapper {
     //查询上面业务已经入库的资格返回的用户
     PromotionReservationDetailVO selectDetailByReservationIdAndConsumerId(
             @Param("reservationId") String reservationId,
+            @Param("consumerId") Long consumerId
+    );
+
+    @Select("""
+        SELECT
+            pr.reservation_id AS reservationId,
+            pr.activity_item_id AS activityItemId,
+            pr.quantity,
+            pr.unit_price_snapshot AS unitPriceSnapshot,
+            pr.status AS reservationStatus,
+            pr.order_id AS orderId,
+            co.order_no AS orderNo,
+            co.status AS orderStatus,
+            co.total_amount AS totalAmount,
+            co.expire_at AS expireAt,
+            pr.created_at AS createdAt,
+            pr.updated_at AS updatedAt
+        FROM promotion_reservations pr
+        LEFT JOIN commerce_order co
+          ON co.id = pr.order_id
+         AND co.consumer_id = pr.consumer_id
+        WHERE pr.consumer_id = #{consumerId}
+          AND pr.activity_id = #{activityId}
+        ORDER BY pr.created_at DESC, pr.id DESC
+        """)
+    // 查询当前消费者在指定活动中的全部抢购资格及异步订单结果。
+    List<PromotionReservationDetailVO> selectDetailsByActivityIdAndConsumerId(
+            @Param("activityId") Long activityId,
             @Param("consumerId") Long consumerId
     );
 
