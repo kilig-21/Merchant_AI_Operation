@@ -2829,3 +2829,22 @@ PAID --申请售后--> AFTER_SALE
 
 - 用户检查本节记录并提交 R9 部署准备文件。
 - 提交后再决定免费后端平台或服务器方案，并学习服务器上的 Git、环境变量、Docker Compose、HTTPS 和 Vercel 回连配置。
+
+## 2026-09-05 / Boot 4 版本演进
+
+### 今天完成
+
+- 用户在 `codex/upgrade-boot4` 明确授权 Agent 直接升级并检验。基线为 `4ff5870`，R9 部署准备实际已提交。
+- 后端升级到 Boot 4.1.1，适配 MyBatis 4.1.0、Springdoc 3.1.0、Jackson 3、Flyway Starter、MVC 测试包和 JSpecify 注解；保留 Java 21。
+- 新增专用 Compose、测试 profile、SKU 夹具、JSON 兼容测试和复现脚本；原业务数据库不参与写入测试。
+- 完整后端 verify：75 项，0 失败、0 错误。前端 check/test/build 全通过；31 项 HTTP/BFF 检查通过。
+- 详细部署结果与复现方式见 `docs/boot4-upgrade.md`；本次未新增 AI 业务或模型依赖。
+
+### 侧边任务/对话补充记录
+
+- 创建并检出分支以当前 HEAD 为起点，升级分支可保留集合分支的完整代码；升级验收后再决定合并。
+- 原结算组数据库集成测试错误地用 `@Mock` 声明真实被测 Service；改为 `@Autowired` 后实际访问数据库通过。这是既有测试缺陷，不应把“测试类能编译”当作集成测试通过。
+- Jackson 不只用于 HTTP：商品缓存和 Outbox 消息也使用 JSON。迁移需要验证旧 JSON 可读、金额精度、日期格式以及错误响应结构。
+- `java-jwt` 内部仍使用 Jackson 2，与应用 Jackson 3 可以共存，不能为追求依赖树只有一个大版本而随意排除。
+- 原参数校验异常仍为 HTTP 200 / body code 400；本轮保留原行为并在脚本中分别断言，后续另行统一异常语义。
+- PowerShell 对部分媒体类型把响应正文呈现为字节数组；验收脚本先按 UTF-8 解码，再读取 JSON，避免把正常 health UP 误判为失败。

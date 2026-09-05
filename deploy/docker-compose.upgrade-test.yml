@@ -1,0 +1,38 @@
+name: merchant-boot4-test
+
+# Disposable, local-only infrastructure. No production volumes or credentials.
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: boot4-test-only
+      MYSQL_DATABASE: ai_commerce_upgrade_test
+    ports:
+      - "127.0.0.1:13307:3306"
+    command: --default-time-zone=+08:00
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -pboot4-test-only --silent"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+  redis:
+    image: redis:7.4
+    ports:
+      - "127.0.0.1:16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    environment:
+      RABBITMQ_DEFAULT_USER: upgrade_test
+      RABBITMQ_DEFAULT_PASS: boot4-test-only
+    ports:
+      - "127.0.0.1:15673:5672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 3s
+      timeout: 5s
+      retries: 30

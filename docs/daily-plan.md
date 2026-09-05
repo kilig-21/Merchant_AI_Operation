@@ -1,3 +1,13 @@
+## 当前更新：2026-09-05 / Boot 4 升级
+
+- 当前分支：`codex/upgrade-boot4`，由已提交 R9 部署准备的 `4ff5870` 创建；下文历史看板中的“尚未提交”不再代表当前状态。
+- 用户明确授权 Agent 直接完成本轮升级和检查；后续新业务后端仍按带着做的方式推进。
+- 已完成 Boot 4.1.1、MyBatis 4.1.0、Springdoc 3.1.0、Jackson 3、Flyway Starter 和 MVC 测试适配。
+- 隔离测试环境完整 `verify`：75 项，0 失败、0 错误；前端 check/test/build 和 31 项 HTTP/BFF 检查通过。
+- Docker 独立标签镜像构建成功，容器 health UP、ping、OpenAPI 和商品读取通过；临时验收环境已清理，未替换原部署。
+- 本轮详细范围、复现命令、部署验证和已知问题见 `docs/boot4-upgrade.md`。升级不等于 R9 全部完成或 A1/A2 完成。
+- 下一步：用户检查升级差异并决定提交/合并，再补 A1 只读经营查询与指标测试，随后接入 Spring AI 2。
+
 ## 开工必读
 
 - 每天继续本项目时，先读 `docs/collaboration-rules.md`、`docs/daily-plan.md`、`docs/learning-log.md`。

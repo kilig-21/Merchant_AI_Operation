@@ -1,8 +1,8 @@
 package org.example.merchant_ai_operation.promotion.service;
 
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import org.example.merchant_ai_operation.common.BizException;
 import org.example.merchant_ai_operation.outbox.entity.OutboxEvent;
 import org.example.merchant_ai_operation.outbox.mapper.OutboxEventMapper;
@@ -246,7 +246,7 @@ public class PromotionReservationService {
                             reservation.getReservationId()
                     )
             ));
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new BizException(500, "促销订单事件生成失败");
         }
         event.setStatus("PENDING");

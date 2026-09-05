@@ -1,7 +1,7 @@
 package org.example.merchant_ai_operation.order.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import org.example.merchant_ai_operation.cart.mapper.CartItemMapper;
 import org.example.merchant_ai_operation.common.BizException;
 import org.example.merchant_ai_operation.idempotency.entity.IdempotentRequest;
@@ -549,7 +549,7 @@ public class OrderService {
                     "orderNo", order.getOrderNo(),
                     "expireAt", order.getExpireAt()
             )));
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new BizException("订单事件生成失败");
         }
 

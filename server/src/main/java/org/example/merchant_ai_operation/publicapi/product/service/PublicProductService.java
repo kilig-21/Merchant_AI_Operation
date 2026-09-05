@@ -1,8 +1,8 @@
 package org.example.merchant_ai_operation.publicapi.product.service;
 
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.example.merchant_ai_operation.common.BizException;
 import org.example.merchant_ai_operation.publicapi.product.cache.ProductCacheKey;
@@ -67,12 +67,12 @@ public class PublicProductService {
         //Redis 没值：继续查数据库
         if (cachedJson != null && !cachedJson.isBlank()) {
             try {
-                //如果 JSON 格式正确，就返回对象；如果格式错误，就抛出 JsonProcessingException，进入数据库查询。
+                //如果 JSON 格式正确，就返回对象；如果格式错误，就抛出 JacksonException，进入数据库查询。
                 return objectMapper.readValue( //把 JSON 字符串转回 Java 对象
                         cachedJson,
                         PublicProductDetailVO.class
                 );
-            } catch (JsonProcessingException e) {
+            } catch (JacksonException e) {
                 log.warn(
                         "商品详情缓存格式错误，回源数据库，key={}",
                         cacheKey,
@@ -114,7 +114,7 @@ public class PublicProductService {
 
         try {
             json = objectMapper.writeValueAsString(result);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             log.warn(
                     "商品详情序列化失败，不写入缓存，key={}",
                     cacheKey,
