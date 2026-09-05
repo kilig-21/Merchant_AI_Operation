@@ -2791,3 +2791,41 @@ PAID --申请售后--> AFTER_SALE
 
 - R8 当前开发与集成验收完成。推送或合并主分支前，先由用户决定 `feature/integration` 的交付策略。
 - 未来若要补充资格申请的手工验收，应新建处于 `SCHEDULED` 的独立测试活动，先预热，再在开始窗口内以真实消费者会话验证申请、重复申请、库存售罄和资格详情，不复用已进入 `ACTIVE` 的历史活动。
+
+## Day 33：2026-09-04 / R9 部署前本地完整部署演练
+
+### 今天学了什么
+
+- Dockerfile 可以采用多阶段构建：第一阶段使用 Maven/JDK 编译 jar，第二阶段只保留 Java 运行环境和 jar，从而减少运行镜像内容；`EXPOSE` 只是声明容器端口，真正的端口映射由 Compose 的 `ports` 完成。
+- Spring Boot 配置中的 `${ENV_NAME:default}` 是环境变量加默认值的写法。本地运行没有环境变量时使用 `localhost`，容器运行时由 Compose 注入 `mysql`、`redis`、`rabbitmq` 等服务名；容器内不能把 `localhost` 当作其他容器。
+- `.env` 与 Compose YAML 的写法不同：`.env` 使用 `KEY=value`，YAML 使用缩进和 `key: value`。密码、JWT 密钥等只保存在 `deploy/.env`，不能提交或截图。
+- Compose 的 `depends_on` 健康条件可以让后端在 MySQL、Redis、RabbitMQ 健康后再启动；但服务显示 `Started` 还需要通过 `/actuator/health` 和实际业务接口确认。
+- “镜像”和“容器”不是一回事：镜像是应用打包模板，容器是运行实例。多阶段构建的 Maven 镜像只参与构建，后端运行时使用最终应用镜像。
+
+### 今天完成
+
+- 用户在 `feature/integration` 基线上完成部署准备文件：`server/Dockerfile`、`server/.dockerignore`、`deploy/docker-compose.production.yml`，并将 `application.properties` 改为可被环境变量覆盖的基础设施配置。
+- 生产 Compose 配置解析通过；Docker Hub 基础镜像下载完成；Maven 首次依赖下载约 10 分钟后构建成功，生成 `merchant-ai-operation-server:latest`。
+- 启动完整 Compose 后，MySQL、Redis、RabbitMQ 均为 `Healthy`，Spring Boot 后端映射到本机 `8080`。
+- `GET /actuator/health` 返回 `{"status":"UP"}`；`GET /api/ping` 返回 `pong`；`GET /api/public/products/ping` 返回 `public-product-pong`。
+- `GET /api/public/stores/1001/products?page=1&size=10` 返回 `code=0` 和空数组，确认真实公开商品查询已经进入数据库；空数组是本次新演练数据库没有商品数据，不是接口失败。
+
+### 遇到的问题与处理
+
+| 问题 | 原因与处理 | 是否已理解 |
+|---|---|---|
+| Docker 拉取基础镜像超时 | Clash Verge 的系统代理最初没有被 Docker Desktop 正确使用；打开系统代理并重启 Docker Desktop 后，Java 和 Maven 基础镜像均能下载 | 是 |
+| Maven 依赖下载时间很长 | 第一次构建需要从 Maven Central 下载大量依赖，下载完成后会由 Docker/Maven 缓存，后续构建通常更快 | 是 |
+| PowerShell 健康响应显示为数字 | `Invoke-WebRequest` 在本机把内容显示成字节序列，对应的 JSON 实际是 `{"status":"UP"}`；使用 `curl.exe` 更直观 | 是 |
+| 为什么关闭 Clash 系统代理后本地服务仍正常 | 镜像已经在本机缓存，容器间通信是本地 Docker 网络，健康检查也访问本机端口，不需要再次访问 Docker Hub；Codex 的长连接则是另一条网络链路 | 是 |
+
+### 交付边界
+
+- 本次完成的是服务器上传前的本地完整部署演练，不是公网生产上线。
+- 尚未上传服务器、配置公网 HTTPS 域名，也没有修改 Vercel 的 `BACKEND_ORIGIN`。
+- 当前 R9 部署准备文件尚未提交；提交时不得加入 `deploy/.env`。
+
+### 下一步
+
+- 用户检查本节记录并提交 R9 部署准备文件。
+- 提交后再决定免费后端平台或服务器方案，并学习服务器上的 Git、环境变量、Docker Compose、HTTPS 和 Vercel 回连配置。

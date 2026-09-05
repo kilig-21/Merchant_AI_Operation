@@ -8,23 +8,23 @@
 | 项目 | 进度 |
 |---|---|
 | 原主线步骤 | `████████████████████████` 24 / 36（步骤 24 已完成） |
-| 新主线开发 | `████████░░░░░░░` 8 / 15（R1～R8 已完成；R9、A1～A6 待推进） |
+| 新主线开发 | `█████████░░░░░░` 9 / 15（R1～R8 已完成；R9 已完成本地部署演练，服务器上传前准备中；A1～A6 待推进） |
 | 当前阶段 | 真实电商联调、AI 与版本演进 |
 | 周验收 | 已通过 |
-| 最近提交 | 后端：`b19e3c1 feat(promotion): add R8 promotion read APIs`；前端：`f2ff70d feat(web): add promotion campaign flows`；集成：`07a7535 merge: integrate R8 promotion frontend` |
+| 最近提交 | 后端：`be16c09 test(promotion): close R8 backend quality checks`；前端：`f2ff70d feat(web): add promotion campaign flows`；集成：`f1f0382 merge: integrate R8 backend quality baseline` |
 
 ## 进度看板
 | 项目     | 当前状态                         |
 | ------ | ---------------------------- |
 | 当前阶段   | 真实电商联调、AI 与版本演进 |
 | 当前文档   | `D:\ALLAPPS\Note_Apps\Document\Coding\真实电商联调、AI与版本演进开发链.md` |
-| 当前步骤   | R8 已完成：限量促销公开读取、商家营销和消费者资格/订单结果页面已合入集合分支 |
-| 本周目标   | 完成 R8 代码收口，并在进入 R9 前完成质量基线检查 |
-| 今日目标   | R8 加餐收口：代码复核、测试编译修复、前后端质量检查和看板同步 |
-| 昨日完成   | R7：商家订单、经营汇总与按日趋势已接真实数据并完成集合分支验收 |
-| 当前卡点   | 无 R8 功能卡点；代码级测试与前端构建通过；完整后端集成测试等待 Docker MySQL 凭据恢复 |
-| 最近一次提交 | 后端：`b19e3c1`；前端：`f2ff70d`；集成：`07a7535` |
-| 明日优先   | R9：先确定本地部署、健康检查、密钥配置和 CI 的收口顺序 |
+| 当前步骤   | R9：本地完整部署演练已完成，当前停在服务器上传前 |
+| 本周目标   | 完成 R9 部署前配置、镜像构建、Compose 启动和接口健康验证 |
+| 今日目标   | 整理昨天的 R9 本地部署结果，提交部署配置；随后再准备服务器上传 |
+| 昨日完成   | R9：后端 Docker 镜像、生产 Compose、本地依赖启动、健康检查和公开接口验证 |
+| 当前卡点   | 尚未上传服务器；仍需确定服务器/域名/HTTPS 方案，并将 Vercel 的 `BACKEND_ORIGIN` 指向公网后端 |
+| 最近一次提交 | 集成：`f1f0382`；R9 部署准备文件当前尚未提交 |
+| 明日优先   | 提交并推送 R9 部署准备文件，再选择免费后端部署或服务器上传方案 |
 
 ## 每日任务
 
@@ -1695,3 +1695,34 @@
 - 不归档任何可能泄露 Authorization/Bearer 值的页面或终端画面。
 - 集成分支当时比 `origin/feature/integration` 超前 5 个本地提交；本轮未执行 `push` 或合并 `main`，由用户决定后续交付动作。
 - 下一阶段开始前，应先决定是否推送 `feature/integration`，再按路线文档进入下一项真实业务闭环。
+
+## Day 33：2026-09-04 / R9 部署前本地完整部署演练
+
+### 今日完成
+
+- [x] 核对 `feature/backend`、`feature/web-v2` 与 `feature/integration` 的提交关系；集合分支已包含后端最新提交 `be16c09` 和前端 R8 提交 `f2ff70d`，当前基线为 `f1f0382`。
+- [x] 用户完成后端配置环境变量化：MySQL、Redis、RabbitMQ 在本地运行和 Docker 运行时可以使用不同地址；未修改业务接口。
+- [x] 用户创建 `server/Dockerfile` 和 `server/.dockerignore`，使用 Java 21/Maven 多阶段构建后端镜像，并排除本地构建产物和 IDE 文件。
+- [x] 用户创建 `deploy/docker-compose.production.yml`，编排 MySQL、Redis、RabbitMQ 和 Spring Boot 后端；依赖服务加入健康检查，后端通过 Compose 服务名连接基础设施。
+- [x] 使用 `docker compose ... config --quiet` 校验生产 Compose 配置通过；敏感变量保存在 `deploy/.env`，未纳入 Git。
+
+### 本地部署验收
+
+- [x] Docker Hub 镜像下载完成；首次 Maven 依赖下载较慢，后端镜像构建成功，镜像名为 `merchant-ai-operation-server:latest`。
+- [x] `docker compose ... up -d` 启动成功，MySQL、Redis、RabbitMQ 均为 `Healthy`，Spring Boot 后端成功启动并映射到本机 `8080`。
+- [x] `GET /actuator/health` 返回 `{"status":"UP"}`。
+- [x] `GET /api/ping` 返回统一成功响应，数据为 `pong`。
+- [x] `GET /api/public/products/ping` 返回统一成功响应，数据为 `public-product-pong`。
+- [x] `GET /api/public/stores/1001/products?page=1&size=10` 返回成功响应和空数组；说明真实公开商品查询链路已进入数据库，当前演练库暂无商品数据。
+
+### 问题与边界
+
+- Docker 首次拉取基础镜像时曾因 Clash Verge 系统代理未被 Docker Desktop 正确使用而连接 Docker Hub 超时；打开系统代理并重启 Docker Desktop 后镜像下载恢复。
+- PowerShell `Invoke-WebRequest` 在本机把响应内容显示为字节序列；这些数字实际对应 `{"status":"UP"}`，后续使用 `curl.exe` 查看 JSON 更直观。
+- 本次只完成服务器上传前的本地演练；尚未上传服务器、配置公网 HTTPS 域名或修改 Vercel 的 `BACKEND_ORIGIN`。
+- R9 部署准备文件当前尚未提交；提交时只能加入部署配置、Dockerfile、后端配置和本次文档，不能加入 `deploy/.env`。
+
+### 下一步
+
+- 由用户检查本节记录后提交并推送 R9 部署准备文件。
+- 提交完成后再确定免费后端平台或实际服务器，准备公网数据库/Redis/RabbitMQ、HTTPS 和 Vercel `BACKEND_ORIGIN`，再进行服务器上传。
