@@ -291,6 +291,38 @@ export interface MerchantDashboardTrendPoint {
   paidRevenue: number;
 }
 
+export interface MerchantOperatingSummary {
+  validOrderCount: number;
+  paidOrderCount: number;
+  paidRevenue: number;
+  averageOrderValue: number;
+  pendingPaymentCount: number;
+  lowStockProductCount: number;
+}
+
+export interface TopProduct {
+  skuId: number;
+  skuName: string;
+  soldQuantity: number;
+  paidRevenue: number;
+}
+
+export interface PromotionPerformance {
+  activityId: number;
+  activityName: string;
+  reservationCount: number;
+  orderCreatedCount: number;
+  successfulQuantity: number;
+  promotionRevenue: number;
+  orderConversionRate: number;
+}
+
+export interface AfterSaleRate {
+  paidOrderItemCount: number;
+  afterSaleOrderItemCount: number;
+  afterSaleRate: number;
+}
+
 export interface JournalMetadata {
   slug: string;
   title: string;
