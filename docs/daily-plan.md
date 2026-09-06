@@ -1,12 +1,11 @@
-## 当前更新：2026-09-05 / Boot 4 升级
+## 当前更新：2026-09-06 / Day 34 / A1 经营指标只读查询
 
-- 当前分支：`codex/upgrade-boot4`，由已提交 R9 部署准备的 `4ff5870` 创建；下文历史看板中的“尚未提交”不再代表当前状态。
-- 用户明确授权 Agent 直接完成本轮升级和检查；后续新业务后端仍按带着做的方式推进。
-- 已完成 Boot 4.1.1、MyBatis 4.1.0、Springdoc 3.1.0、Jackson 3、Flyway Starter 和 MVC 测试适配。
-- 隔离测试环境完整 `verify`：75 项，0 失败、0 错误；前端 check/test/build 和 31 项 HTTP/BFF 检查通过。
-- Docker 独立标签镜像构建成功，容器 health UP、ping、OpenAPI 和商品读取通过；临时验收环境已清理，未替换原部署。
-- 本轮详细范围、复现命令、部署验证和已知问题见 `docs/boot4-upgrade.md`。升级不等于 R9 全部完成或 A1/A2 完成。
-- 下一步：用户检查升级差异并决定提交/合并，再补 A1 只读经营查询与指标测试，随后接入 Spring AI 2。
+- 当前分支：`feature/integration`；已合入 A1 后端 `d09e438` 和前端 `6ad2ade`，集合分支合并提交为 `94497d5`、`d53bf55`。
+- 已完成经营汇总、客单价、热销 SKU、促销表现和售后申请率的受控只读查询；tenantId 只来自安全上下文，日期最多 31 天，列表 limit 为 1～10。
+- A1 使用两个专用测试租户和固定 SQL 夹具完成 7 项集成测试，全部通过；前端 check、4 项测试和生产构建通过。
+- Dashboard 已接入新增查询，并增加指标口径说明与 A2 常问问题预告；当前没有 Spring AI、模型调用或模型密钥。
+- 尚未在集合分支完成真实商家浏览器会话/BFF 联调；当前结论是代码与自动测试通过，不把页面真实运行误写成已验收。
+- 下一步：完成集合分支浏览器联调并推送，随后收口 A1，再进入使用 Spring AI 2.x 的 A2。
 
 ## 开工必读
 
@@ -18,7 +17,7 @@
 | 项目 | 进度 |
 |---|---|
 | 原主线步骤 | `████████████████████████` 24 / 36（步骤 24 已完成） |
-| 新主线开发 | `█████████░░░░░░` 9 / 15（R1～R8 已完成；R9 已完成本地部署演练，服务器上传前准备中；A1～A6 待推进） |
+| 新主线开发 | `██████████░░░░░` 10 / 15（R1～R9 已形成当前基线；A1 开发与自动测试完成，浏览器联调待补；A2～A6 待推进） |
 | 当前阶段 | 真实电商联调、AI 与版本演进 |
 | 周验收 | 已通过 |
 | 最近提交 | 后端：`be16c09 test(promotion): close R8 backend quality checks`；前端：`f2ff70d feat(web): add promotion campaign flows`；集成：`f1f0382 merge: integrate R8 backend quality baseline` |
@@ -1736,3 +1735,45 @@
 
 - 由用户检查本节记录后提交并推送 R9 部署准备文件。
 - 提交完成后再确定免费后端平台或实际服务器，准备公网数据库/Redis/RabbitMQ、HTTPS 和 Vercel `BACKEND_ORIGIN`，再进行服务器上传。
+
+## Day 34：2026-09-06 / A1 经营指标字典、样例数据与只读查询
+
+### 今日目标
+
+- [x] 在 Boot 4.1.1 基线上建立面向页面和后续 AI 的受控经营查询层。
+- [x] 使用固定样例数据验证指标可复算、空数据、参数边界和租户隔离。
+- [x] 在独立前端分支接入 A1 查询并完成构建，再合入集合分支。
+
+### 用户完成的后端代码
+
+- [x] 新建 `merchant.analytics` 模块，包含 `MerchantAnalyticsController`、`MerchantAnalyticsQueryService`、`MerchantAnalyticsMapper` 和四个专用 VO。
+- [x] 新增 `GET /api/merchant/analytics/summary`：返回有效订单数、已支付订单数、已支付营业额、客单价、待支付订单数和低库存商品数。
+- [x] 新增 `GET /api/merchant/analytics/top-products`：按销量、销售额、SKU ID 稳定排序，`limit` 限制为 1～10。
+- [x] 新增 `GET /api/merchant/analytics/promotions`：返回资格数、成功创建订单数、成功件数、促销金额和下单转化率；促销金额不冒充已支付营业额。
+- [x] 新增 `GET /api/merchant/analytics/after-sale-rate`：按不同已支付订单明细计算售后申请率，不冒充退款率。
+- [x] 日期统一转换为左闭右开时间范围，最多查询 31 个自然日；所有 tenantId 均取自 `CurrentUser.requiredMerchantTenantId()`。
+
+### Agent 完成的测试、文档与前端
+
+- [x] 扩展 `docs/metrics-dictionary.md`，固定客单价、热销商品、促销表现、售后申请率、比率返回形式、查询边界和验收原则。
+- [x] 新增两个专用测试租户、多个订单状态、热销 SKU、促销资格和售后申请夹具；数据使用独立 ID 段并在测试后定向清理。
+- [x] 新增 `MerchantAnalyticsQueryServiceIntegrationTest`，覆盖商家 A 固定值、商家 B 隔离、空范围、稳定排序、促销转化率、售后申请率、32 天拒绝和非法 limit。
+- [x] 前端 Dashboard 接入四类经营查询，增加客单价、热销 SKU、促销表现、售后申请率、指标说明和“A2 即将开放”的常问问题入口。
+- [x] 前端保持现有运营控制台视觉语言，并补充桌面、平板和手机布局。
+
+### 验收结果
+
+- [x] 后端 `mvn -DskipTests compile` 与 `test-compile` 通过。
+- [x] A1 固定预期集成测试 7 项全部通过。
+- [x] 前端 `npm run check`、`npm run test`（4 项）和 `npm run build` 通过。
+- [x] 后端提交 `d09e438 feat(analytics): add controlled merchant metric queries` 已推送。
+- [x] 前端提交 `6ad2ade feat(web): add merchant analytics dashboard` 已推送。
+- [x] `feature/integration` 先合后端得到 `94497d5`，再合前端得到 `d53bf55`。
+- [ ] 集合分支真实商家登录、BFF 转发和浏览器 Dashboard 展示尚待现场验收。
+- [ ] 集合分支当前领先远端 4 个提交，尚待真实联调通过后推送。
+
+### 当前边界与下一步
+
+- A1 没有引入 Spring AI、模型 SDK、模型调用或 API Key；A2 才使用 Spring AI 2.x。
+- 当前自动测试证明查询结果、边界和租户隔离正确，但不替代浏览器真实会话验收。
+- 下一步启动集合分支后端和前端，以真实商家账号检查四个 `/api/backend/merchant/analytics/**` BFF 请求和 Dashboard 展示；通过后推送集合分支并进入 A2。
