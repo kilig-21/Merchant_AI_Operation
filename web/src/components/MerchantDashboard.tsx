@@ -2,7 +2,14 @@
 
 import { apiClient } from "@/lib/client-api";
 import { currency, demoMerchantProducts } from "@/lib/demo-data";
-import type { MerchantDashboardMetrics, MerchantDashboardTrendPoint, MerchantProduct } from "@/lib/types";
+import type {
+  AfterSaleRate,
+  MerchantDashboardTrendPoint,
+  MerchantOperatingSummary,
+  MerchantProduct,
+  PromotionPerformance,
+  TopProduct,
+} from "@/lib/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { DemoNotice } from "./DemoNotice";
@@ -36,8 +43,11 @@ export function MerchantDashboard() {
   const [range, setRange] = useState<DateRange>(createDefaultRange);
   const [activeRange, setActiveRange] = useState<DateRange>(createDefaultRange);
   const [products, setProducts] = useState<MerchantProduct[]>([]);
-  const [metrics, setMetrics] = useState<MerchantDashboardMetrics | null>(null);
+  const [metrics, setMetrics] = useState<MerchantOperatingSummary | null>(null);
   const [trends, setTrends] = useState<MerchantDashboardTrendPoint[]>([]);
+  const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
+  const [promotions, setPromotions] = useState<PromotionPerformance[]>([]);
+  const [afterSale, setAfterSale] = useState<AfterSaleRate | null>(null);
   const [demo, setDemo] = useState(false);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [failure, setFailure] = useState<unknown>(null);
@@ -53,6 +63,9 @@ export function MerchantDashboard() {
       setProducts(demoMerchantProducts);
       setMetrics(null);
       setTrends([]);
+      setTopProducts([]);
+      setPromotions([]);
+      setAfterSale(null);
       setDemo(true);
       setLoadingDashboard(false);
       return;
@@ -60,19 +73,28 @@ export function MerchantDashboard() {
 
     try {
       const query = new URLSearchParams(activeRange).toString();
-      const [nextProducts, nextMetrics, nextTrends] = await Promise.all([
+      const [nextProducts, nextMetrics, nextTrends, nextTopProducts, nextPromotions, nextAfterSale] = await Promise.all([
         apiClient<MerchantProduct[]>("/api/backend/merchant/products?page=1&size=8"),
-        apiClient<MerchantDashboardMetrics>(`/api/backend/merchant/dashboard/metrics?${query}`),
+        apiClient<MerchantOperatingSummary>(`/api/backend/merchant/analytics/summary?${query}`),
         apiClient<MerchantDashboardTrendPoint[]>(`/api/backend/merchant/dashboard/trends?${query}`),
+        apiClient<TopProduct[]>(`/api/backend/merchant/analytics/top-products?${query}&limit=5`),
+        apiClient<PromotionPerformance[]>(`/api/backend/merchant/analytics/promotions?${query}&limit=5`),
+        apiClient<AfterSaleRate>(`/api/backend/merchant/analytics/after-sale-rate?${query}`),
       ]);
       setProducts(nextProducts);
       setMetrics(nextMetrics);
       setTrends(nextTrends);
+      setTopProducts(nextTopProducts);
+      setPromotions(nextPromotions);
+      setAfterSale(nextAfterSale);
       setDemo(false);
     } catch (caught) {
       setProducts([]);
       setMetrics(null);
       setTrends([]);
+      setTopProducts([]);
+      setPromotions([]);
+      setAfterSale(null);
       setDemo(false);
       setFailure(caught);
     } finally {
@@ -143,7 +165,7 @@ export function MerchantDashboard() {
             </button>
           </form>
 
-          <section className="metrics" aria-busy={loadingDashboard} aria-label="真实经营汇总">
+          <section className="metrics metrics--analytics" aria-busy={loadingDashboard} aria-label="真实经营汇总">
             <article className="metric">
               <span>有效订单</span>
               <strong>{metrics ? metrics.validOrderCount : "—"}</strong>
@@ -153,6 +175,11 @@ export function MerchantDashboard() {
               <span>已支付营业额</span>
               <strong>{metrics ? currency(metrics.paidRevenue) : "—"}</strong>
               <small>按下单日归因</small>
+            </article>
+            <article className="metric">
+              <span>客单价</span>
+              <strong>{metrics ? currency(metrics.averageOrderValue) : "—"}</strong>
+              <small>{metrics ? `${metrics.paidOrderCount} 笔已支付订单` : "已支付营业额 ÷ 订单数"}</small>
             </article>
             <article className="metric">
               <span>待支付订单</span>
@@ -167,6 +194,49 @@ export function MerchantDashboard() {
           </section>
 
           <MerchantCharts demo={demo} loading={loadingDashboard} products={products} rangeLabel={period} trends={trends} />
+
+          <section className="analytics-insights" aria-label="经营洞察">
+            <article className="panel surface analytics-panel">
+              <span className="eyebrow">TOP PRODUCTS</span>
+              <h2>热销 SKU</h2>
+              {!loadingDashboard && !topProducts.length ? <p className="chart-empty">该范围内暂无已支付商品。</p> : null}
+              {topProducts.map((product, index) => (
+                <div className="merchant-row" key={product.skuId}>
+                  <div>
+                    <strong>{String(index + 1).padStart(2, "0")} · {product.skuName}</strong>
+                    <small>{product.soldQuantity} 件 · {currency(product.paidRevenue)}</small>
+                  </div>
+                </div>
+              ))}
+            </article>
+
+            <article className="panel surface analytics-panel">
+              <span className="eyebrow">CAMPAIGN SIGNAL</span>
+              <h2>促销表现</h2>
+              {!loadingDashboard && !promotions.length ? <p className="chart-empty">该范围内暂无促销资格记录。</p> : null}
+              {promotions.map((promotion) => (
+                <div className="merchant-row" key={promotion.activityId}>
+                  <div>
+                    <strong>{promotion.activityName}</strong>
+                    <small>{promotion.successfulQuantity} 件 · {currency(promotion.promotionRevenue)}</small>
+                  </div>
+                  <span className="analytics-rate">{Math.round(promotion.orderConversionRate * 100)}%</span>
+                </div>
+              ))}
+            </article>
+
+            <article className="panel surface analytics-panel analytics-panel--rate">
+              <span className="eyebrow">AFTER-SALE PULSE</span>
+              <h2>售后申请率</h2>
+              <strong className="analytics-rate-hero">{afterSale ? `${Math.round(afterSale.afterSaleRate * 100)}%` : "—"}</strong>
+              <p>
+                {afterSale
+                  ? `${afterSale.afterSaleOrderItemCount} / ${afterSale.paidOrderItemCount} 个已支付订单明细曾发起售后`
+                  : "正在读取售后数据…"}
+              </p>
+              <small>申请率不等于退款率或退款完成率</small>
+            </article>
+          </section>
 
           <section className="merchant-grid">
             <article className="panel surface">
@@ -199,6 +269,32 @@ export function MerchantDashboard() {
                 <span>查看本店真实订单</span>
                 <span aria-hidden="true">↗</span>
               </Link>
+            </article>
+          </section>
+
+          <section className="analytics-reference">
+            <article className="panel surface metric-guide">
+              <span className="eyebrow">METRIC NOTES</span>
+              <h2>这些数字如何计算</h2>
+              <div className="metric-guide-grid">
+                <p><strong>客单价</strong><span>已支付营业额 ÷ 已支付订单数，按订单创建日归因。</span></p>
+                <p><strong>热销商品</strong><span>仅统计已支付订单，按销量、销售额、SKU ID 稳定排序。</span></p>
+                <p><strong>促销表现</strong><span>统计资格成功创建订单的金额，不代表订单已经支付。</span></p>
+                <p><strong>售后申请率</strong><span>曾发起售后的明细数 ÷ 已支付订单明细数。</span></p>
+              </div>
+            </article>
+
+            <article className="panel surface common-questions">
+              <span className="eyebrow">AI ASSISTANT / A2</span>
+              <h2>常问问题</h2>
+              <p>下一阶段可直接向经营助手提问；当前入口只展示问题，不会调用模型。</p>
+              <ul>
+                <li>最近 7 天营业额是多少？</li>
+                <li>哪些商品卖得最好？</li>
+                <li>哪些商品需要补库存？</li>
+                <li>促销表现和售后是否异常？</li>
+              </ul>
+              <span className="status-pill">A2 即将开放</span>
             </article>
           </section>
         </>
