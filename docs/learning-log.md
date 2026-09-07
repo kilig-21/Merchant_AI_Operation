@@ -2888,3 +2888,38 @@ PAID --申请售后--> AFTER_SALE
 
 - 在 `feature/integration` 启动真实后端与前端，以商家会话验证 BFF 的 summary、top-products、promotions、after-sale-rate 及页面空数据/有数据展示。
 - 真实联调通过后推送集合分支，正式收口 A1；随后进入 A2，使用 Spring AI 2.x 建立不读取业务数据的最小只读对话。
+
+## Day 35：2026-09-07 / A1 真实会话与 BFF 联调
+
+### 今天完成
+
+- 启动 MySQL、Redis、RabbitMQ、Spring Boot 和 Next.js，后端健康检查为 `UP`。
+- 使用真实账号 `merchant_a_admin` 从前端登录，安全 Cookie 经 Next.js BFF 转换为后端 Bearer 身份；浏览器脚本无法读取完整 Token。
+- Dashboard 成功展示商家 A 的真实经营结果：有效订单 `2`、营业额 `487`、客单价 `243.5`、两个热销 SKU、售后申请率 `50%`，并正确展示促销空态。
+- 使用真实后端请求复核空范围、32 天跨度和非法 limit；同时对比商家 A/B 结果并验证消费者访问返回 403。
+- 前端 check、4 项测试和生产构建通过；A1 没有模型依赖或模型调用。
+
+### 今天确认的链路
+
+```text
+商家登录
+→ 后端签发 JWT
+→ Next.js 仅存入 HttpOnly Cookie
+→ Dashboard 请求 /api/backend/merchant/analytics/**
+→ BFF 注入 Authorization
+→ Spring Security 恢复 LoginPrincipal
+→ Service 从 CurrentUser 取得 tenantId
+→ Mapper 执行受控聚合 SQL
+→ Dashboard 展示真实结果
+```
+
+### 侧边任务/对话补充记录
+
+- 用户已掌握 tenantId 不能信任前端参数：只读场景会造成跨租户数据泄露，写场景还可能造成跨租户篡改，因此统一从服务端安全上下文取得。
+- 浏览器原生日期输入存在自己的 min/max 校验；未来日期会在提交前被浏览器阻止。
+- 自动化直接改变 date input 的 DOM 值不一定等于 React 状态已经同步。本轮没有把这种不可靠操作当成页面验收，而是使用真实 HTTP 请求验证空范围和参数边界。
+
+### 下一步
+
+- A1 已完成代码、自动测试和真实浏览器/BFF 联调，可以收口。
+- 用户决定是否提交并推送集合分支文档；随后进入 A2，使用 Spring AI 2.x 完成尚不能读取业务数据的最小只读文本对话。
