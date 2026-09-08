@@ -2,6 +2,7 @@ package org.example.merchant_ai_operation.merchant.ai.service;
 
 
 import org.example.merchant_ai_operation.merchant.ai.dto.AiChatRequest;
+import org.example.merchant_ai_operation.merchant.ai.exception.AiChatException;
 import org.example.merchant_ai_operation.merchant.ai.vo.AiChatResponse;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -35,17 +36,32 @@ public class AiChatService {
                 new UserMessage(request.message())
         ));
 
-        // 调用模型。
-        ChatResponse response = chatModel.call(prompt);
+        try {
+            // 调用模型。
+            ChatResponse response = chatModel.call(prompt);
 
-        //提取模型回答问题
-        String answer = Objects.requireNonNull(response.getResult())
-                .getOutput()
-                .getText();
+            if (response == null
+                    || response.getResult() == null
+                    || response.getResult().getOutput() == null
+                    || response.getResult().getOutput().getText() == null
+                    || response.getResult().getOutput().getText().isBlank()) {
+                throw new AiChatException(502, "AI 返回内容为空", null);
+            }
 
-        // 获取本次使用的模型名称
-        String model = chatModel.getOptions().getModel();
+            //提取模型回答问题
+            String answer = Objects.requireNonNull(response.getResult())
+                    .getOutput()
+                    .getText();
 
-        return new AiChatResponse(answer, model, false);
+            // 获取本次使用的模型名称
+            String model = chatModel.getOptions().getModel();
+
+            return new AiChatResponse(answer, model, false);
+
+        } catch (AiChatException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new AiChatException(503, "AI 服务暂时不可用", ex);
+        }
     }
 }
