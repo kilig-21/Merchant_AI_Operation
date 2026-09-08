@@ -27,15 +27,11 @@ export function MerchantAiChat() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const [retryMessage, setRetryMessage] = useState<string | null>(null);
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const message = input.trim();
-    if (!message || loading) return;
-
-    setMessages((current) => [...current, { role: "user", content: message }]);
-    setInput("");
+  async function requestAnswer(message: string) {
     setFailure(null);
+    setRetryMessage(null);
     setLoading(true);
 
     try {
@@ -49,9 +45,24 @@ export function MerchantAiChat() {
       ]);
     } catch (error) {
       setFailure(error instanceof Error ? error.message : "AI 服务暂时不可用，请稍后重试。");
+      setRetryMessage(message);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const message = input.trim();
+    if (!message || loading) return;
+
+    setMessages((current) => [...current, { role: "user", content: message }]);
+    setInput("");
+    await requestAnswer(message);
+  }
+
+  function retry() {
+    if (retryMessage && !loading) void requestAnswer(retryMessage);
   }
 
   return (
@@ -80,7 +91,7 @@ export function MerchantAiChat() {
             {loading ? <div className="ai-chat-loading">助手正在思考…</div> : null}
           </div>
 
-          {failure ? <RequestFailure error={failure} onRetry={() => setFailure(null)} title="AI 助手暂时无法回答" /> : null}
+          {failure ? <RequestFailure error={failure} onRetry={retry} title="AI 助手暂时无法回答" /> : null}
 
           <form className="ai-chat-form" onSubmit={submit}>
             <label htmlFor="merchant-ai-message">向助手提问</label>
