@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSession } from "./SessionProvider";
 const nav = [
   { href: "/merchant/dashboard", label: "经营概览" },
+  { href: "/merchant/ai", label: "AI 经营助手" },
   { href: "/merchant/products", label: "商品管理" },
   { href: "/merchant/orders", label: "订单管理" },
   { href: "/merchant/after-sales", label: "售后审核" },
