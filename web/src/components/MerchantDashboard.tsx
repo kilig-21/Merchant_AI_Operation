@@ -287,14 +287,13 @@ export function MerchantDashboard() {
             <article className="panel surface common-questions">
               <span className="eyebrow">AI ASSISTANT / A2</span>
               <h2>常问问题</h2>
-              <p>下一阶段可直接向经营助手提问；当前入口只展示问题，不会调用模型。</p>
+              <p>经营助手现已开放基础文本对话；当前不会读取下方指标，也不会执行店铺操作。</p>
               <ul>
-                <li>最近 7 天营业额是多少？</li>
-                <li>哪些商品卖得最好？</li>
-                <li>哪些商品需要补库存？</li>
-                <li>促销表现和售后是否异常？</li>
+                <li>帮我写一段新品上架公告</li>
+                <li>给我三条通用的店铺经营建议</li>
+                <li>如何更清晰地回复顾客售后问题？</li>
               </ul>
-              <span className="status-pill">A2 即将开放</span>
+              <Link className="button" href="/merchant/ai">进入 AI 经营助手 ↗</Link>
             </article>
           </section>
         </>
