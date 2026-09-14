@@ -323,6 +323,13 @@ export interface AfterSaleRate {
   afterSaleRate: number;
 }
 
+/** A2 商家 AI 文本对话响应；当前阶段不会读取真实经营数据。 */
+export interface MerchantAiChatResponse {
+  answer: string;
+  model: string | null;
+  businessDataUsed: boolean;
+}
+
 export interface JournalMetadata {
   slug: string;
   title: string;
