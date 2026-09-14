@@ -29,7 +29,7 @@ export function MerchantAiChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([starterMessage]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [failure, setFailure] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Error | null>(null);
   const [retryMessage, setRetryMessage] = useState<string | null>(null);
   const [serviceState, setServiceState] = useState<ServiceState>("idle");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -60,7 +60,7 @@ export function MerchantAiChat() {
       ]);
       setServiceState("ready");
     } catch (error) {
-      setFailure(error instanceof Error ? error.message : "AI 服务暂时不可用，请稍后重试。");
+      setFailure(error instanceof Error ? error : new Error("AI 服务暂时不可用，请稍后重试。"));
       setRetryMessage(message);
       setServiceState("error");
     } finally {
@@ -133,7 +133,7 @@ export function MerchantAiChat() {
             <div ref={messagesEndRef} />
           </div>
 
-          {failure ? <RequestFailure error={failure} onRetry={retry} title="AI 助手暂时无法回答" /> : null}
+          {failure ? <RequestFailure error={failure} loginHref="/merchant/login" onRetry={retry} title="AI 助手暂时无法回答" /> : null}
 
           <form className="ai-chat-form" onSubmit={submit}>
             <label htmlFor="merchant-ai-message">向助手提问</label>
