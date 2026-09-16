@@ -2923,3 +2923,42 @@ PAID --申请售后--> AFTER_SALE
 
 - A1 已完成代码、自动测试和真实浏览器/BFF 联调，可以收口。
 - 用户决定是否提交并推送集合分支文档；随后进入 A2，使用 Spring AI 2.x 完成尚不能读取业务数据的最小只读文本对话。
+
+## Day 37：2026-09-16 / A2 Spring AI 基础对话收口
+
+### 今天学了什么
+
+- A2 的模型调用边界由两部分共同保证：System Prompt 约束模型不能查询真实经营数据或执行业务操作，后端则没有为模型注册任何经营数据工具。因此回答只能基于用户文本和通用知识，不能凭空产生店铺数字。
+- 前端的 BFF 负责读取 HttpOnly 会话 Cookie、转发 Bearer 身份；浏览器页面不保存或读取 JWT。未登录时 BFF 返回 401，页面必须将它解释为登录失效，而不是笼统的 AI 服务故障。
+- AI 失败处理不能只保存字符串。保留 `ApiError` 对象才能携带 HTTP 状态码，让 `RequestFailure` 按 401、429、5xx 等情况展示不同的恢复动作。
+
+### 今天完成
+
+- 后端 A2 已完成：`POST /api/merchant/ai/chat` 经过登录商家身份、频率限制和超时/异常处理后调用 Spring AI 2.x 的 `ChatModel`；返回回答、模型名和 `businessDataUsed=false`。
+- 真实 BFF 联调完成：以商家账号登录后，`POST /api/backend/merchant/ai/chat` 收到 DeepSeek `deepseek-v4-flash` 的正常响应；模型回答明确说明当前不读取订单、商品、库存、经营指标和售后数据。未登录调用正确返回 401。
+- 后端定向测试全部通过：`MerchantAiControllerTest` 4 项、`AiChatGuardTest` 3 项、`AiChatServiceTest` 4 项。
+- 前端 `npm run check`、7 项测试和生产构建通过；页面能展示模型名和“本次回答未使用店铺经营数据”。
+- 修复 `web/src/components/MerchantAiChat.tsx`：捕获失败时保留原始 `Error`，并向 `RequestFailure` 提供 `/merchant/login`。真实过期会话从“AI 助手暂时无法回答”修正为“登录已失效/请先登录”。
+- 分支交付完成：集合分支顺序合入后端 `089c2ae`、前端 `c48d088`；错误状态修复在集合分支提交为 `97d8b29`，并以 `4607bac` cherry-pick 到 `feature/web-v2`。`feature/backend`、`feature/web-v2`、`feature/integration` 均已推送。
+
+### 验收记录
+
+| 验收项 | 结果 |
+|---|---|
+| 后端健康检查 | `/actuator/health` 返回 `UP` |
+| 已登录 BFF 对话 | DeepSeek 正常响应，返回 `businessDataUsed=false` |
+| 未登录 BFF 对话 | 返回 401“请先登录” |
+| A2 后端定向测试 | 11 项通过 |
+| 前端质量检查 | check、7 项测试、生产构建通过 |
+| 浏览器错误恢复 | 过期登录态展示重新登录入口；重新登录后正常对话 |
+
+### 侧边任务/对话补充记录
+
+- 集合分支的职责是集成和验收。后端、前端各自完成 A2 后，由集合分支先合后端、再合前端；不把整个集合分支反向 merge 回两个功能分支，避免引入不属于该分支的改动。
+- 当集合分支上的改动只属于前端时，先形成单独提交，再通过 `git cherry-pick <commit>` 同步到 `feature/web-v2`。cherry-pick 会生成新提交号，因此 `97d8b29` 与 `4607bac` 内容等价但哈希不同是正常现象。
+- 合并后发现方向不对时，`git reset --merge ORIG_HEAD` 可撤销刚刚完成的 merge，同时尽量保留合并前已有的本地改动；只适用于确认要撤回最近一次合并的场景。
+
+### 下一步
+
+- 切换到 `feature/backend` 开始 A3。第一步只建立“当前商家经营汇总”受控工具：日期范围由工具参数提供，tenantId 必须由 `CurrentUser` 注入，模型不得接触任意 SQL 或写操作。
+- 首条工具通过租户隔离、日期限制、DTO 可追溯和模型实调验证后，再依次增加其余只读工具、会话/审计存储与 SSE。
