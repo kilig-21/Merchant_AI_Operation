@@ -22,7 +22,7 @@ type ServiceState = "idle" | "loading" | "ready" | "error";
 
 const starterMessage: ChatMessage = {
   role: "assistant",
-  content: "你好，我是商家经营助手的早期版本。当前可以进行基础文本对话，但还不能查询真实经营数据或执行店铺操作。",
+  content: "你好，我是商家经营助手。当前可以进行基础文本对话，并查询当前商家在明确日期范围内的经营汇总；不能执行任何店铺操作。",
 };
 
 export function MerchantAiChat() {
@@ -93,13 +93,13 @@ export function MerchantAiChat() {
     <MerchantShell title="AI 经营助手" eyebrow="MORROW / AI OPERATIONS">
       <section className="ai-chat-layout" aria-label="AI 经营助手">
         <div className="ai-chat-intro">
-          <span className="eyebrow">A2 / TEXT MODEL</span>
-          <h2>把问题交给助手，先从清晰的对话开始。</h2>
-          <p>当前版本只提供基础文本对话，不读取订单、商品、库存、经营指标或售后数据。</p>
+          <span className="eyebrow">A3 / READ-ONLY TOOL</span>
+          <h2>把问题交给助手，需要时用真实数据回答。</h2>
+          <p>当前版本可查询当前商家在明确日期范围内的经营汇总，仍不会执行任何店铺操作。</p>
           <div className="ai-chat-boundary">
-            <strong>A2 能力边界</strong>
+            <strong>A3 当前能力</strong>
             <span>可以生成通用建议与文案</span>
-            <span>不会查询店铺真实数据</span>
+            <span>可以查询当前商家的经营汇总</span>
             <span>不会执行改价、上架或促销操作</span>
           </div>
           <div className="ai-chat-starters" aria-label="快捷问题">
@@ -115,7 +115,7 @@ export function MerchantAiChat() {
           <div className={`ai-chat-status ai-chat-status--${serviceState}`}>
             <span className="status-dot" aria-hidden="true" />
             <span>{statusLabel}</span>
-            <small>A2 · 纯文本 · 不读取经营数据</small>
+            <small>A3 · 经营汇总 · 只读查询</small>
           </div>
 
           <div className="ai-chat-messages" aria-live="polite">
@@ -124,8 +124,12 @@ export function MerchantAiChat() {
                 <span className="ai-chat-role">{message.role === "user" ? "你" : "助手"}</span>
                 <p>{message.content}</p>
                 {message.model ? <small>模型：{message.model}</small> : null}
-                {message.role === "assistant" && message.businessDataUsed === false ? (
-                  <small>本次回答未使用店铺经营数据</small>
+                {message.role === "assistant" && typeof message.businessDataUsed === "boolean" ? (
+                  <small className={`ai-chat-data-note ai-chat-data-note--${message.businessDataUsed ? "used" : "unused"}`}>
+                    {message.businessDataUsed
+                      ? "本次回答已查询当前商家经营数据"
+                      : "本次回答未使用店铺经营数据"}
+                  </small>
                 ) : null}
               </article>
             ))}
