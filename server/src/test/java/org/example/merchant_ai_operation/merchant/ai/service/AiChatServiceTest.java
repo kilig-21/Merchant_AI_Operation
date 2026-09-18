@@ -3,7 +3,10 @@ package org.example.merchant_ai_operation.merchant.ai.service;
 import org.example.merchant_ai_operation.merchant.ai.dto.AiChatRequest;
 import org.example.merchant_ai_operation.merchant.ai.exception.AiChatException;
 import org.example.merchant_ai_operation.merchant.ai.guard.AiChatGuard;
+import org.example.merchant_ai_operation.merchant.ai.tool.AiToolUsageTracker;
+import org.example.merchant_ai_operation.merchant.ai.tool.MerchantAnalyticsTools;
 import org.example.merchant_ai_operation.merchant.ai.vo.AiChatResponse;
+import org.example.merchant_ai_operation.merchant.analytics.service.MerchantAnalyticsQueryService;
 import org.example.merchant_ai_operation.security.LoginPrincipal;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +38,8 @@ class AiChatServiceTest {
 
     private ObjectProvider<ChatModel> chatModelProvider;
     private ChatModel chatModel;
+    private MerchantAnalyticsTools merchantAnalyticsTools;
+    private AiToolUsageTracker toolUsageTracker;
     private AiChatService service;
 
     @BeforeEach
@@ -42,12 +47,24 @@ class AiChatServiceTest {
     void setUp() {
         chatModelProvider = mock(ObjectProvider.class);
         chatModel = mock(ChatModel.class);
-        ChatOptions options = mock(ChatOptions.class);
+        ChatOptions options = ChatOptions.builder()
+                .model("deepseek-v4-flash")
+                .build();
         when(chatModel.getOptions()).thenReturn(options);
-        when(options.getModel()).thenReturn("deepseek-v4-flash");
+        when(chatModel.getDefaultOptions()).thenReturn(options);
 
         AiChatGuard guard = new AiChatGuard(Clock.systemUTC());
-        service = new AiChatService(chatModelProvider, guard);
+        toolUsageTracker = new AiToolUsageTracker();
+        merchantAnalyticsTools = new MerchantAnalyticsTools(
+                mock(MerchantAnalyticsQueryService.class),
+                toolUsageTracker
+        );
+        service = new AiChatService(
+                chatModelProvider,
+                guard,
+                merchantAnalyticsTools,
+                toolUsageTracker
+        );
 
         LoginPrincipal principal = new LoginPrincipal(8001L, 1001L, "MERCHANT_ADMIN");
         SecurityContextHolder.getContext().setAuthentication(
@@ -78,7 +95,7 @@ class AiChatServiceTest {
     }
 
     @Test
-    void returnsModelAnswerWithoutClaimingBusinessDataUsage() {
+    void returnsModelAnswerWithoutClaimingBusinessDataUsageWhenNoToolIsCalled() {
         when(chatModelProvider.getIfAvailable()).thenReturn(chatModel);
         when(chatModel.call(org.mockito.ArgumentMatchers.any(Prompt.class)))
                 .thenReturn(responseWithText("可以先从复盘商品表现开始。"));
@@ -92,7 +109,7 @@ class AiChatServiceTest {
         ArgumentCaptor<Prompt> captor = ArgumentCaptor.forClass(Prompt.class);
         verify(chatModel).call(captor.capture());
         Prompt prompt = captor.getValue();
-        assertTrue(prompt.getSystemMessage().getText().contains("不能查询订单"));
+        assertTrue(prompt.getSystemMessage().getText().contains("仅当用户询问当前登录商家"));
         assertEquals("如何复盘经营？", prompt.getUserMessage().getText());
     }
 
