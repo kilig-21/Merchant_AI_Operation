@@ -5,6 +5,7 @@ import org.example.merchant_ai_operation.merchant.analytics.service.MerchantAnal
 import org.example.merchant_ai_operation.merchant.analytics.vo.AfterSaleRateVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.MerchantOperatingSummaryVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.LowStockSkuVO;
+import org.example.merchant_ai_operation.merchant.analytics.vo.OrderStatusStatisticsVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.PromotionPerformanceVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.TopProductVO;
 import org.example.merchant_ai_operation.security.LoginPrincipal;
@@ -104,6 +105,18 @@ class MerchantAnalyticsQueryServiceIntegrationTest {
     }
 
     @Test
+    void shouldReturnOrderStatusStatisticsForTenantA() {
+        OrderStatusStatisticsVO statistics =
+                analyticsQueryService.getOrderStatusStatistics(START_DATE, END_DATE);
+
+        assertEquals(5L, statistics.totalOrderCount());
+        assertEquals(1L, statistics.pendingPaymentOrderCount());
+        assertEquals(2L, statistics.paidOrderCount());
+        assertEquals(1L, statistics.cancelledOrderCount());
+        assertEquals(1L, statistics.closedOrderCount());
+    }
+
+    @Test
     void shouldReturnFixedPromotionPerformanceForTenantA() {
         List<PromotionPerformanceVO> promotions =
                 analyticsQueryService.getPromotionPerformance(START_DATE, END_DATE, 5);
@@ -141,6 +154,14 @@ class MerchantAnalyticsQueryServiceIntegrationTest {
         assertMoney("999.00", summary.averageOrderValue());
         assertEquals(0L, summary.pendingPaymentCount());
         assertEquals(1L, summary.lowStockProductCount());
+
+        OrderStatusStatisticsVO statistics =
+                analyticsQueryService.getOrderStatusStatistics(START_DATE, END_DATE);
+        assertEquals(1L, statistics.totalOrderCount());
+        assertEquals(0L, statistics.pendingPaymentOrderCount());
+        assertEquals(1L, statistics.paidOrderCount());
+        assertEquals(0L, statistics.cancelledOrderCount());
+        assertEquals(0L, statistics.closedOrderCount());
     }
 
     @Test
@@ -165,6 +186,14 @@ class MerchantAnalyticsQueryServiceIntegrationTest {
         assertEquals(0L, afterSaleRate.paidOrderItemCount());
         assertEquals(0L, afterSaleRate.afterSaleOrderItemCount());
         assertMoney("0.00", afterSaleRate.afterSaleRate());
+
+        OrderStatusStatisticsVO statistics =
+                analyticsQueryService.getOrderStatusStatistics(emptyStart, emptyEnd);
+        assertEquals(0L, statistics.totalOrderCount());
+        assertEquals(0L, statistics.pendingPaymentOrderCount());
+        assertEquals(0L, statistics.paidOrderCount());
+        assertEquals(0L, statistics.cancelledOrderCount());
+        assertEquals(0L, statistics.closedOrderCount());
     }
 
     @Test

@@ -6,6 +6,7 @@ import org.example.merchant_ai_operation.merchant.analytics.mapper.MerchantAnaly
 import org.example.merchant_ai_operation.merchant.analytics.vo.AfterSaleRateVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.MerchantOperatingSummaryVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.LowStockSkuVO;
+import org.example.merchant_ai_operation.merchant.analytics.vo.OrderStatusStatisticsVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.PromotionPerformanceVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.TopProductVO;
 import org.example.merchant_ai_operation.security.CurrentUser;
@@ -118,6 +119,32 @@ public class MerchantAnalyticsQueryService {
                 tenantId,
                 LOW_STOCK_THRESHOLD,
                 safeLimit
+        );
+    }
+
+    /**
+     * 查询当前商家指定日期范围内的订单状态统计。
+     */
+    public OrderStatusStatisticsVO getOrderStatusStatistics(
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
+        QueryRange range = normalizeDateRange(startDate, endDate);
+        Long tenantId = CurrentUser.requiredMerchantTenantId();
+
+        MerchantAnalyticsMapper.OrderStatusStatisticsRow row =
+                analyticsMapper.selectOrderStatusStatistics(
+                        tenantId,
+                        range.startAt(),
+                        range.endAt()
+                );
+
+        return new OrderStatusStatisticsVO(
+                row.totalOrderCount(),
+                row.pendingPaymentOrderCount(),
+                row.paidOrderCount(),
+                row.cancelledOrderCount(),
+                row.closedOrderCount()
         );
     }
 

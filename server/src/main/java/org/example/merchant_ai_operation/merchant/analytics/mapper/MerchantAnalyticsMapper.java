@@ -72,6 +72,18 @@ public interface MerchantAnalyticsMapper {
     }
 
     /**
+     * 承接订单当前状态的原始聚合结果。
+     */
+    record OrderStatusStatisticsRow(
+            Long totalOrderCount,
+            Long pendingPaymentOrderCount,
+            Long paidOrderCount,
+            Long cancelledOrderCount,
+            Long closedOrderCount
+    ) {
+    }
+
+    /**
      * 根据商家租户和指定时间范围，查询经营汇总所需的原始数据。
      *
      * <p>订单类指标使用左闭右开的时间范围；
@@ -202,6 +214,34 @@ public interface MerchantAnalyticsMapper {
             @Param("tenantId") Long tenantId,
             @Param("lowStockThreshold") int lowStockThreshold,
             @Param("limit") int limit
+    );
+
+    /**
+     * 查询当前商家在指定日期范围内订单的当前状态分布。
+     *
+     * <p>日期归因使用订单创建时间，与既有经营汇总保持一致；状态使用订单
+     * 当前值，因此同一笔历史订单只会归入一种状态。</p>
+     */
+    @Select("""
+        SELECT
+            COUNT(*) AS totalOrderCount,
+            COALESCE(SUM(CASE WHEN o.status = 'PENDING_PAYMENT' THEN 1 ELSE 0 END), 0)
+                AS pendingPaymentOrderCount,
+            COALESCE(SUM(CASE WHEN o.status = 'PAID' THEN 1 ELSE 0 END), 0)
+                AS paidOrderCount,
+            COALESCE(SUM(CASE WHEN o.status = 'CANCELLED' THEN 1 ELSE 0 END), 0)
+                AS cancelledOrderCount,
+            COALESCE(SUM(CASE WHEN o.status = 'CLOSED' THEN 1 ELSE 0 END), 0)
+                AS closedOrderCount
+        FROM commerce_order o
+        WHERE o.tenant_id = #{tenantId}
+          AND o.created_at >= #{startAt}
+          AND o.created_at < #{endAt}
+        """)
+    OrderStatusStatisticsRow selectOrderStatusStatistics(
+            @Param("tenantId") Long tenantId,
+            @Param("startAt") LocalDateTime startAt,
+            @Param("endAt") LocalDateTime endAt
     );
 
     /**

@@ -5,6 +5,7 @@ package org.example.merchant_ai_operation.merchant.ai.tool;
 import org.example.merchant_ai_operation.merchant.analytics.service.MerchantAnalyticsQueryService;
 import org.example.merchant_ai_operation.merchant.analytics.vo.AfterSaleRateVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.LowStockSkuVO;
+import org.example.merchant_ai_operation.merchant.analytics.vo.OrderStatusStatisticsVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.MerchantOperatingSummaryVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.PromotionPerformanceVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.TopProductVO;
@@ -109,5 +110,19 @@ public class MerchantAnalyticsTools {
 
         toolUsageTracker.markBusinessDataUsed();
         return skus;
+    }
+
+    @Tool(description = "查询当前登录商家在指定日期范围内的订单状态统计，包括订单总数、待付款、已支付、已取消和已关闭订单数。")
+    public OrderStatusStatisticsVO getOrderStatusStatistics(
+            @ToolParam(description = "查询开始日期，格式为 yyyy-MM-dd")
+            LocalDate startDate,
+            @ToolParam(description = "查询结束日期，格式为 yyyy-MM-dd，最多查询 31 天")
+            LocalDate endDate
+    ) {
+        OrderStatusStatisticsVO statistics =
+                analyticsQueryService.getOrderStatusStatistics(startDate, endDate);
+
+        toolUsageTracker.markBusinessDataUsed();
+        return statistics;
     }
 }

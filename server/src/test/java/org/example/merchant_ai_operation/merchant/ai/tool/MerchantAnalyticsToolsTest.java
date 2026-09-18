@@ -3,6 +3,7 @@ package org.example.merchant_ai_operation.merchant.ai.tool;
 import org.example.merchant_ai_operation.merchant.analytics.service.MerchantAnalyticsQueryService;
 import org.example.merchant_ai_operation.merchant.analytics.vo.AfterSaleRateVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.LowStockSkuVO;
+import org.example.merchant_ai_operation.merchant.analytics.vo.OrderStatusStatisticsVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.MerchantOperatingSummaryVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.PromotionPerformanceVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.TopProductVO;
@@ -200,5 +201,39 @@ class MerchantAnalyticsToolsTest {
         }
 
         verify(analyticsQueryService).getLowStockSkus(3);
+    }
+
+    @Test
+    void delegatesOrderStatusStatisticsQueryToAnalyticsService() {
+        MerchantAnalyticsQueryService analyticsQueryService =
+                mock(MerchantAnalyticsQueryService.class);
+        AiToolUsageTracker toolUsageTracker = new AiToolUsageTracker();
+        MerchantAnalyticsTools tools = new MerchantAnalyticsTools(
+                analyticsQueryService,
+                toolUsageTracker
+        );
+        LocalDate startDate = LocalDate.of(2026, 8, 1);
+        LocalDate endDate = LocalDate.of(2026, 8, 3);
+        OrderStatusStatisticsVO expected = new OrderStatusStatisticsVO(
+                8L,
+                2L,
+                3L,
+                1L,
+                2L
+        );
+
+        when(analyticsQueryService.getOrderStatusStatistics(startDate, endDate))
+                .thenReturn(expected);
+
+        try (AiToolUsageTracker.Scope scope = toolUsageTracker.openScope()) {
+            OrderStatusStatisticsVO actual =
+                    tools.getOrderStatusStatistics(startDate, endDate);
+
+            assertSame(expected, actual);
+            assertTrue(scope.businessDataUsed());
+        }
+
+        verify(analyticsQueryService)
+                .getOrderStatusStatistics(startDate, endDate);
     }
 }
