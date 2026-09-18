@@ -2,6 +2,7 @@ package org.example.merchant_ai_operation.merchant.ai.tool;
 
 import org.example.merchant_ai_operation.merchant.analytics.service.MerchantAnalyticsQueryService;
 import org.example.merchant_ai_operation.merchant.analytics.vo.MerchantOperatingSummaryVO;
+import org.example.merchant_ai_operation.merchant.analytics.vo.PromotionPerformanceVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.TopProductVO;
 import org.junit.jupiter.api.Test;
 
@@ -94,5 +95,44 @@ class MerchantAnalyticsToolsTest {
         }
 
         verify(analyticsQueryService).getTopProducts(startDate, endDate, 3);
+    }
+
+    @Test
+    void delegatesPromotionPerformanceQueryToAnalyticsService() {
+        MerchantAnalyticsQueryService analyticsQueryService =
+                mock(MerchantAnalyticsQueryService.class);
+        AiToolUsageTracker toolUsageTracker = new AiToolUsageTracker();
+        MerchantAnalyticsTools tools = new MerchantAnalyticsTools(
+                analyticsQueryService,
+                toolUsageTracker
+        );
+
+        LocalDate startDate = LocalDate.of(2026, 8, 1);
+        LocalDate endDate = LocalDate.of(2026, 8, 3);
+        List<PromotionPerformanceVO> expected = List.of(
+                new PromotionPerformanceVO(
+                        301L,
+                        "秋季上新",
+                        50L,
+                        12L,
+                        10L,
+                        new BigDecimal("1680.00"),
+                        new BigDecimal("0.2400")
+                )
+        );
+
+        when(analyticsQueryService.getPromotionPerformance(startDate, endDate, 3))
+                .thenReturn(expected);
+
+        try (AiToolUsageTracker.Scope scope = toolUsageTracker.openScope()) {
+            List<PromotionPerformanceVO> actual =
+                    tools.getPromotionPerformance(startDate, endDate, 3);
+
+            assertSame(expected, actual);
+            assertTrue(scope.businessDataUsed());
+        }
+
+        verify(analyticsQueryService)
+                .getPromotionPerformance(startDate, endDate, 3);
     }
 }
