@@ -53,6 +53,8 @@
 .ai-chat-message--user .ai-chat-role { color: rgba(255,255,255,.68); }
 .ai-chat-message p { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; line-height: 1.65; }
 .ai-chat-message small { display: block; margin-top: 8px; color: var(--morrow-muted); font-size: 11px; }
+.ai-chat-message .ai-chat-data-note--used { color: #2f7d59; }
+.ai-chat-message .ai-chat-data-note--unused { color: var(--morrow-muted); }
 .ai-chat-loading { align-self: flex-start; color: var(--morrow-muted); font-size: 13px; }
 .ai-chat-form { border-top: 1px solid var(--morrow-line); padding-top: 18px; }
 .ai-chat-form label { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 600; }
