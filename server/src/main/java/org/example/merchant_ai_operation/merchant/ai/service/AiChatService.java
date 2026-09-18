@@ -5,17 +5,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.merchant_ai_operation.merchant.ai.dto.AiChatRequest;
 import org.example.merchant_ai_operation.merchant.ai.exception.AiChatException;
 import org.example.merchant_ai_operation.merchant.ai.guard.AiChatGuard;
+import org.example.merchant_ai_operation.merchant.ai.tool.AiToolUsageTracker;
+import org.example.merchant_ai_operation.merchant.ai.tool.MerchantAnalyticsTools;
 import org.example.merchant_ai_operation.merchant.ai.vo.AiChatResponse;
 import org.example.merchant_ai_operation.security.CurrentUser;
-import org.springframework.ai.chat.messages.SystemMessage;
-import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
-import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 
 @Slf4j
@@ -23,20 +20,32 @@ import java.util.UUID;
 public class AiChatService {
 
     //系统提示词
-    private static final String SYSTEM_PROMPT = """
-            你是商家经营助手的早期版本。
-            当前不能查询订单、商品、库存、经营指标或售后数据，也不能执行任何业务操作。
-            如果用户询问真实经营数据，必须明确说明当前版本尚未接入经营数据。
-            使用中文回答，表达简洁，不要编造任何真实业务数字。
+    private static final String SYSTEM_PROMPT =
+            """
+            你是商家经营助手。
+            仅当用户询问当前登录商家在明确日期范围内的经营汇总时，才可以调用已提供的经营汇总工具。
+            工具只返回当前商家的有效订单数、已支付订单数、营业额、客单价、待付款订单数和低库存商品数。
+            真实经营数字只能来自工具返回结果；没有调用工具时不得编造数字。
+            不得查询其他商家数据，不得调用任意 SQL，不得执行改价、上架、促销、订单、库存或售后写操作。
+            用户的问题超出已提供工具能力时，要明确说明当前不能查询。
+            使用中文回答，表达简洁。
             """;
 
     private final ObjectProvider<ChatModel> chatModelProvider;
     private final AiChatGuard aiChatGuard;
+    private final MerchantAnalyticsTools merchantAnalyticsTools;
+    private final AiToolUsageTracker toolUsageTracker;
+
     public AiChatService(
             ObjectProvider<ChatModel> chatModelProvider,
-            AiChatGuard aiChatGuard) {
+            AiChatGuard aiChatGuard,
+            MerchantAnalyticsTools merchantAnalyticsTools,
+            AiToolUsageTracker toolUsageTracker
+    ) {
         this.chatModelProvider = chatModelProvider;
         this.aiChatGuard = aiChatGuard;
+        this.merchantAnalyticsTools = merchantAnalyticsTools;
+        this.toolUsageTracker = toolUsageTracker;
     }
 
     /**
@@ -68,41 +77,41 @@ public class AiChatService {
                     model
             );
 
-            Prompt prompt = new Prompt(List.of(
-                    new SystemMessage(SYSTEM_PROMPT),
-                    new UserMessage(request.message())
-            ));
 
-            try {
-                // 调用模型。
-                ChatResponse response = chatModel.call(prompt);
+            ChatClient chatClient = ChatClient.builder(chatModel)
+                    .defaultSystem(SYSTEM_PROMPT)
+                    .defaultTools(merchantAnalyticsTools)
+                    .build();
 
-                if (response == null
-                        || response.getResult() == null
-                        || response.getResult().getOutput() == null
-                        || response.getResult().getOutput().getText() == null
-                        || response.getResult().getOutput().getText().isBlank()) {
+            try (AiToolUsageTracker.Scope toolScope =
+                         toolUsageTracker.openScope()) {
+
+                String answer = chatClient.prompt()
+                        .user(request.message())
+                        .call()
+                        .content();
+
+                if (answer == null || answer.isBlank()) {
                     throw new AiChatException(502, "AI 返回内容为空", null);
                 }
 
-                //提取模型回答问题
-                String answer = Objects.requireNonNull(response.getResult())
-                        .getOutput()
-                        .getText();
+                boolean businessDataUsed = toolScope.businessDataUsed();
 
-                //记录回答字符数，不记录回答内容。
+                //写入成功日志
                 long costMs = (System.nanoTime() - startNanos) / 1_000_000;
                 log.info(
-                        "AI 调用成功 requestId={} model={} cost={}ms answerChars={}",
+                        "AI 调用成功 requestId={} model={} cost={}ms answerChars={} businessDataUsed={}",
                         requestId,
                         model,
                         costMs,
-                        answer.length()
+                        answer.length(),
+                        businessDataUsed
                 );
 
-                return new AiChatResponse(answer, model, false);
-
-            } catch (AiChatException ex) {
+                // 保留原有成功日志，并补上 businessDataUsed
+                return new AiChatResponse(answer, model, businessDataUsed);
+            }
+            catch (AiChatException ex) {
                 //处理当前的“模型返回空内容”等已知业务问题。
                 long costMs = (System.nanoTime() - startNanos) / 1_000_000;
 

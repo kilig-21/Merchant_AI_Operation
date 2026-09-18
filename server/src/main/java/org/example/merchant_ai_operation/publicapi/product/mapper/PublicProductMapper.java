@@ -42,10 +42,10 @@ public interface PublicProductMapper {
                 @Param("offset") int offset
         );
 
-
-
-        //第一个查 SPU：商品本体信息，比如名称、描述、更新时间。
-        //这个方法只查已上架 SPU。下架商品会查不到，后面 Service 里就返回“商品不存在”。
+        /*
+        第一个查 SPU：商品本体信息，比如名称、描述、更新时间。
+        这个方法只查已上架 SPU。下架商品会查不到，后面 Service 里就返回“商品不存在”。
+        */
         @Select("""
                SELECT
                    p.id,
@@ -60,13 +60,13 @@ public interface PublicProductMapper {
         //查 SPU 基础详情
         PublicProductBaseVO selectPublicProductDetail(
                 @Param("storeId") Long storeId,
-                @Param("spuId") Long spuId);
+                @Param("spuId") Long spuId
+        );
 
-
-
-
-        //第二个查 SKU：这个商品下面有哪些可售规格、价格、库存。
-        //查询具体的sku商品型号
+        /*
+        第二个查 SKU：这个商品下面有哪些可售规格、价格、库存。
+        查询具体的sku商品型号
+        */
         @Select("""
                 SELECT
                     s.id,
@@ -87,8 +87,8 @@ public interface PublicProductMapper {
         //查这个 SPU 下的可售 SKU
         List<PublicSkuVO> selectPublicSkusBySpuId(
                 @Param("storeId") Long storeId,
-                @Param("spuId") Long spuId);
-
+                @Param("spuId") Long spuId
+        );
         @Select("""
         SELECT
             s.id AS skuId,
