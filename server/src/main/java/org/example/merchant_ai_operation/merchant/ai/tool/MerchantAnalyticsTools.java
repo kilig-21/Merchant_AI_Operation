@@ -4,10 +4,12 @@ package org.example.merchant_ai_operation.merchant.ai.tool;
 
 import org.example.merchant_ai_operation.merchant.analytics.service.MerchantAnalyticsQueryService;
 import org.example.merchant_ai_operation.merchant.analytics.vo.MerchantOperatingSummaryVO;
+import org.example.merchant_ai_operation.merchant.analytics.vo.TopProductVO;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 import java.time.LocalDate;
+import java.util.List;
 
 
 @Component
@@ -38,5 +40,24 @@ public class MerchantAnalyticsTools {
 
         //把查询结果返回给 Spring AI
         return summary;
+    }
+
+    @Tool(description = "查询当前登录商家在指定日期范围内销量最高的 SKU，包括商品名称、销量和已支付销售额。")
+    public List<TopProductVO> getTopProducts(
+            @ToolParam(description = "查询开始日期，格式为 yyyy-MM-dd")
+            LocalDate startDate,
+            @ToolParam(description = "查询结束日期，格式为 yyyy-MM-dd，最多查询 31 天")
+            LocalDate endDate,
+            @ToolParam(description = "返回热销商品数量，必须在 1 到 10 之间")
+            Integer limit
+    ) {
+        List<TopProductVO> products = analyticsQueryService.getTopProducts(
+                startDate,
+                endDate,
+                limit
+        );
+
+        toolUsageTracker.markBusinessDataUsed();
+        return products;
     }
 }

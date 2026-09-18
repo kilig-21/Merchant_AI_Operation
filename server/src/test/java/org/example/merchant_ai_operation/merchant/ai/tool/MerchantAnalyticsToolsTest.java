@@ -2,10 +2,12 @@ package org.example.merchant_ai_operation.merchant.ai.tool;
 
 import org.example.merchant_ai_operation.merchant.analytics.service.MerchantAnalyticsQueryService;
 import org.example.merchant_ai_operation.merchant.analytics.vo.MerchantOperatingSummaryVO;
+import org.example.merchant_ai_operation.merchant.analytics.vo.TopProductVO;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -54,5 +56,43 @@ class MerchantAnalyticsToolsTest {
 
         verify(analyticsQueryService)
                 .getOperatingSummary(startDate, endDate);
+    }
+
+    @Test
+    void delegatesTopProductsQueryToAnalyticsService() {
+        MerchantAnalyticsQueryService analyticsQueryService =
+                mock(MerchantAnalyticsQueryService.class);
+        AiToolUsageTracker toolUsageTracker = new AiToolUsageTracker();
+        MerchantAnalyticsTools tools = new MerchantAnalyticsTools(
+                analyticsQueryService,
+                toolUsageTracker
+        );
+
+        LocalDate startDate = LocalDate.of(2026, 8, 1);
+        LocalDate endDate = LocalDate.of(2026, 8, 3);
+        List<TopProductVO> expected = List.of(
+                new TopProductVO(
+                        101L,
+                        "轻量防晒衣",
+                        8L,
+                        new BigDecimal("800.00")
+                )
+        );
+
+        when(analyticsQueryService.getTopProducts(startDate, endDate, 3))
+                .thenReturn(expected);
+
+        try (AiToolUsageTracker.Scope scope = toolUsageTracker.openScope()) {
+            List<TopProductVO> actual = tools.getTopProducts(
+                    startDate,
+                    endDate,
+                    3
+            );
+
+            assertSame(expected, actual);
+            assertTrue(scope.businessDataUsed());
+        }
+
+        verify(analyticsQueryService).getTopProducts(startDate, endDate, 3);
     }
 }

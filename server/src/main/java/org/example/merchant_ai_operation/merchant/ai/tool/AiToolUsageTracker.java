@@ -61,7 +61,7 @@ public class AiToolUsageTracker {
         if (nextCount > MAX_TOOL_CALLS_PER_CHAT) {
             throw new AiChatException(
                     400,
-                    "一次对话最多查询一次经营汇总",
+                    "一次对话最多调用一次经营查询工具",
                     null
             );
         }

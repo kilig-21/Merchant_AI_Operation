@@ -40,7 +40,7 @@ class AiToolUsageTrackerTest {
             );
 
             assertEquals(400, exception.getCode());
-            assertEquals("一次对话最多查询一次经营汇总", exception.getMessage());
+            assertEquals("一次对话最多调用一次经营查询工具", exception.getMessage());
             assertTrue(scope.businessDataUsed());
         }
     }
