@@ -1,6 +1,7 @@
 package org.example.merchant_ai_operation.merchant.ai.tool;
 
 import org.example.merchant_ai_operation.merchant.analytics.service.MerchantAnalyticsQueryService;
+import org.example.merchant_ai_operation.merchant.analytics.vo.AfterSaleRateVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.MerchantOperatingSummaryVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.PromotionPerformanceVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.TopProductVO;
@@ -134,5 +135,36 @@ class MerchantAnalyticsToolsTest {
 
         verify(analyticsQueryService)
                 .getPromotionPerformance(startDate, endDate, 3);
+    }
+
+    @Test
+    void delegatesAfterSaleRateQueryToAnalyticsService() {
+        MerchantAnalyticsQueryService analyticsQueryService =
+                mock(MerchantAnalyticsQueryService.class);
+        AiToolUsageTracker toolUsageTracker = new AiToolUsageTracker();
+        MerchantAnalyticsTools tools = new MerchantAnalyticsTools(
+                analyticsQueryService,
+                toolUsageTracker
+        );
+
+        LocalDate startDate = LocalDate.of(2026, 8, 1);
+        LocalDate endDate = LocalDate.of(2026, 8, 3);
+        AfterSaleRateVO expected = new AfterSaleRateVO(
+                10L,
+                2L,
+                new BigDecimal("0.2000")
+        );
+
+        when(analyticsQueryService.getAfterSaleRate(startDate, endDate))
+                .thenReturn(expected);
+
+        try (AiToolUsageTracker.Scope scope = toolUsageTracker.openScope()) {
+            AfterSaleRateVO actual = tools.getAfterSaleRate(startDate, endDate);
+
+            assertSame(expected, actual);
+            assertTrue(scope.businessDataUsed());
+        }
+
+        verify(analyticsQueryService).getAfterSaleRate(startDate, endDate);
     }
 }

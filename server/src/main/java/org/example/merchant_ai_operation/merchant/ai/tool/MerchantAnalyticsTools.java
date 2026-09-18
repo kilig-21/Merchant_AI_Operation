@@ -3,6 +3,7 @@ package org.example.merchant_ai_operation.merchant.ai.tool;
 
 
 import org.example.merchant_ai_operation.merchant.analytics.service.MerchantAnalyticsQueryService;
+import org.example.merchant_ai_operation.merchant.analytics.vo.AfterSaleRateVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.MerchantOperatingSummaryVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.PromotionPerformanceVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.TopProductVO;
@@ -80,5 +81,21 @@ public class MerchantAnalyticsTools {
 
         toolUsageTracker.markBusinessDataUsed();
         return performances;
+    }
+
+    @Tool(description = "查询当前登录商家在指定日期范围内的售后概览，包括已支付订单明细数、发起售后的明细数和售后申请率。")
+    public AfterSaleRateVO getAfterSaleRate(
+            @ToolParam(description = "查询开始日期，格式为 yyyy-MM-dd")
+            LocalDate startDate,
+            @ToolParam(description = "查询结束日期，格式为 yyyy-MM-dd，最多查询 31 天")
+            LocalDate endDate
+    ) {
+        AfterSaleRateVO afterSaleRate = analyticsQueryService.getAfterSaleRate(
+                startDate,
+                endDate
+        );
+
+        toolUsageTracker.markBusinessDataUsed();
+        return afterSaleRate;
     }
 }
