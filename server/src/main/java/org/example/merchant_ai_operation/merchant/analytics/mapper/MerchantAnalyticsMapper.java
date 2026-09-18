@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.example.merchant_ai_operation.merchant.analytics.vo.TopProductVO;
+import org.example.merchant_ai_operation.merchant.analytics.vo.LowStockSkuVO;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -167,6 +168,39 @@ public interface MerchantAnalyticsMapper {
             @Param("tenantId") Long tenantId,
             @Param("startAt") LocalDateTime startAt,
             @Param("endAt") LocalDateTime endAt,
+            @Param("limit") int limit
+    );
+
+    /**
+     * 查询当前商家的低库存 SKU 快照。
+     *
+     * <p>库存是当前状态，不按订单日期范围过滤。SKU 与 SPU 均必须处于
+     * ON_SALE 状态，避免把已下架商品带入经营建议。</p>
+     */
+    @Select("""
+        SELECT
+            s.id AS skuId,
+            s.spu_id AS spuId,
+            p.name AS productName,
+            s.sku_name AS skuName,
+            s.sale_price AS salePrice,
+            s.available_stock AS availableStock,
+            s.locked_stock AS lockedStock
+        FROM product_sku s
+        JOIN product_spu p
+          ON p.id = s.spu_id
+         AND p.tenant_id = s.tenant_id
+        WHERE s.tenant_id = #{tenantId}
+          AND s.status = 'ON_SALE'
+          AND p.status = 'ON_SALE'
+          AND s.available_stock <= #{lowStockThreshold}
+        ORDER BY s.available_stock ASC,
+                 s.id ASC
+        LIMIT #{limit}
+        """)
+    List<LowStockSkuVO> selectLowStockSkus(
+            @Param("tenantId") Long tenantId,
+            @Param("lowStockThreshold") int lowStockThreshold,
             @Param("limit") int limit
     );
 

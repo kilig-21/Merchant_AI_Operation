@@ -4,6 +4,7 @@ package org.example.merchant_ai_operation.merchant.ai.tool;
 
 import org.example.merchant_ai_operation.merchant.analytics.service.MerchantAnalyticsQueryService;
 import org.example.merchant_ai_operation.merchant.analytics.vo.AfterSaleRateVO;
+import org.example.merchant_ai_operation.merchant.analytics.vo.LowStockSkuVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.MerchantOperatingSummaryVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.PromotionPerformanceVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.TopProductVO;
@@ -97,5 +98,16 @@ public class MerchantAnalyticsTools {
 
         toolUsageTracker.markBusinessDataUsed();
         return afterSaleRate;
+    }
+
+    @Tool(description = "查询当前登录商家的低库存 SKU 当前快照，包括商品名称、规格名称、售价、可售库存和锁定库存。低库存指可售库存不高于 5。")
+    public List<LowStockSkuVO> getLowStockSkus(
+            @ToolParam(description = "返回低库存 SKU 数量，必须在 1 到 10 之间")
+            Integer limit
+    ) {
+        List<LowStockSkuVO> skus = analyticsQueryService.getLowStockSkus(limit);
+
+        toolUsageTracker.markBusinessDataUsed();
+        return skus;
     }
 }

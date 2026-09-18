@@ -5,6 +5,7 @@ import org.example.merchant_ai_operation.common.BizException;
 import org.example.merchant_ai_operation.merchant.analytics.mapper.MerchantAnalyticsMapper;
 import org.example.merchant_ai_operation.merchant.analytics.vo.AfterSaleRateVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.MerchantOperatingSummaryVO;
+import org.example.merchant_ai_operation.merchant.analytics.vo.LowStockSkuVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.PromotionPerformanceVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.TopProductVO;
 import org.example.merchant_ai_operation.security.CurrentUser;
@@ -99,6 +100,23 @@ public class MerchantAnalyticsQueryService {
                 tenantId,
                 range.startAt(),
                 range.endAt(),
+                safeLimit
+        );
+    }
+
+    /**
+     * 查询当前商家低库存 SKU 的当前快照。
+     *
+     * <p>库存并非历史订单指标，因此不接收日期范围。低库存的阈值与经营汇总
+     * 使用同一口径，均为可售库存不高于 5。</p>
+     */
+    public List<LowStockSkuVO> getLowStockSkus(Integer limit) {
+        int safeLimit = validateLimit(limit);
+        Long tenantId = CurrentUser.requiredMerchantTenantId();
+
+        return analyticsMapper.selectLowStockSkus(
+                tenantId,
+                LOW_STOCK_THRESHOLD,
                 safeLimit
         );
     }

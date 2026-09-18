@@ -2,6 +2,7 @@ package org.example.merchant_ai_operation.merchant.ai.tool;
 
 import org.example.merchant_ai_operation.merchant.analytics.service.MerchantAnalyticsQueryService;
 import org.example.merchant_ai_operation.merchant.analytics.vo.AfterSaleRateVO;
+import org.example.merchant_ai_operation.merchant.analytics.vo.LowStockSkuVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.MerchantOperatingSummaryVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.PromotionPerformanceVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.TopProductVO;
@@ -166,5 +167,38 @@ class MerchantAnalyticsToolsTest {
         }
 
         verify(analyticsQueryService).getAfterSaleRate(startDate, endDate);
+    }
+
+    @Test
+    void delegatesLowStockSkuQueryToAnalyticsService() {
+        MerchantAnalyticsQueryService analyticsQueryService =
+                mock(MerchantAnalyticsQueryService.class);
+        AiToolUsageTracker toolUsageTracker = new AiToolUsageTracker();
+        MerchantAnalyticsTools tools = new MerchantAnalyticsTools(
+                analyticsQueryService,
+                toolUsageTracker
+        );
+        List<LowStockSkuVO> expected = List.of(
+                new LowStockSkuVO(
+                        101L,
+                        11L,
+                        "轻量防晒衣",
+                        "雾蓝色 / L",
+                        new BigDecimal("199.00"),
+                        3,
+                        1
+                )
+        );
+
+        when(analyticsQueryService.getLowStockSkus(3)).thenReturn(expected);
+
+        try (AiToolUsageTracker.Scope scope = toolUsageTracker.openScope()) {
+            List<LowStockSkuVO> actual = tools.getLowStockSkus(3);
+
+            assertSame(expected, actual);
+            assertTrue(scope.businessDataUsed());
+        }
+
+        verify(analyticsQueryService).getLowStockSkus(3);
     }
 }

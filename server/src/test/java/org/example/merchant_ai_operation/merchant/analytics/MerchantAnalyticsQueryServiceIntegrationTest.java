@@ -4,6 +4,7 @@ import org.example.merchant_ai_operation.common.BizException;
 import org.example.merchant_ai_operation.merchant.analytics.service.MerchantAnalyticsQueryService;
 import org.example.merchant_ai_operation.merchant.analytics.vo.AfterSaleRateVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.MerchantOperatingSummaryVO;
+import org.example.merchant_ai_operation.merchant.analytics.vo.LowStockSkuVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.PromotionPerformanceVO;
 import org.example.merchant_ai_operation.merchant.analytics.vo.TopProductVO;
 import org.example.merchant_ai_operation.security.LoginPrincipal;
@@ -88,6 +89,21 @@ class MerchantAnalyticsQueryServiceIntegrationTest {
     }
 
     @Test
+    void shouldReturnLowStockSkuSnapshotForCurrentTenant() {
+        List<LowStockSkuVO> lowStockSkus = analyticsQueryService.getLowStockSkus(10);
+
+        assertEquals(1, lowStockSkus.size());
+        LowStockSkuVO sku = lowStockSkus.getFirst();
+        assertEquals(9200000000201L, sku.skuId());
+        assertEquals(9200000000101L, sku.spuId());
+        assertEquals("A1 test headphones", sku.productName());
+        assertEquals("A1 headphones standard", sku.skuName());
+        assertMoney("50.00", sku.salePrice());
+        assertEquals(4, sku.availableStock());
+        assertEquals(0, sku.lockedStock());
+    }
+
+    @Test
     void shouldReturnFixedPromotionPerformanceForTenantA() {
         List<PromotionPerformanceVO> promotions =
                 analyticsQueryService.getPromotionPerformance(START_DATE, END_DATE, 5);
@@ -142,6 +158,7 @@ class MerchantAnalyticsQueryServiceIntegrationTest {
         assertEquals(0L, summary.pendingPaymentCount());
         assertEquals(1L, summary.lowStockProductCount());
         assertEquals(List.of(), analyticsQueryService.getTopProducts(emptyStart, emptyEnd, 5));
+        assertEquals(1, analyticsQueryService.getLowStockSkus(5).size());
         assertEquals(List.of(), analyticsQueryService.getPromotionPerformance(emptyStart, emptyEnd, 5));
 
         AfterSaleRateVO afterSaleRate = analyticsQueryService.getAfterSaleRate(emptyStart, emptyEnd);
@@ -174,6 +191,10 @@ class MerchantAnalyticsQueryServiceIntegrationTest {
         assertThrows(
                 BizException.class,
                 () -> analyticsQueryService.getPromotionPerformance(START_DATE, END_DATE, 11)
+        );
+        assertThrows(
+                BizException.class,
+                () -> analyticsQueryService.getLowStockSkus(0)
         );
     }
 
