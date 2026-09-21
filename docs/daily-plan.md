@@ -1,3 +1,13 @@
+## 当前更新：2026-09-16 / Day 37 / A2 Spring AI 基础对话收口
+
+- A1 已完成固定预期测试与真实商家浏览器/BFF 联调；Dashboard 查询仍保持“安全上下文注入 tenantId、日期最多 31 天、列表 limit 为 1～10”的边界。
+- A2 已接入 Spring AI 2.x 与 DeepSeek：商家可进行基础中文文本对话；System Prompt 明确禁止读取订单、商品、库存、经营指标和售后数据，也禁止执行任何业务操作。
+- 真实 BFF 链路已验证：登录后向 `/api/backend/merchant/ai/chat` 提问，得到模型 `deepseek-v4-flash` 的正常回答，响应明确标记 `businessDataUsed=false`；未登录请求返回 401。
+- 后端 A2 定向测试 11 项全部通过（Controller 4、Guard 3、Service 4）；前端 `npm run check`、7 项测试与生产构建通过。
+- 前端修复保留后端 `ApiError` 状态码，401 会显示“登录已失效/请先登录”，不再被降级为笼统的服务不可用提示。
+- 集合分支已顺序合入后端 `089c2ae`、前端 `c48d088`，前端错误状态修复提交为 `97d8b29`；同一修复已 cherry-pick 到 `feature/web-v2` 为 `4607bac`。三个分支均已推送。
+- 下一步：进入 A3，先在 `feature/backend` 实现第一条受控只读工具——当前商家的经营汇总查询；暂不一次性加入会话、审计和 SSE。
+
 ## 开工必读
 
 - 每天继续本项目时，先读 `docs/collaboration-rules.md`、`docs/daily-plan.md`、`docs/learning-log.md`。
@@ -7,26 +17,27 @@
 
 | 项目 | 进度 |
 |---|---|
-| 总步骤 | `████████████████████████` 24 / 36（步骤 24 已完成） |
-| 当前阶段 | 第 1 阶段：工程与基础业务 |
-| 本周任务 | `███████` 7 / 7 |
+| 原主线步骤 | `████████████████████████` 24 / 36（步骤 24 已完成） |
+| 新主线开发 | `███████████░░░░` 11 / 15（R1～R9、A1、A2 已完成；A3～A6 待推进） |
+| 当前阶段 | 真实电商联调、AI 与版本演进 |
 | 周验收 | 已通过 |
-| 最近提交 | `e3cabc9 docs: add promotion flow comments` |
+| 最近提交 | 后端：`732ff89 feat(ai): complete A2 DeepSeek chat backend`；前端：`4607bac fix(web): preserve merchant AI error state`；集成：`97d8b29 fix(web): preserve merchant AI error state` |
 
 ## 进度看板
 | 项目     | 当前状态                         |
 | ------ | ---------------------------- |
-| 当前阶段   | 第 1 阶段：工程与基础业务               |
-| 当前文档   | `02-交易库存限量促销开发链.md`           |
-| 当前步骤   | 步骤 24 已完成：时区统一、促销对账、自动化并发验收与故障补偿演练 |
-| 本周目标   | 后端继续推进可靠交易基础：缓存一致性、消息可靠性和订单关闭 |
-| 今日目标   | 完成步骤 24 的自动化并发验收、异步建单对账与故障补偿演练 |
-| 昨日完成   | 步骤 22 促销规则、库存划拨与取消归还已完成并提交 |
-| 当前卡点   | 步骤 24 核心验收已完成；多实例 Outbox 发布抢占与更完整的重试/死信策略留待后续增强 |
-| 最近一次提交 | `e3cabc9 docs: add promotion flow comments`；本次时区、状态任务、步骤 24 测试与文档待用户提交 |
-| 明日优先   | 按路线进入步骤 25 前，先复盘本次可靠交易测试与提交检查点 |
+| 当前阶段   | 真实电商联调、AI 与版本演进 |
+| 当前文档   | `D:\ALLAPPS\Note_Apps\Document\Coding\真实电商联调、AI与版本演进开发链.md` |
+| 当前步骤   | A3：受控只读工具调用、会话、SSE 与审计 |
+| 本周目标   | 建立第一条可追溯、跨租户隔离的 AI 只读经营查询工具 |
+| 今日目标   | 在后端分支完成“经营汇总”工具的边界设计、实现与定向测试 |
+| 昨日完成   | A2 模型真实回答、BFF 鉴权、错误状态修复、集合分支合并与推送 |
+| 当前卡点   | A3 尚未实现；会话持久化、审计和 SSE 必须在首条工具稳定后分步加入 |
+| 最近一次提交 | 后端：`732ff89`；前端：`4607bac`；集成：`97d8b29` |
+| 明日优先   | 将首条工具接入模型调用，并验证回答数字可回溯到经营汇总 DTO |
 
 ## 每日任务
+
 ## Day 1：2026-07-19
 
 ### 今日阶段
@@ -1551,3 +1562,243 @@
 
 - 当前分支：`feature/backend`；不切换、不合并。
 - S6 当前提交范围为商家订单列表、Dashboard 指标后端代码和本节阶段文档记录；前端接入项暂缓。
+
+## Day 32：2026-09-02 / R1、R2 真实前端联调验收
+
+### 今日阶段
+
+- 当前文档：`真实电商联调、AI 与版本演进开发链.md`
+- 当前步骤：R1、R2
+- 今日目标：消除真实会话错误时的 Demo 伪造结果，并让公开店铺、商品和搜索读取真实后端数据。
+
+### 今天完成
+
+- [x] R1：为显式 Demo 会话增加清晰标识；真实会话遇到接口失败不再回退本地 Demo 购物车、订单或商家业务结果。
+- [x] R1：BFF 在后端返回 401 时清理会话 Cookie；前端为 401、403、409、503 提供确定的错误、重试或重新登录提示。
+- [x] R2：店铺目录、店铺页、店铺商品页、商品详情和搜索页改为读取公开真实接口；静态图片与色彩映射仅保留为视觉资产。
+- [x] R2：补齐 loading、空结果、非法店铺和服务不可用状态，不再把 `demoStores`、`demoMarketplaceProducts` 当作真实目录或搜索结果。
+
+### 今天验收
+
+- [x] 前端 Biome lint、TypeScript 类型检查、Vitest 和 Next.js production build 通过。
+- [x] Docker 依赖服务与本地后端启动；`/actuator/health` 返回 `UP`。
+- [x] 公开接口和 BFF 验证两家店铺数据归属正确；商家 B 最小测试商品可在公开列表、搜索、店铺页和商品详情读取。
+- [x] 无效会话返回 401；消费者访问商家接口返回 403；重复注册返回 409；不可达后端由 BFF 返回 503 与“服务暂时无法连接”。
+- [x] 非法店铺页面返回 404；主前端服务返回 200；临时 503 验收实例已关闭。
+- [ ] 未生成自动化浏览器视觉截图：本机浏览器自动化环境缺少 Chrome；本次仅将已完成的接口级和构建级证据写为通过。
+
+### 今天完成后的边界
+
+- 商家 B 的最小联调商品保留在本地测试数据库，便于后续查看；未修改任何 `server/` 业务源码。
+- R1、R2 前端改动已由用户提交并推送到 `feature/web-v2`：`1fccdfa feat(web): 完成 R1/R2 真实接口联调`。
+- 下一步进入 R3：先由用户按“讲一步、写一步、验收一步”的方式完成真实购物车详情接口，接口稳定后再由 Agent 直接补前端。
+
+## Day 32：2026-09-02 / R3～R5 真实购物车与跨店结算闭环（加餐）
+
+### 今日阶段
+
+- 当前步骤：R3 真实购物车详情、R4 地址选择、R5 跨店结算与前端接线。
+- 协作边界：后端业务代码由用户在 `feature/backend` 编写；前端由 Agent 在 `feature/web-v2` 实现；提交和推送均由用户执行。
+
+### 今天完成
+
+- [x] R3：`GET /api/cart/items` 改为返回 `CartItemDetailVO`，从当前消费者的购物车关联 SKU、SPU 和店铺，返回商品、价格、库存、数量、`purchasable` 与不可购买原因。
+- [x] R4：复用 `GET /api/addresses`，结算时读取当前消费者地址并默认选中默认地址；没有地址时前端引导用户补充。
+- [x] R5：跨店结算组 `8` 成功创建两笔待支付子订单；幂等参数冲突返回 `409`，取消后库存恢复。
+- [x] R5：补齐结算组详情的订单项和地址快照；库存不足提交返回 `409`，未污染购物车、库存、订单或幂等记录。
+- [x] R5：恢复库存后创建结算组 `10` 并模拟支付成功，父组和两笔子订单均为 `PAID`。
+- [x] 前端：`feature/web-v2` 完成真实购物车勾选、地址选择、创建结算组、详情、刷新、模拟支付、取消和错误提示，提交为 `61191b8 feat(web): connect real checkout flow`。
+
+### 今日验收
+
+- [x] ApiFox：真实购物车详情、跨店创建、幂等冲突、取消后详情、库存不足失败与支付后详情均符合预期。
+- [x] DataGrip：取消后库存恢复、失败提交后库存未变、支付后库存扣减且锁定库存归零。
+- [x] 前端分支：`npm run check`、`npm test`（4 项）和 `npm run build` 通过；生产构建包含 `/cart`、`/checkout`、`/checkout/success`。
+- [x] 集成分支真实浏览器验收：购物车、地址、创建、刷新、支付、取消和库存不足提示与后端状态一致。
+
+### 今日截图记录
+
+- `docs/images/day-33-r3-r5/`：保留真实购物车、创建结算组、幂等冲突、取消详情、库存恢复/扣减与失败回滚的无凭据截图；目录名沿用既有归档路径，不随 Day 标题重命名。
+
+### 当前边界与下一步
+
+- 后端提交 `5fe0766`、`3415ae9` 与前端提交 `61191b8` 已在 `feature/integration` 合并并通过浏览器验收。
+- 本日不自动提交或推送文档；由用户检查后自行提交。
+
+## Day 32：2026-09-02 / R6 真实售后与商家审核集成验收
+
+### 今日完成
+
+- [x] R6 未新增 `server/` 业务代码；复用既有消费者可申请订单项、售后提交/列表/详情，以及商家售后列表/详情/审核接口。
+- [x] `feature/web-v2` 完成真实售后前端接线：消费者申请、列表和详情；商家售后审核列表、详情、通过/拒绝操作及状态提示。前端提交为 `1fde4f2 feat: implement R6 after-sales workflow`。
+- [x] 前端 `npm run check`、`npm test`（4 项）和 `npm run build` 均通过。
+- [x] 用户创建 `feature/integration`，先合并 R3～R5 的后端和前端提交，再合并 R6 前端提交；R6 合并提交为 `f5e1185 merge: integrate R6 after-sales web`。
+
+### 真实浏览器验收
+
+- [x] 消费者对自己的真实已支付订单项提交售后申请；申请编号 `ASR20260903192650332440` 能在刷新后恢复。
+- [x] 商家 A 在真实商家审核页读取该申请并审核通过；消费者刷新详情后仍显示“审核通过”、申请金额、申请原因和商家备注。
+- [x] 商家 B 请求商家 A 的售后详情返回 HTTP/body `409`、“售后申请不存在”、`data: null`；未读取到跨租户数据。
+- [x] 页面明确说明“审核通过”只是审核结果，不表示资金已退回；退款、退货物流和完成态仍不在 R6 范围内。
+
+### 当前边界与下一步
+
+- R6 的消费者与商家真实接线、状态回显和跨商家隔离均已完成；测试产生的售后申请仅保留在本地测试数据库。
+- R7 需要由用户先完成 Dashboard 按日订单/营业额趋势、指标字典和隔离验收；不要把现有四项汇总误写成已具备真实趋势数据。
+- 本次文档记录位于 `feature/backend`，由用户检查后自行提交和推送；未修改 `server/` 业务代码。
+
+## Day 33：2026-09-04 / R7 商家 Dashboard 真实趋势与集成验收
+
+### 今日完成
+
+- [x] 用户在 `feature/backend` 实现 `GET /api/merchant/dashboard/trends`：返回 `date`、`orderCount`、`paidRevenue`，使用当前安全上下文的 `tenantId`，而非客户端传入的租户。
+- [x] 趋势日期采用包含首尾日期的自然日输入、数据库左闭右开查询；服务限制最大 31 天，并把没有订单的日期补为 `0`。
+- [x] 已新增并落实 `docs/metrics-dictionary.md`：四项汇总、两项按日趋势、状态口径、金额单位、时区、空数据与 DataGrip 对照 SQL 均有定义。
+- [x] Agent 在 `feature/web-v2` 将商家订单、Dashboard 四项指标与趋势图接至真实 BFF；真实会话发生加载、空数据或失败时不回退为 Demo 数据。前端提交为 `50a5dd4 feat(web): connect merchant dashboard to live metrics`。
+- [x] 集合分支先合后端得到 `902fb90 merge: integrate R7 merchant dashboard backend`，再合前端得到 `be4ccd9 merge: integrate R7 merchant dashboard web`；两条提交均已推送至 `origin/feature/integration`。
+
+### 真实验收结果
+
+- [x] `mvn -DskipTests compile` 成功。
+- [x] 商家 A 在 `2026-09-01` 至 `2026-09-04`：汇总为有效订单 `2`、已支付营业额 `487.00`；趋势仅 `2026-09-03` 为订单 `2`、营业额 `487.00`，其余三日均补 `0`。
+- [x] 商家 B 同一日期范围：汇总为有效订单 `2`、已支付营业额 `198.00`；趋势仅 `2026-09-03` 为订单 `2`、营业额 `198.00`。A/B 数字不同，未发生租户串读。
+- [x] 通过前端 `/api/session/login` 建立 HttpOnly 会话后，BFF `/api/backend/merchant/dashboard/**` 能正确转发真实后端响应；不是直接在浏览器内伪造 JSON。
+- [x] 商家请求 32 天趋势返回 HTTP/body `400`、`趋势查询最多支持31天`；消费者请求商家趋势返回 HTTP/body `403`、`没有权限访问该资源`。
+- [x] 真实模式的 Dashboard 图表和商家订单页不使用营业额、订单趋势或商品的 Demo 回退数据。
+
+### 截图记录
+
+- `docs/images/day-34-r7/maven-r7-dashboard-compile-success.png`：后端编译成功。
+- `docs/images/day-34-r7/apifox-r7-dashboard-metrics-merchant-a.png`：商家 A 四项经营汇总成功返回。
+- `docs/images/day-34-r7/apifox-r7-dashboard-trends-range-limit.png`：趋势日期范围超过 31 天的 `400` 响应。
+- 未归档任何展示 Authorization/Bearer 值的截图；商家 B 和消费者权限结果以本节无凭据文字验收记录为准。
+
+### 当前边界与下一步
+
+- R7 不新增订单履约、发货、退款或支付完成时间字段；当前营业额仍按订单创建时间和当前 `PAID` 状态计算，详见指标字典。
+- 路线原计划中的固定预期自动测试，本轮按用户约定未新增。另有既有 `CheckoutServiceTest` 调用已改为 `private` 的方法，导致 `spring-boot:run` 的 `testCompile` 失败；它不是本次 R7 改动，也未在本轮修改。
+- 下一步进入 R8：先由用户完成公开促销活动列表/详情和资格结果的后端读取接口，再由 Agent 接入商家营销与消费者活动页面。
+
+## Day 33：2026-09-04 / R8 限量促销真实联调与集成验收（加餐）
+
+### 今日完成
+
+- [x] 用户在 `feature/backend` 完成公开活动读取：`GET /api/public/promotions` 与 `GET /api/public/promotions/{activityId}`；列表返回服务端时间与可见活动，详情对不存在活动返回 `404`。
+- [x] 复用既有商家活动创建、预热、取消和消费者资格申请/详情能力；新增的读取接口让前端可以恢复“我的资格”状态，而不是只停留在提交按钮。
+- [x] Agent 在 `feature/web-v2` 完成真实商家营销页与消费者限量活动列表、详情页：创建活动、预热、取消、公开列表/详情、资格申请和资格状态轮询均走 BFF，不使用伪造活动数据。
+- [x] 消费者页面明确区分“获得抢购资格”和“订单已创建”：资格申请成功不被展示为下单成功。
+- [x] 后端提交为 `b19e3c1 feat(promotion): add R8 promotion read APIs`；前端提交为 `f2ff70d feat(web): add promotion campaign flows`。
+- [x] `feature/integration` 先合入后端得到 `eae1b9c`，再合入前端得到 `07a7535`；合并后工作区干净。
+
+### 集成验收
+
+- [x] 后端 `mvn compile` 通过。
+- [x] 前端 `npm run check`、`npm run test`（4 项）和 `npm run build` 通过；生产构建包含 `/promotions` 与 `/promotions/[activityId]`。
+- [x] 已启动后端真实返回活动 `25`：公开活动列表与详情均为 HTTP `200`，字段包含活动、商品、SKU、活动价、时间、活动状态、库存提示和单人限额。
+- [x] 前端 BFF `/api/backend/public/promotions` 已实际转发到 `localhost:8080` 并返回同一份活动数据；`/promotions` 与 `/promotions/25` 页面均返回 HTTP `200`。
+- [x] 未登录访问资格恢复接口返回 HTTP/body `401`、`请先登录`，鉴权边界符合预期。
+- [ ] 未以真实消费者登录态提交新的资格申请：本轮按用户要求避免写入新的测试数据。因此这不是“成功抢购资格”的手工写入验收；公开读取、BFF 转发、鉴权拒绝和构建级验收均已完成。
+
+### 截图与交付边界
+
+- R8 的无凭据公开接口截图待补：当前终端未注入 `JWT_SECRET`，后端无法重新启动，因此不把失败画面或无关桌面截图归档为验收证据。后续应从已配置运行环境启动服务后，只截取公开活动 JSON 响应。
+- 不归档任何可能泄露 Authorization/Bearer 值的页面或终端画面。
+- 集成分支当时比 `origin/feature/integration` 超前 5 个本地提交；本轮未执行 `push` 或合并 `main`，由用户决定后续交付动作。
+- 下一阶段开始前，应先决定是否推送 `feature/integration`，再按路线文档进入下一项真实业务闭环。
+
+## Day 33：2026-09-04 / R9 部署前本地完整部署演练
+
+### 今日完成
+
+- [x] 核对 `feature/backend`、`feature/web-v2` 与 `feature/integration` 的提交关系；集合分支已包含后端最新提交 `be16c09` 和前端 R8 提交 `f2ff70d`，当前基线为 `f1f0382`。
+- [x] 用户完成后端配置环境变量化：MySQL、Redis、RabbitMQ 在本地运行和 Docker 运行时可以使用不同地址；未修改业务接口。
+- [x] 用户创建 `server/Dockerfile` 和 `server/.dockerignore`，使用 Java 21/Maven 多阶段构建后端镜像，并排除本地构建产物和 IDE 文件。
+- [x] 用户创建 `deploy/docker-compose.production.yml`，编排 MySQL、Redis、RabbitMQ 和 Spring Boot 后端；依赖服务加入健康检查，后端通过 Compose 服务名连接基础设施。
+- [x] 使用 `docker compose ... config --quiet` 校验生产 Compose 配置通过；敏感变量保存在 `deploy/.env`，未纳入 Git。
+
+### 本地部署验收
+
+- [x] Docker Hub 镜像下载完成；首次 Maven 依赖下载较慢，后端镜像构建成功，镜像名为 `merchant-ai-operation-server:latest`。
+- [x] `docker compose ... up -d` 启动成功，MySQL、Redis、RabbitMQ 均为 `Healthy`，Spring Boot 后端成功启动并映射到本机 `8080`。
+- [x] `GET /actuator/health` 返回 `{"status":"UP"}`。
+- [x] `GET /api/ping` 返回统一成功响应，数据为 `pong`。
+- [x] `GET /api/public/products/ping` 返回统一成功响应，数据为 `public-product-pong`。
+- [x] `GET /api/public/stores/1001/products?page=1&size=10` 返回成功响应和空数组；说明真实公开商品查询链路已进入数据库，当前演练库暂无商品数据。
+
+### 问题与边界
+
+- Docker 首次拉取基础镜像时曾因 Clash Verge 系统代理未被 Docker Desktop 正确使用而连接 Docker Hub 超时；打开系统代理并重启 Docker Desktop 后镜像下载恢复。
+- PowerShell `Invoke-WebRequest` 在本机把响应内容显示为字节序列；这些数字实际对应 `{"status":"UP"}`，后续使用 `curl.exe` 查看 JSON 更直观。
+- 本次只完成服务器上传前的本地演练；尚未上传服务器、配置公网 HTTPS 域名或修改 Vercel 的 `BACKEND_ORIGIN`。
+- R9 部署准备文件当前尚未提交；提交时只能加入部署配置、Dockerfile、后端配置和本次文档，不能加入 `deploy/.env`。
+
+### 下一步
+
+- 由用户检查本节记录后提交并推送 R9 部署准备文件。
+- 提交完成后再确定免费后端平台或实际服务器，准备公网数据库/Redis/RabbitMQ、HTTPS 和 Vercel `BACKEND_ORIGIN`，再进行服务器上传。
+
+## Day 34：2026-09-06 / A1 经营指标字典、样例数据与只读查询
+
+### 今日目标
+
+- [x] 在 Boot 4.1.1 基线上建立面向页面和后续 AI 的受控经营查询层。
+- [x] 使用固定样例数据验证指标可复算、空数据、参数边界和租户隔离。
+- [x] 在独立前端分支接入 A1 查询并完成构建，再合入集合分支。
+
+### 用户完成的后端代码
+
+- [x] 新建 `merchant.analytics` 模块，包含 `MerchantAnalyticsController`、`MerchantAnalyticsQueryService`、`MerchantAnalyticsMapper` 和四个专用 VO。
+- [x] 新增 `GET /api/merchant/analytics/summary`：返回有效订单数、已支付订单数、已支付营业额、客单价、待支付订单数和低库存商品数。
+- [x] 新增 `GET /api/merchant/analytics/top-products`：按销量、销售额、SKU ID 稳定排序，`limit` 限制为 1～10。
+- [x] 新增 `GET /api/merchant/analytics/promotions`：返回资格数、成功创建订单数、成功件数、促销金额和下单转化率；促销金额不冒充已支付营业额。
+- [x] 新增 `GET /api/merchant/analytics/after-sale-rate`：按不同已支付订单明细计算售后申请率，不冒充退款率。
+- [x] 日期统一转换为左闭右开时间范围，最多查询 31 个自然日；所有 tenantId 均取自 `CurrentUser.requiredMerchantTenantId()`。
+
+### Agent 完成的测试、文档与前端
+
+- [x] 扩展 `docs/metrics-dictionary.md`，固定客单价、热销商品、促销表现、售后申请率、比率返回形式、查询边界和验收原则。
+- [x] 新增两个专用测试租户、多个订单状态、热销 SKU、促销资格和售后申请夹具；数据使用独立 ID 段并在测试后定向清理。
+- [x] 新增 `MerchantAnalyticsQueryServiceIntegrationTest`，覆盖商家 A 固定值、商家 B 隔离、空范围、稳定排序、促销转化率、售后申请率、32 天拒绝和非法 limit。
+- [x] 前端 Dashboard 接入四类经营查询，增加客单价、热销 SKU、促销表现、售后申请率、指标说明和“A2 即将开放”的常问问题入口。
+- [x] 前端保持现有运营控制台视觉语言，并补充桌面、平板和手机布局。
+
+### 验收结果
+
+- [x] 后端 `mvn -DskipTests compile` 与 `test-compile` 通过。
+- [x] A1 固定预期集成测试 7 项全部通过。
+- [x] 前端 `npm run check`、`npm run test`（4 项）和 `npm run build` 通过。
+- [x] 后端提交 `d09e438 feat(analytics): add controlled merchant metric queries` 已推送。
+- [x] 前端提交 `6ad2ade feat(web): add merchant analytics dashboard` 已推送。
+- [x] `feature/integration` 先合后端得到 `94497d5`，再合前端得到 `d53bf55`。
+- [ ] 集合分支真实商家登录、BFF 转发和浏览器 Dashboard 展示尚待现场验收。
+- [ ] 集合分支当前领先远端 4 个提交，尚待真实联调通过后推送。
+
+### 当前边界与下一步
+
+- A1 没有引入 Spring AI、模型 SDK、模型调用或 API Key；A2 才使用 Spring AI 2.x。
+- 当前自动测试证明查询结果、边界和租户隔离正确，但不替代浏览器真实会话验收。
+- 下一步启动集合分支后端和前端，以真实商家账号检查四个 `/api/backend/merchant/analytics/**` BFF 请求和 Dashboard 展示；通过后推送集合分支并进入 A2。
+
+## Day 35：2026-09-07 / A1 真实商家联调与收口
+
+### 今日目标
+
+- [x] 以集合分支启动真实基础设施、后端和 Next.js 前端。
+- [x] 使用真实商家会话验证 A1 BFF 请求和 Dashboard 展示。
+- [x] 验证空范围、日期跨度、limit、角色权限与租户隔离边界。
+
+### 真实联调结果
+
+- [x] MySQL、Redis、RabbitMQ 正常运行；`GET /actuator/health` 返回 `status: UP`，并包含 liveness/readiness 分组。
+- [x] `merchant_a_admin` 通过前端登录后进入 `/merchant/dashboard`；页面经 BFF 展示有效订单 `2`、已支付营业额 `487`、客单价 `243.5`、两个热销 SKU 和售后申请率 `50%`。
+- [x] Dashboard 同时展示趋势、促销空态、指标口径说明，以及明确标注当前不调用模型的 A2 常问问题入口。
+- [x] 历史空范围的汇总返回全零，热销商品返回空列表；没有用 Demo 数据补齐真实结果。
+- [x] 32 天范围返回 HTTP/body `400` 和“经营查询最多支持31天”；`limit=0` 返回 HTTP/body `400` 和“返回数量必须在1到10之间”。
+- [x] 同一日期范围内商家 A 返回营业额 `487`，商家 B 返回 `198`；消费者访问商家经营接口返回 HTTP/body `403`。
+- [x] 前端 `npm run check`、4 项测试和生产构建再次通过；桌面浏览器页面没有发现横向溢出、遮挡或关键控件裁切。
+
+### 边界与下一步
+
+- 浏览器原生日期控件拒绝未来日期，符合前端 `max` 约束。自动化直接写入日期未可靠触发 React 状态，因此空范围和非法参数以真实后端请求验收，不把未成功的页面交互记为通过。
+- A1 仍未引入 Spring AI、模型 SDK、模型调用或 API Key。
+- A1 代码、自动测试和真实浏览器/BFF 联调均已完成；下一步由用户决定是否提交并推送本次文档，然后进入 A2 的 Spring AI 2.x 最小只读对话。

@@ -1,8 +1,10 @@
 import {
   type ApiEnvelope,
   ApiError,
+  type MarketplaceProduct,
   type ProductDetail,
   type ProductSummary,
+  type PublicStoreSummary,
   type SessionUser,
 } from "./types";
 
@@ -32,6 +34,14 @@ export async function backendRequest<T>(path: string, init: RequestInit = {}, to
 
 export const getPublicProducts = (storeId: number) =>
   backendRequest<ProductSummary[]>(`/api/public/stores/${storeId}/products?page=1&size=48`);
+
+export const getPublicStores = () => backendRequest<PublicStoreSummary[]>("/api/public/stores");
+
+export const searchPublicProducts = (keyword = "", storeId?: number) => {
+  const params = new URLSearchParams({ keyword, page: "1", size: "48" });
+  if (storeId) params.set("storeId", String(storeId));
+  return backendRequest<MarketplaceProduct[]>(`/api/public/stores/products/search?${params.toString()}`);
+};
 
 export const getPublicProduct = (storeId: number, productId: number) =>
   backendRequest<ProductDetail>(`/api/public/stores/${storeId}/products/${productId}`);

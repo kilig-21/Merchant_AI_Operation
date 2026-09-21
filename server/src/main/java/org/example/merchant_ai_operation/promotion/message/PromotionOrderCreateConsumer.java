@@ -1,6 +1,6 @@
 package org.example.merchant_ai_operation.promotion.message;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import org.example.merchant_ai_operation.config.RabbitMqConfig;
 import org.example.merchant_ai_operation.promotion.compensation.entity.PromotionCompensationRecord;

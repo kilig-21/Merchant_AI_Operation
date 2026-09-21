@@ -1,4 +1,4 @@
-import { AfterSalesClient } from "@/components/AccountServices";
+import { AfterSalesClient } from "@/components/AfterSales";
 
 export default function AfterSalesPage() {
   return <AfterSalesClient />;

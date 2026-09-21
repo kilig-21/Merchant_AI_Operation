@@ -249,11 +249,11 @@ public class CheckoutService {
     }
 
 
-    //<------------------------------ 私有方法 --------------------------------->
+    //<------------------------------ 包内测试辅助方法 --------------------------------->
 
 
     //算Group的总金额
-    private BigDecimal calculateTotal(Map<Long, List<OrderSkuSnapshotVO>> groupedSnapshots) {
+    BigDecimal calculateTotal(Map<Long, List<OrderSkuSnapshotVO>> groupedSnapshots) {
         if (groupedSnapshots == null || groupedSnapshots.isEmpty()) {
             throw new BizException(400, "没有可结算的商品");
         }
@@ -268,7 +268,7 @@ public class CheckoutService {
     }
 
     //将商家的订单组成group来清算
-    private Map<Long, List<OrderSkuSnapshotVO>> loadGroupedSnapshots(List<Long> cartItemIds) {
+    Map<Long, List<OrderSkuSnapshotVO>> loadGroupedSnapshots(List<Long> cartItemIds) {
         if (cartItemIds == null || cartItemIds.isEmpty()) {
             throw new BizException(400, "请选择要结算的购物车项");
         }

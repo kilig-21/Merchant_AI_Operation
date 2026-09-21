@@ -1,4 +1,4 @@
-import { AfterSalesCreateClient } from "@/components/AccountServices";
+import { AfterSalesCreateClient } from "@/components/AfterSales";
 import { Suspense } from "react";
 
 export default function NewAfterSalesPage() {

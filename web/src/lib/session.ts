@@ -19,13 +19,13 @@ export async function getSessionState(): Promise<SessionState> {
       status: "authenticated",
       user:
         demoRole === "merchant"
-          ? { id: 99002, username: "演示店主", userType: "MERCHANT_ADMIN", tenantId: 1001 }
-          : { id: 99001, username: "演示会员", userType: "CONSUMER", tenantId: null },
+          ? { id: 99002, username: "演示店主", userType: "MERCHANT_ADMIN", tenantId: 1001, isDemo: true }
+          : { id: 99001, username: "演示会员", userType: "CONSUMER", tenantId: null, isDemo: true },
     };
   }
   if (!token) return { status: "anonymous", user: null };
   try {
-    return { status: "authenticated", user: await getCurrentUserWithToken(token) };
+    return { status: "authenticated", user: { ...(await getCurrentUserWithToken(token)), isDemo: false } };
   } catch (error) {
     if (error instanceof ApiError && error.status === 503) return { status: "unavailable", user: null };
     return { status: "anonymous", user: null };

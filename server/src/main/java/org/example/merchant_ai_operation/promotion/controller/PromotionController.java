@@ -6,7 +6,10 @@ import org.example.merchant_ai_operation.common.ApiResponse;
 import org.example.merchant_ai_operation.promotion.dto.CreatePromotionRequest;
 import org.example.merchant_ai_operation.promotion.service.PromotionRedisPreheatService;
 import org.example.merchant_ai_operation.promotion.service.PromotionService;
+import org.example.merchant_ai_operation.promotion.vo.MerchantPromotionActivityVO;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/merchant/promotions")
@@ -40,5 +43,11 @@ public class PromotionController {
     public ApiResponse<Void> preheatPromotion(@PathVariable Long activityId) {
         promotionRedisPreheatService.preheat(activityId);
         return ApiResponse.ok(null);
+    }
+
+    // 查询当前登录商家的全部促销活动，包括已排期、进行中、已结束和已取消活动。
+    @GetMapping
+    public ApiResponse<List<MerchantPromotionActivityVO>> listMyPromotionActivities() {
+        return ApiResponse.ok(promotionService.listMyPromotionActivities());
     }
 }

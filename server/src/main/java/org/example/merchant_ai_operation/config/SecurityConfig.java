@@ -1,6 +1,6 @@
 package org.example.merchant_ai_operation.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.example.merchant_ai_operation.common.ApiResponse;
 import org.example.merchant_ai_operation.security.JwtAuthentication;
 import org.springframework.context.annotation.Bean;

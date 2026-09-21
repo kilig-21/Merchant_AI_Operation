@@ -5,7 +5,7 @@ import type { ProductSummary } from "@/lib/types";
 import { useMemo, useState } from "react";
 import { ProductCard } from "./ProductCard";
 
-export function ProductGridClient({ products, storeId }: { products: ProductSummary[]; storeId: number }) {
+export function ProductGridClient({ products, storeId, storeName }: { products: ProductSummary[]; storeId: number; storeName?: string }) {
   const [category, setCategory] = useState("全部");
   const [query, setQuery] = useState("");
   const categories = ["全部", ...new Set(products.map((item) => visualFor(item.id).category))];
@@ -43,7 +43,7 @@ export function ProductGridClient({ products, storeId }: { products: ProductSumm
       {visible.length ? (
         <div className="product-grid">
           {visible.map((product) => (
-            <ProductCard key={product.id} product={product} storeId={storeId} />
+            <ProductCard key={product.id} product={product} storeId={storeId} storeName={storeName} />
           ))}
         </div>
       ) : (

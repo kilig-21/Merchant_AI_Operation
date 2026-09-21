@@ -11,6 +11,8 @@ export interface SessionUser {
   username: string;
   userType: UserRole;
   tenantId: number | null;
+  /** 仅由 web 的会话路由写入；绝不根据用户 ID 推断演示身份。 */
+  isDemo?: boolean;
 }
 
 export interface LoginResult {
@@ -42,6 +44,13 @@ export interface StoreSummary {
   badge: string;
 }
 
+/** 公开店铺目录的真实接口合同。视觉素材不属于这份业务数据。 */
+export interface PublicStoreSummary {
+  id: number;
+  name: string;
+  productCount: number;
+}
+
 export interface MarketplaceProduct extends ProductSummary {
   storeId: number;
   storeName: string;
@@ -65,10 +74,39 @@ export interface ProductDetail {
 export interface CartItem {
   id: number;
   skuId: number;
+  productId: number | null;
+  productName: string | null;
+  skuName: string | null;
+  storeId: number | null;
+  storeName: string | null;
+  salePrice: number | null;
+  availableStock: number | null;
+  quantity: number;
+  purchasable: boolean;
+  unavailableReason: string | null;
+}
+
+/** 购物车写接口的轻量响应；完整展示信息统一由 GET /api/cart/items 读取。 */
+export interface CartItemMutation {
+  id: number;
+  skuId: number;
   quantity: number;
 }
 
-export type OrderStatus = "PENDING_PAYMENT" | "PAID" | "CLOSED" | string;
+export interface ConsumerAddress {
+  id: number;
+  receiverName: string;
+  receiverPhone: string;
+  province: string;
+  city: string;
+  district: string;
+  detailAddress: string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type OrderStatus = "PENDING_PAYMENT" | "PAID" | "CANCELLED" | "CLOSED" | string;
 
 export interface OrderItem {
   id: number;
@@ -97,6 +135,74 @@ export interface CreateOrderResult {
   expireAt: string;
 }
 
+export interface ShippingAddress {
+  receiverName: string;
+  receiverPhone: string;
+  province: string;
+  city: string;
+  district: string;
+  detailAddress: string;
+}
+
+export interface CheckoutOrder {
+  id: number;
+  checkoutGroupId: number;
+  orderNo: string;
+  tenantId: number;
+  status: OrderStatus;
+  totalAmount: number;
+  expireAt: string;
+  createdAt: string;
+  items: OrderItem[];
+  shippingAddress: ShippingAddress | null;
+}
+
+export interface CheckoutGroup {
+  checkoutGroupId: number;
+  checkoutNo: string;
+  status: OrderStatus;
+  totalAmount: number;
+  createdAt: string;
+  orders: CheckoutOrder[];
+}
+
+export interface CreateCheckoutGroupResult {
+  checkoutGroupId: number;
+  checkoutNo: string;
+  status: OrderStatus;
+  totalAmount: number;
+  orders: CreateOrderResult[];
+}
+
+export type AfterSaleStatus = "SUBMITTED" | "REVIEWING" | "APPROVED" | "REJECTED" | string;
+
+/** 消费者与商家共用的售后读取模型；不含内部租户、消费者和审核人字段。 */
+export interface AfterSaleRequest {
+  id: number;
+  requestNo: string;
+  orderId: number;
+  orderItemId: number;
+  quantity: number;
+  requestedAmount: number;
+  reason: string;
+  status: AfterSaleStatus;
+  merchantRemark: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 消费者可申请售后的已支付订单项上下文。 */
+export interface AfterSaleEligibleOrderItem {
+  orderId: number;
+  orderItemId: number;
+  tenantId: number;
+  consumerId: number;
+  orderStatus: string;
+  salePrice: number;
+  purchasedQuantity: number;
+}
+
 export interface MerchantProduct {
   id: number;
   name: string;
@@ -106,6 +212,122 @@ export interface MerchantProduct {
   minSalePrice: number | null;
   totalAvailableStock: number;
   updatedAt: string;
+}
+
+/** 商家自己的限量促销活动；精确库存仅在商家工作台展示。 */
+export interface MerchantPromotionActivity {
+  activityId: number;
+  activityItemId: number;
+  name: string;
+  productName: string;
+  skuId: number;
+  skuName: string;
+  activityPrice: number;
+  stockTotal: number;
+  stockAvailable: number;
+  limitPerUser: number;
+  startAt: string;
+  endAt: string;
+  status: "SCHEDULED" | "ACTIVE" | "ENDED" | "CANCELLED" | string;
+}
+
+/** 消费者公开活动读取模型；不包含商家内部库存和租户字段。 */
+export interface PublicPromotionActivity {
+  activityId: number;
+  activityItemId: number;
+  name: string;
+  productName: string;
+  skuName: string;
+  activityPrice: number;
+  startAt: string;
+  endAt: string;
+  status: "SCHEDULED" | "ACTIVE" | string;
+  stockStatus: "AVAILABLE" | "SOLD_OUT" | string;
+  limitPerUser: number;
+}
+
+export interface PublicPromotionList {
+  serverTime: string;
+  activities: PublicPromotionActivity[];
+}
+
+export interface PublicPromotionDetail {
+  serverTime: string;
+  activity: PublicPromotionActivity;
+}
+
+export interface PromotionReservationResult {
+  code: number;
+  reservationId: string;
+}
+
+export interface PromotionReservationDetail {
+  reservationId: string;
+  activityItemId: number;
+  quantity: number;
+  unitPriceSnapshot: number;
+  reservationStatus: "PENDING_ORDER" | "ORDER_CREATED" | "FAILED" | "COMPENSATED" | string;
+  orderId: number | null;
+  orderNo: string | null;
+  orderStatus: OrderStatus | null;
+  totalAmount: number | null;
+  expireAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 商家经营概览的区间汇总；金额单位为人民币元。 */
+export interface MerchantDashboardMetrics {
+  validOrderCount: number;
+  paidRevenue: number;
+  pendingPaymentCount: number;
+  lowStockProductCount: number;
+}
+
+/** 商家 Dashboard 的单日真实趋势点；日期由后端按业务自然日返回。 */
+export interface MerchantDashboardTrendPoint {
+  date: string;
+  orderCount: number;
+  paidRevenue: number;
+}
+
+export interface MerchantOperatingSummary {
+  validOrderCount: number;
+  paidOrderCount: number;
+  paidRevenue: number;
+  averageOrderValue: number;
+  pendingPaymentCount: number;
+  lowStockProductCount: number;
+}
+
+export interface TopProduct {
+  skuId: number;
+  skuName: string;
+  soldQuantity: number;
+  paidRevenue: number;
+}
+
+export interface PromotionPerformance {
+  activityId: number;
+  activityName: string;
+  reservationCount: number;
+  orderCreatedCount: number;
+  successfulQuantity: number;
+  promotionRevenue: number;
+  orderConversionRate: number;
+}
+
+export interface AfterSaleRate {
+  paidOrderItemCount: number;
+  afterSaleOrderItemCount: number;
+  afterSaleRate: number;
+}
+
+/** A2 商家 AI 文本对话响应；当前阶段不会读取真实经营数据。 */
+export interface MerchantAiChatResponse {
+  answer: string;
+  model: string | null;
+  businessDataUsed: boolean;
 }
 
 export interface JournalMetadata {

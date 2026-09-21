@@ -3,6 +3,7 @@ package org.example.merchant_ai_operation.cart.mapper;
 
 import org.apache.ibatis.annotations.*;
 import org.example.merchant_ai_operation.cart.entity.CartItem;
+import org.example.merchant_ai_operation.cart.vo.CartItemDetailVO;
 
 import java.util.List;
 
@@ -113,6 +114,54 @@ public interface CartItemMapper {
     //删除购物车的商品记录
     int deleteByIdAndConsumerId(
             @Param("id") Long id,
+            @Param("consumerId") Long consumerId
+    );
+
+    @Select("""
+        SELECT
+            c.id,
+            c.sku_id AS skuId,
+            p.id AS productId,
+            p.name AS productName,
+            s.sku_name AS skuName,
+            t.id AS storeId,
+            t.name AS storeName,
+            s.sale_price AS salePrice,
+            s.available_stock AS availableStock,
+            c.quantity,
+            CASE
+                WHEN s.id IS NOT NULL
+                 AND p.id IS NOT NULL
+                 AND t.id IS NOT NULL
+                 AND t.status = 1
+                 AND p.status = 'ON_SALE'
+                 AND s.status = 'ON_SALE'
+                 AND s.available_stock >= c.quantity
+                THEN TRUE
+                ELSE FALSE
+            END AS purchasable,
+            CASE
+                WHEN s.id IS NULL THEN '商品规格已不存在'
+                WHEN p.id IS NULL THEN '商品已不存在'
+                WHEN t.id IS NULL OR t.status <> 1 THEN '店铺暂不可用'
+                WHEN p.status <> 'ON_SALE' THEN '商品已下架'
+                WHEN s.status <> 'ON_SALE' THEN '商品规格已下架'
+                WHEN s.available_stock < c.quantity THEN '库存不足'
+                ELSE NULL
+            END AS unavailableReason
+        FROM cart_item c
+        LEFT JOIN product_sku s
+          ON s.id = c.sku_id
+        LEFT JOIN product_spu p
+          ON p.id = s.spu_id
+         AND p.tenant_id = s.tenant_id
+        LEFT JOIN tenant t
+          ON t.id = s.tenant_id
+        WHERE c.consumer_id = #{consumerId}
+        ORDER BY c.updated_at DESC, c.id DESC
+        """)
+    //读取购物车详情
+    List<CartItemDetailVO> selectDetailsByConsumerId(
             @Param("consumerId") Long consumerId
     );
 

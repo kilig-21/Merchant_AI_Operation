@@ -1,5 +1,6 @@
 import { DemoNotice } from "./DemoNotice";
 import { MerchantShell } from "./MerchantShell";
+import { useSession } from "./SessionProvider";
 
 const segments = [
   { name: "第一次来到店里", count: 486, share: "46%", note: "近 30 天首次下单或收藏" },
@@ -9,6 +10,9 @@ const segments = [
 ];
 
 export function MerchantCustomers() {
+  const { user, loading } = useSession();
+  if (loading) return <MerchantShell title="顾客洞察" eyebrow="AUDIENCE / INSIGHTS"><div className="empty-state"><p>正在确认会话状态…</p></div></MerchantShell>;
+  if (user?.isDemo !== true) return <MerchantShell title="顾客洞察" eyebrow="AUDIENCE / INSIGHTS"><div className="empty-state"><span className="eyebrow">LIVE SERVICE / PENDING</span><h2>真实顾客洞察尚未接入。</h2><p>当前不会展示演示顾客资料或人群数据。</p></div></MerchantShell>;
   return (
     <MerchantShell title="顾客洞察" eyebrow="AUDIENCE / INSIGHTS">
       <DemoNotice>顾客分群为演示数据；未接入真实用户资料，也不提供导出或触达操作。</DemoNotice>

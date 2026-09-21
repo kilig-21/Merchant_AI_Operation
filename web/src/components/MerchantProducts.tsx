@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { DemoNotice } from "./DemoNotice";
 import { MerchantShell } from "./MerchantShell";
+import { RequestFailure } from "./RequestFailure";
 import { StatusPill } from "./StatusPill";
 import { useSession } from "./SessionProvider";
 export function MerchantProducts() {
@@ -13,6 +14,7 @@ export function MerchantProducts() {
   const [query, setQuery] = useState("");
   const [demo, setDemo] = useState(false);
   const [error, setError] = useState("");
+  const [failure, setFailure] = useState<unknown>(null);
   const [busy, setBusy] = useState<number | null>(null);
   const { user, loading } = useSession();
   async function load() {
@@ -24,14 +26,16 @@ export function MerchantProducts() {
         ),
       );
       setDemo(false);
-    } catch {
-      setProducts(demoMerchantProducts);
-      setDemo(true);
+    } catch (caught) {
+      setProducts([]);
+      setDemo(false);
+      setFailure(caught);
     }
   }
   useEffect(() => {
     if (loading) return;
-    if ((user?.id ?? 0) >= 99000) {
+    setFailure(null);
+    if (user?.isDemo === true) {
       setProducts(demoMerchantProducts);
       setDemo(true);
       return;
@@ -41,11 +45,12 @@ export function MerchantProducts() {
         setProducts(result);
         setDemo(false);
       })
-      .catch(() => {
-        setProducts(demoMerchantProducts);
-        setDemo(true);
+      .catch((caught) => {
+        setProducts([]);
+        setDemo(false);
+        setFailure(caught);
       });
-  }, [loading, user?.id]);
+  }, [loading, user?.isDemo]);
   const visible = useMemo(
     () => products.filter((p) => p.name.toLowerCase().includes(query.toLowerCase())),
     [products, query],
@@ -80,6 +85,8 @@ export function MerchantProducts() {
       }
     >
       {demo && <DemoNotice>当前展示演示目录，演示条目不可执行上下架。</DemoNotice>}
+      {failure ? <RequestFailure error={failure} loginHref="/merchant/login?redirect=/merchant/products" onRetry={() => window.location.reload()} title="商品目录暂时无法读取" /> : null}
+      {!failure ? <>
       <div className="merchant-toolbar surface">
         <input aria-label="搜索商品名称" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索商品名称" />
         <span className="eyebrow">{visible.length} RESULTS</span>
@@ -126,6 +133,7 @@ export function MerchantProducts() {
           </tbody>
         </table>
       </div>
+      </> : null}
     </MerchantShell>
   );
 }
