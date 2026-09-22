@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 const nav = [
   { href: "/platform", label: "平台总览" },
@@ -8,11 +11,13 @@ const nav = [
 ];
 
 export function PlatformShell({ title, eyebrow, children }: { title: string; eyebrow: string; children: React.ReactNode }) {
+  const pathname = usePathname();
+
   return (
     <main className="platform-shell">
       <aside className="platform-rail">
         <Link className="platform-logo" href="/platform">MORROW<span>PLATFORM</span></Link>
-        <nav>{nav.map((item) => <Link href={item.href} key={item.href}>{item.label}<span>↗</span></Link>)}</nav>
+        <nav>{nav.map((item) => <Link aria-current={pathname === item.href ? "page" : undefined} className={pathname === item.href ? "active" : ""} href={item.href} key={item.href}>{item.label}<span>↗</span></Link>)}</nav>
         <div><span className="eyebrow">DEMO CONSOLE</span><p>平台接口与权限体系待接入</p><Link href="/">返回商城</Link></div>
       </aside>
       <section className="platform-main">
