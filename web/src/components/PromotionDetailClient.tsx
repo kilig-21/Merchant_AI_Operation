@@ -1,9 +1,9 @@
 "use client";
 
 import { apiClient } from "@/lib/client-api";
-import type { PromotionReservationDetail, PromotionReservationResult, PublicPromotionDetail } from "@/lib/types";
+import { ApiError, type PromotionReservationDetail, type PromotionReservationResult, type PublicPromotionDetail } from "@/lib/types";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession } from "./SessionProvider";
 
 const money = (value: number) => `¥${Number(value).toFixed(2)}`;
@@ -17,14 +17,25 @@ export function PromotionDetailClient({ activityId }: { activityId: number }) {
   const [failure, setFailure] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const reserving = useRef(false);
+  const requestKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    apiClient<PublicPromotionDetail>(`/api/backend/public/promotions/${activityId}`)
-      .then((result) => !cancelled && setData(result))
-      .catch((error) => !cancelled && setFailure(error instanceof Error ? error.message : "活动暂时无法读取。"));
+    const refresh = () => {
+      apiClient<PublicPromotionDetail>(`/api/backend/public/promotions/${activityId}`)
+        .then((result) => {
+          if (cancelled) return;
+          setData(result);
+          setFailure("");
+        })
+        .catch((error) => !cancelled && setFailure(error instanceof Error ? error.message : "活动暂时无法读取。"));
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 30_000);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
   }, [activityId]);
 
@@ -68,12 +79,26 @@ export function PromotionDetailClient({ activityId }: { activityId: number }) {
   }, [reservationId]);
 
   async function reserve() {
-    if (!data) return;
+    if (!data || !user || user.isDemo || user.userType !== "CONSUMER" || reservationId || reserving.current) return;
+    reserving.current = true;
     setBusy(true);
     setFailure("");
     setMessage("");
+    const storageKey = `promotion-reservation:${user.id}:${data.activity.activityItemId}`;
+    let requestKey = requestKeyRef.current;
     try {
-      const requestKey = typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+      requestKey ??= window.sessionStorage.getItem(storageKey);
+    } catch {
+      // Private browsing may disable session storage; the in-memory key still protects retries on this page.
+    }
+    requestKey ??= typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+    requestKeyRef.current = requestKey;
+    try {
+      window.sessionStorage.setItem(storageKey, requestKey);
+    } catch {
+      // Continue with the in-memory key.
+    }
+    try {
       const result = await apiClient<PromotionReservationResult>("/api/backend/promotions/reservations", {
         method: "POST",
         body: JSON.stringify({ activityItemId: data.activity.activityItemId, quantity: 1, requestKey }),
@@ -81,19 +106,28 @@ export function PromotionDetailClient({ activityId }: { activityId: number }) {
       setReservationId(result.reservationId);
       setMessage("已获得抢购资格，正在创建订单。资格成功不等于订单已经创建。");
     } catch (error) {
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+        requestKeyRef.current = null;
+        try {
+          window.sessionStorage.removeItem(storageKey);
+        } catch {
+          // Storage can be unavailable.
+        }
+      }
       setMessage(error instanceof Error ? error.message : "抢购未完成。");
     } finally {
+      reserving.current = false;
       setBusy(false);
     }
   }
 
-  if (failure) return <main className="page-shell promotion-page"><div className="empty-state"><span className="eyebrow">ACTIVITY / UNAVAILABLE</span><h2>活动暂时无法读取。</h2><p>{failure}</p><Link className="button" href="/promotions">返回活动列表</Link></div></main>;
+  if (failure && !data) return <main className="page-shell promotion-page"><div className="empty-state"><span className="eyebrow">ACTIVITY / UNAVAILABLE</span><h2>活动暂时无法读取。</h2><p>{failure}</p><Link className="button" href="/promotions">返回活动列表</Link></div></main>;
   if (!data) return <main className="page-shell promotion-page"><div className="empty-state"><p>正在读取真实活动…</p></div></main>;
   const activity = data.activity;
   const consumer = user?.userType === "CONSUMER" && !user.isDemo;
   const canReserve = activity.status === "ACTIVE" && activity.stockStatus === "AVAILABLE" && consumer && !reservationId;
 
-  return <main className="page-shell promotion-page"><Link className="eyebrow promotion-back" href="/promotions">← 返回活动列表</Link><section className="promotion-detail surface"><div><span className="eyebrow">{activity.status === "ACTIVE" ? "LIVE / LIMITED" : "SCHEDULED / UPCOMING"}</span><h1>{activity.name}</h1><p>{activity.productName} · {activity.skuName}</p><dl><div><dt>活动价格</dt><dd>{money(activity.activityPrice)}</dd></div><div><dt>每人限购</dt><dd>{activity.limitPerUser} 件</dd></div><div><dt>活动状态</dt><dd>{activity.stockStatus === "SOLD_OUT" ? "已售罄" : activity.status === "ACTIVE" ? "可尝试抢购" : "尚未开始"}</dd></div></dl></div><aside><span>开始：{new Date(activity.startAt).toLocaleString("zh-CN")}</span><span>结束：{new Date(activity.endAt).toLocaleString("zh-CN")}</span>{!user ? <Link className="button primary" href={`/consumer/login?redirect=/promotions/${activityId}`}>登录后抢购</Link> : null}{user && !consumer ? <p className="form-error">请使用真实消费者账户参与活动。</p> : null}{canReserve ? <button className="button primary" disabled={busy} onClick={() => void reserve()} type="button">{busy ? "资格确认中…" : "尝试抢购"}</button> : null}{reservation ? <ReservationResult reservation={reservation} /> : null}{message ? <p className="promotion-message">{message}</p> : null}</aside></section></main>;
+  return <main className="page-shell promotion-page"><Link className="eyebrow promotion-back" href="/promotions">← 返回活动列表</Link>{failure ? <p className="form-error">活动状态暂时无法刷新，以下是上次读取的结果：{failure}</p> : null}<section className="promotion-detail surface"><div><span className="eyebrow">{activity.status === "ACTIVE" ? "LIVE / LIMITED" : activity.status === "SCHEDULED" ? "SCHEDULED / UPCOMING" : "ACTIVITY / CLOSED"}</span><h1>{activity.name}</h1><p>{activity.productName} · {activity.skuName}</p><dl><div><dt>活动价格</dt><dd>{money(activity.activityPrice)}</dd></div><div><dt>每人限购</dt><dd>{activity.limitPerUser} 件</dd></div><div><dt>活动状态</dt><dd>{activity.stockStatus === "SOLD_OUT" ? "已售罄" : activity.status === "ACTIVE" ? "可尝试抢购" : activity.status === "SCHEDULED" ? "尚未开始" : "活动已结束"}</dd></div></dl></div><aside><span>开始：{new Date(activity.startAt).toLocaleString("zh-CN")}</span><span>结束：{new Date(activity.endAt).toLocaleString("zh-CN")}</span>{!user ? <Link className="button primary" href={`/consumer/login?redirect=/promotions/${activityId}`}>登录后抢购</Link> : null}{user && !consumer ? <p className="form-error">请使用真实消费者账户参与活动。</p> : null}{canReserve ? <button className="button primary" disabled={busy} onClick={() => void reserve()} type="button">{busy ? "资格确认中…" : "尝试抢购"}</button> : null}{reservation ? <ReservationResult reservation={reservation} /> : null}{message ? <p className="promotion-message">{message}</p> : null}</aside></section></main>;
 }
 
 function ReservationResult({ reservation }: { reservation: PromotionReservationDetail }) {
