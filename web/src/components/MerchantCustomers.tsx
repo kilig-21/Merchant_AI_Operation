@@ -1,3 +1,5 @@
+"use client";
+
 import { DemoNotice } from "./DemoNotice";
 import { MerchantShell } from "./MerchantShell";
 import { useSession } from "./SessionProvider";
