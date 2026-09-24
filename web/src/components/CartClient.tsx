@@ -12,7 +12,7 @@ import type { CartItem, CartItemMutation } from "@/lib/types";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DemoNotice } from "./DemoNotice";
 import { RequestFailure } from "./RequestFailure";
 import { useSession } from "./SessionProvider";
@@ -45,6 +45,8 @@ export function CartClient() {
   const [error, setError] = useState("");
   const [failure, setFailure] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  const pendingMutations = useRef(new Set<number>());
+  const [pendingItemIds, setPendingItemIds] = useState<number[]>([]);
   const router = useRouter();
   const { user, loading: sessionLoading } = useSession();
   const demoSession = user?.isDemo === true;
@@ -123,6 +125,10 @@ export function CartClient() {
   }, [sessionLoading, demoSession]);
 
   async function liveQuantity(item: CartItem, next: number) {
+    if (pendingMutations.current.has(item.id)) return;
+    pendingMutations.current.add(item.id);
+    setPendingItemIds([...pendingMutations.current]);
+    setError("");
     const value = Math.max(1, next);
     const previous = item.quantity;
     setItems((current) => current.map((entry) => (entry.id === item.id ? { ...entry, quantity: value } : entry)));
@@ -137,25 +143,42 @@ export function CartClient() {
     } catch (caught) {
       setItems((current) => current.map((entry) => (entry.id === item.id ? { ...entry, quantity: previous } : entry)));
       setError(caught instanceof Error ? caught.message : "更新失败。");
+    } finally {
+      pendingMutations.current.delete(item.id);
+      setPendingItemIds([...pendingMutations.current]);
     }
   }
 
   async function liveRemove(item: CartItem) {
-    const previous = items;
+    if (pendingMutations.current.has(item.id)) return;
+    pendingMutations.current.add(item.id);
+    setPendingItemIds([...pendingMutations.current]);
+    setError("");
+    const previousIndex = items.findIndex((entry) => entry.id === item.id);
     const wasSelected = selectedLiveIds.includes(item.id);
     setItems((current) => current.filter((entry) => entry.id !== item.id));
     setSelectedLiveIds((current) => current.filter((id) => id !== item.id));
     try {
       await apiClient<null>(`/api/backend/cart/items/${item.id}`, { method: "DELETE" });
     } catch (caught) {
-      setItems(previous);
+      setItems((current) => {
+        if (current.some((entry) => entry.id === item.id)) return current;
+        const restored = [...current];
+        restored.splice(Math.max(0, Math.min(previousIndex, restored.length)), 0, item);
+        return restored;
+      });
       if (wasSelected) setSelectedLiveIds((current) => [...new Set([...current, item.id])]);
       setError(caught instanceof Error ? caught.message : "移除失败。");
+    } finally {
+      pendingMutations.current.delete(item.id);
+      setPendingItemIds([...pendingMutations.current]);
     }
   }
 
   async function checkout() {
-    if (busy || !count) return;
+    if (busy || !count || pendingMutations.current.size > 0) return;
+    if (mode === "live" && liveCheckoutBlocked) return;
+    setBusy(true);
     if (mode === "demo") {
       router.push("/checkout");
       return;
@@ -238,7 +261,7 @@ export function CartClient() {
                           <label className="cart-select">
                             <input
                               checked={selectedLiveIds.includes(item.id)}
-                              disabled={!item.purchasable}
+                              disabled={!item.purchasable || pendingItemIds.includes(item.id)}
                               onChange={() => toggleLiveSelection(item.id)}
                               type="checkbox"
                             />
@@ -252,14 +275,14 @@ export function CartClient() {
                             <h2>{item.productName ?? "商品已不可用"}</h2>
                             <p>{currency(item.salePrice)} / 件 · 当前库存 {item.availableStock ?? "—"} 件</p>
                             {!item.purchasable && <p className="form-error">{item.unavailableReason ?? "当前商品不可购买"}</p>}
-                            <button onClick={() => void liveRemove(item)} type="button">移除</button>
+                            <button disabled={pendingItemIds.includes(item.id)} onClick={() => void liveRemove(item)} type="button">移除</button>
                           </div>
                           <div className="cart-line-price">
                             <strong>{currency(item.salePrice === null ? null : item.salePrice * item.quantity)}</strong>
                             <div className="stepper">
                               <button
                                 aria-label={`减少 ${item.productName ?? `SKU ${item.skuId}`} 数量`}
-                                disabled={controlsDisabled || item.quantity <= 1}
+                                disabled={controlsDisabled || pendingItemIds.includes(item.id) || item.quantity <= 1}
                                 onClick={() => void liveQuantity(item, item.quantity - 1)}
                                 type="button"
                               >
@@ -268,7 +291,7 @@ export function CartClient() {
                               <span>{item.quantity}</span>
                               <button
                                 aria-label={`增加 ${item.productName ?? `SKU ${item.skuId}`} 数量`}
-                                disabled={controlsDisabled || (item.availableStock !== null && item.quantity >= item.availableStock)}
+                                disabled={controlsDisabled || pendingItemIds.includes(item.id) || (item.availableStock !== null && item.quantity >= item.availableStock)}
                                 onClick={() => void liveQuantity(item, item.quantity + 1)}
                                 type="button"
                               >
@@ -290,8 +313,8 @@ export function CartClient() {
             <div className="summary-row"><span>店铺数量</span><strong>{mode === "demo" ? groupedDemo.length : new Set(selectedLiveItems.map((item) => item.storeId)).size} 家</strong></div>
             <div className="summary-row"><span>配送</span><strong>免运费</strong></div>
             <div className="summary-row total"><span>{mode === "demo" ? "订单总额" : "商品参考合计"}</span><strong>{mode === "demo" ? currency(demoTotal) : currency(selectedLiveTotal)}</strong></div>
-            <button className="button primary" disabled={busy || (mode === "live" && liveCheckoutBlocked)} onClick={() => void checkout()} type="button">
-              {busy ? "正在提交…" : mode === "live" && !selectedLiveItems.length ? "请选择结算商品" : mode === "live" && liveCheckoutBlocked ? "请先处理不可购买商品" : "继续结算"}
+            <button className="button primary" disabled={busy || pendingItemIds.length > 0 || (mode === "live" && liveCheckoutBlocked)} onClick={() => void checkout()} type="button">
+              {busy ? "正在跳转…" : pendingItemIds.length > 0 ? "正在同步购物袋…" : mode === "live" && !selectedLiveItems.length ? "请选择结算商品" : mode === "live" && liveCheckoutBlocked ? "请先处理不可购买商品" : "继续结算"}
             </button>
             <p>{mode === "demo" ? `跨店商品将在提交后拆分为 ${groupedDemo.length} 笔订单。` : "参考金额仅用于展示；提交时由服务端再次确认价格、库存与订单拆分。"}</p>
             {error && <p className="form-error">{error}</p>}
