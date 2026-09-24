@@ -1,18 +1,15 @@
 "use client";
 
 import { apiClient } from "@/lib/client-api";
+import { type SkuDraft, validSkuCollection } from "@/lib/product-draft";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useMemo, useRef, useState } from "react";
 import { DemoNotice } from "./DemoNotice";
 import { MerchantShell } from "./MerchantShell";
 import { useSession } from "./SessionProvider";
 
-interface SkuDraft {
-  skuName: string;
-  salePrice: number;
-  availableStock: number;
-}
+type SkuEditor = SkuDraft & { draftId: number };
 
 export function MerchantProductCreate() {
   const router = useRouter();
@@ -20,14 +17,14 @@ export function MerchantProductCreate() {
   const isDemo = user?.isDemo === true;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [publishNow, setPublishNow] = useState(true);
-  const [skus, setSkus] = useState<SkuDraft[]>([{ skuName: "标准款", salePrice: 99, availableStock: 10 }]);
+  const [publishNow, setPublishNow] = useState(false);
+  const [skus, setSkus] = useState<SkuEditor[]>([{ draftId: 1, skuName: "标准款", salePrice: "", availableStock: "" }]);
+  const nextDraftId = useRef(2);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [uncertainOutcome, setUncertainOutcome] = useState(false);
   const valid = useMemo(
-    () =>
-      name.trim().length > 0 &&
-      skus.every((sku) => sku.skuName.trim().length > 0 && sku.salePrice >= 0 && sku.availableStock >= 0),
+    () => name.trim().length > 0 && validSkuCollection(skus),
     [name, skus],
   );
 
@@ -37,9 +34,11 @@ export function MerchantProductCreate() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!valid || saving || sessionLoading || isDemo) return;
+    if (!valid || saving || sessionLoading || isDemo || uncertainOutcome) return;
     setSaving(true);
     setError("");
+    let productId: number | null = null;
+    let currentStep = "创建商品";
     try {
       const product = await apiClient<{ id: number }>("/api/backend/merchant/products", {
         method: "POST",
@@ -48,19 +47,26 @@ export function MerchantProductCreate() {
           description: description.trim() || undefined,
         }),
       });
+      productId = product.id;
       for (const sku of skus) {
+        currentStep = `添加款式「${sku.skuName.trim()}」`;
         await apiClient<{ id: number }>(`/api/backend/merchant/products/${product.id}/skus`, {
           method: "POST",
-          body: JSON.stringify(sku),
+          body: JSON.stringify({ skuName: sku.skuName.trim(), salePrice: Number(sku.salePrice), availableStock: Number(sku.availableStock) }),
         });
       }
       if (publishNow) {
+        currentStep = "上架商品";
         await apiClient<null>(`/api/backend/merchant/products/${product.id}/publish`, { method: "POST" });
       }
       router.push("/merchant/products?created=1");
       router.refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "商品创建失败。");
+      const reason = caught instanceof Error ? caught.message : "请求未完成。";
+      setError(productId
+        ? `商品草稿 #${productId} 已创建，但${currentStep}未确认成功：${reason} 请到商品管理核对，不要在此重新提交。`
+        : `创建请求结果未确认：${reason} 请先到商品管理核对，避免重复创建。`);
+      setUncertainOutcome(true);
     } finally {
       setSaving(false);
     }
@@ -106,7 +112,7 @@ export function MerchantProductCreate() {
             <span className="eyebrow">02 / SELLING UNITS</span>
             <h2 className="editorial">有哪些可售款式？</h2>
             {skus.map((sku, index) => (
-              <article className="sku-card" key={`${index}-${sku.skuName}`}>
+              <article className="sku-card" key={sku.draftId}>
                 <div className="sku-card-head">
                   <b>SKU {String(index + 1).padStart(2, "0")}</b>
                   <button
@@ -121,6 +127,7 @@ export function MerchantProductCreate() {
                   <label className="form-field">
                     款式名称
                     <input
+                      maxLength={128}
                       onChange={(event) => updateSku(index, { skuName: event.target.value })}
                       value={sku.skuName}
                     />
@@ -129,7 +136,7 @@ export function MerchantProductCreate() {
                     售价（元）
                     <input
                       min="0"
-                      onChange={(event) => updateSku(index, { salePrice: Number(event.target.value) })}
+                      onChange={(event) => updateSku(index, { salePrice: event.target.value })}
                       step="0.01"
                       type="number"
                       value={sku.salePrice}
@@ -139,7 +146,7 @@ export function MerchantProductCreate() {
                     可售库存
                     <input
                       min="0"
-                      onChange={(event) => updateSku(index, { availableStock: Number(event.target.value) })}
+                      onChange={(event) => updateSku(index, { availableStock: event.target.value })}
                       step="1"
                       type="number"
                       value={sku.availableStock}
@@ -153,13 +160,14 @@ export function MerchantProductCreate() {
               onClick={() =>
                 setSkus((current) => [
                   ...current,
-                  { skuName: `款式 ${current.length + 1}`, salePrice: 99, availableStock: 10 },
+                  { draftId: nextDraftId.current++, skuName: `款式 ${current.length + 1}`, salePrice: "", availableStock: "" },
                 ])
               }
               type="button"
             >
               ＋ 增加一个 SKU
             </button>
+            <p className="auth-field-note">款式名称不可重复；售价需大于 0 且最多两位小数，库存需为非负整数。</p>
           </section>
         </div>
         <aside className="publish-panel surface">
@@ -180,8 +188,9 @@ export function MerchantProductCreate() {
           </label>
           <p>上架后，消费者可以在公共商品页看到它。</p>
           {error && <p className="form-error">{error}</p>}
-          <button className="button primary" disabled={!valid || saving || sessionLoading || isDemo} type="submit">
-            {isDemo ? "演示账号不可创建" : saving ? "正在创建…" : "创建商品"}
+          {uncertainOutcome ? <Link className="button" href="/merchant/products">前往商品管理核对 ↗</Link> : null}
+          <button className="button primary" disabled={!valid || saving || sessionLoading || isDemo || uncertainOutcome} type="submit">
+            {isDemo ? "演示账号不可创建" : uncertainOutcome ? "请先核对创建结果" : saving ? "正在创建…" : "创建商品"}
           </button>
         </aside>
       </form>
