@@ -19,7 +19,7 @@ export function ProductCard({
         <Image src={visual.image} alt={product.name} fill sizes="(max-width: 720px) 88vw, 33vw" />
       </div>
       <div className="product-card-copy">
-        <span>{storeName ? `${storeName} / ${visual.category}` : visual.category}</span>
+        <span>{storeName ?? visual.category}</span>
         <strong>{currency(product.minSalePrice)}</strong>
         <h3>{product.name}</h3>
         <p>{product.description}</p>
