@@ -13,6 +13,8 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
+
 import java.util.UUID;
 
 @Slf4j
@@ -145,5 +147,33 @@ public class AiChatService {
                 );
             }
         }
+    }
+
+    /**
+    * 接入真实模型的 delta 流
+    * */
+    public Flux<String> stream(AiChatRequest request){
+        ChatModel chatModel = chatModelProvider.getIfAvailable();
+
+        if (chatModel == null){
+            return Flux.error(
+                    new AiChatException(
+                            503,
+                            "AI 服务尚未配置，请联系管理员",
+                            null
+                    )
+            );
+        }
+        CurrentUser.required();
+
+        ChatClient chatClient = ChatClient.builder(chatModel)
+                .defaultSystem(SYSTEM_PROMPT)
+                .build();
+
+        return chatClient.prompt()
+                .user(request.message())
+                .stream()
+                .content();
+
     }
 }
