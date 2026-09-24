@@ -1621,6 +1621,43 @@ img {
   background: var(--morrow-solid);
   box-shadow: 0 8px 25px rgba(20, 22, 19, 0.06);
 }
+.merchant-sidebar nav a.pending {
+  color: var(--morrow-ink);
+  background: var(--morrow-solid);
+}
+.merchant-sidebar nav a.pending span {
+  color: #789820;
+  font-weight: 700;
+}
+.merchant-route-loading {
+  display: block;
+  position: relative;
+  min-height: 180px;
+  margin-top: 24px;
+  overflow: hidden;
+  border: 1px solid var(--morrow-line);
+  border-radius: 20px;
+  background: var(--morrow-surface);
+}
+.merchant-route-loading__bar {
+  display: block;
+  height: 3px;
+  width: 38%;
+  background: #789820;
+  animation: merchant-loading-progress 1.5s ease-in-out infinite alternate;
+}
+.merchant-route-loading__message {
+  display: block;
+  margin: 42px 28px;
+  color: var(--morrow-muted);
+}
+@keyframes merchant-loading-progress {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(265%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .merchant-route-loading__bar { animation: none; }
+}
 .merchant-account {
   margin-top: auto;
   padding-top: 17px;

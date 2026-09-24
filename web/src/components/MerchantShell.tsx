@@ -2,6 +2,7 @@
 import { ThemeSwitcher } from "@once-ui-system/core";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { useSession } from "./SessionProvider";
 const nav = [
   { href: "/merchant/dashboard", label: "经营概览" },
@@ -20,6 +21,8 @@ export function MerchantShell({
   children,
 }: { title: string; eyebrow?: string; actions?: React.ReactNode; children: React.ReactNode }) {
   const path = usePathname();
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const navigatingTo = pendingHref && !path.startsWith(pendingHref) ? pendingHref : null;
   const { user, signOut } = useSession();
   return (
     <main className="merchant-shell">
@@ -29,12 +32,19 @@ export function MerchantShell({
         </Link>
         <nav>
           {nav.map((item) => (
-            <Link className={path.startsWith(item.href) ? "active" : ""} href={item.href} key={item.href}>
+            <Link
+              aria-current={path.startsWith(item.href) ? "page" : undefined}
+              className={`${path.startsWith(item.href) ? "active" : ""}${navigatingTo === item.href ? " pending" : ""}`}
+              href={item.href}
+              key={item.href}
+              onNavigate={() => setPendingHref(path.startsWith(item.href) ? null : item.href)}
+            >
               {item.label}
-              <span>↗</span>
+              <span>{navigatingTo === item.href ? "···" : "↗"}</span>
             </Link>
           ))}
         </nav>
+        <span aria-live="polite" className="sr-only">{navigatingTo ? `正在打开${nav.find((item) => item.href === navigatingTo)?.label ?? "页面"}` : ""}</span>
         <div className="merchant-account">
           <span>{user?.username || "merchant"}</span>
           <small>{user?.tenantId ? `Tenant ${user.tenantId}` : "商家账户"}</small>
