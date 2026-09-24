@@ -4,7 +4,9 @@ import { apiClient } from "@/lib/client-api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useMemo, useState } from "react";
+import { DemoNotice } from "./DemoNotice";
 import { MerchantShell } from "./MerchantShell";
+import { useSession } from "./SessionProvider";
 
 interface SkuDraft {
   skuName: string;
@@ -14,6 +16,8 @@ interface SkuDraft {
 
 export function MerchantProductCreate() {
   const router = useRouter();
+  const { user, loading: sessionLoading } = useSession();
+  const isDemo = user?.isDemo === true;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [publishNow, setPublishNow] = useState(true);
@@ -33,7 +37,7 @@ export function MerchantProductCreate() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!valid || saving) return;
+    if (!valid || saving || sessionLoading || isDemo) return;
     setSaving(true);
     setError("");
     try {
@@ -72,6 +76,7 @@ export function MerchantProductCreate() {
         </Link>
       }
     >
+      {isDemo ? <DemoNotice>演示账号只能预览商品编辑界面，不能创建或上架真实商品。</DemoNotice> : null}
       <form className="create-grid" onSubmit={submit}>
         <div>
           <section className="form-section surface">
@@ -175,8 +180,8 @@ export function MerchantProductCreate() {
           </label>
           <p>上架后，消费者可以在公共商品页看到它。</p>
           {error && <p className="form-error">{error}</p>}
-          <button className="button primary" disabled={!valid || saving} type="submit">
-            {saving ? "正在创建…" : "创建商品"}
+          <button className="button primary" disabled={!valid || saving || sessionLoading || isDemo} type="submit">
+            {isDemo ? "演示账号不可创建" : saving ? "正在创建…" : "创建商品"}
           </button>
         </aside>
       </form>

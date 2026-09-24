@@ -285,9 +285,9 @@ export function MerchantDashboard() {
             </article>
 
             <article className="panel surface common-questions">
-              <span className="eyebrow">AI ASSISTANT / A2</span>
+              <span className="eyebrow">AI ASSISTANT / A3</span>
               <h2>常问问题</h2>
-              <p>经营助手现已开放基础文本对话；当前不会读取下方指标，也不会执行店铺操作。</p>
+              <p>真实商家账号可在明确日期范围内查询本店经营汇总；助手不会执行店铺操作。演示账号仅可预览界面。</p>
               <ul>
                 <li>帮我写一段新品上架公告</li>
                 <li>给我三条通用的店铺经营建议</li>

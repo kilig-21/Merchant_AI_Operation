@@ -8,8 +8,10 @@ import {
   normalizeMerchantAiMessage,
 } from "@/lib/merchant-ai";
 import type { MerchantAiChatResponse } from "@/lib/types";
+import { DemoNotice } from "./DemoNotice";
 import { RequestFailure } from "./RequestFailure";
 import { MerchantShell } from "./MerchantShell";
+import { useSession } from "./SessionProvider";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -26,6 +28,8 @@ const starterMessage: ChatMessage = {
 };
 
 export function MerchantAiChat() {
+  const { user, loading: sessionLoading } = useSession();
+  const isDemo = user?.isDemo === true;
   const [messages, setMessages] = useState<ChatMessage[]>([starterMessage]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -39,6 +43,7 @@ export function MerchantAiChat() {
   });
 
   async function requestAnswer(message: string) {
+    if (sessionLoading || isDemo) return;
     setFailure(null);
     setRetryMessage(null);
     setLoading(true);
@@ -71,7 +76,7 @@ export function MerchantAiChat() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const message = normalizeMerchantAiMessage(input);
-    if (!message || loading) return;
+    if (!message || loading || sessionLoading || isDemo) return;
 
     setMessages((current) => [...current, { role: "user", content: message }]);
     setInput("");
@@ -79,7 +84,7 @@ export function MerchantAiChat() {
   }
 
   function retry() {
-    if (retryMessage && !loading) void requestAnswer(retryMessage);
+    if (retryMessage && !loading && !sessionLoading && !isDemo) void requestAnswer(retryMessage);
   }
 
   const statusLabel = {
@@ -91,6 +96,7 @@ export function MerchantAiChat() {
 
   return (
     <MerchantShell title="AI 经营助手" eyebrow="MORROW / AI OPERATIONS">
+      {isDemo ? <DemoNotice>演示账号只能预览对话界面；真实经营数据查询需要商家账号和后端服务。</DemoNotice> : null}
       <section className="ai-chat-layout" aria-label="AI 经营助手">
         <div className="ai-chat-intro">
           <span className="eyebrow">A3 / READ-ONLY TOOL</span>
@@ -104,7 +110,7 @@ export function MerchantAiChat() {
           </div>
           <div className="ai-chat-starters" aria-label="快捷问题">
             {merchantAiStarterQuestions.map((question) => (
-              <button disabled={loading} key={question} onClick={() => setInput(question)} type="button">
+              <button disabled={loading || sessionLoading || isDemo} key={question} onClick={() => setInput(question)} type="button">
                 {question}<span aria-hidden="true">↗</span>
               </button>
             ))}
@@ -114,7 +120,7 @@ export function MerchantAiChat() {
         <section className="ai-chat-panel surface" aria-label="对话记录">
           <div className={`ai-chat-status ai-chat-status--${serviceState}`}>
             <span className="status-dot" aria-hidden="true" />
-            <span>{statusLabel}</span>
+            <span>{isDemo ? "演示预览，不连接服务" : statusLabel}</span>
             <small>A3 · 经营汇总 · 只读查询</small>
           </div>
 
@@ -148,12 +154,12 @@ export function MerchantAiChat() {
               placeholder="例如：帮我写一段新品上架公告"
               maxLength={MERCHANT_AI_MESSAGE_LIMIT}
               rows={3}
-              disabled={loading}
+              disabled={loading || sessionLoading || isDemo}
             />
             <div className="ai-chat-form-footer">
               <span>{input.length}/{MERCHANT_AI_MESSAGE_LIMIT}</span>
-              <button className="button primary" type="submit" disabled={loading || !input.trim()}>
-                {loading ? "发送中…" : "发送 ↗"}
+              <button className="button primary" type="submit" disabled={loading || sessionLoading || isDemo || !input.trim()}>
+                {isDemo ? "演示账号不可发送" : loading ? "发送中…" : "发送 ↗"}
               </button>
             </div>
           </form>
