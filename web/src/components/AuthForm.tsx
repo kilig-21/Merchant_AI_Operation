@@ -18,10 +18,8 @@ interface AuthFormProps {
 
 type FormValues = {
   username: string;
-  email: string;
   password: string;
   passwordConfirm: string;
-  terms: boolean;
   businessName: string;
   storeName: string;
   contactName: string;
@@ -30,10 +28,8 @@ type FormValues = {
 
 const initialValues: FormValues = {
   username: "",
-  email: "",
   password: "",
   passwordConfirm: "",
-  terms: false,
   businessName: "",
   storeName: "",
   contactName: "",
@@ -106,12 +102,12 @@ export function AuthForm({ audience, mode, submission = "live" }: AuthFormProps)
     ) {
       return "请先补充商家名称、店铺名称和联系人。";
     }
-    if (!values.username.trim() || !values.email.trim() || !values.password || !values.passwordConfirm) {
+    if (!values.username.trim() || !values.password || !values.passwordConfirm) {
       return "请完整填写注册信息。";
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) return "请输入有效的邮箱地址。";
+    if (values.username.trim().length < 3 || values.username.trim().length > 64) return "账号长度需为 3 到 64 个字符。";
+    if (values.password.length < 6 || values.password.length > 32) return "密码长度需为 6 到 32 个字符。";
     if (values.password !== values.passwordConfirm) return "两次输入的密码不一致。";
-    if (!values.terms) return "请先同意服务条款。";
     return "";
   };
 
@@ -132,7 +128,7 @@ export function AuthForm({ audience, mode, submission = "live" }: AuthFormProps)
     try {
       const result = await apiClient<{ user: SessionUser }>(`/api/session/${mode}`, {
         method: "POST",
-        body: JSON.stringify({ username: values.username, password: values.password }),
+        body: JSON.stringify({ username: values.username.trim(), password: values.password }),
       });
       if (isMerchant && !result.user.userType.startsWith("MERCHANT_")) {
         await fetch("/api/session/logout", { method: "POST" });
@@ -233,16 +229,6 @@ export function AuthForm({ audience, mode, submission = "live" }: AuthFormProps)
         placeholder={isMerchant ? "输入商家账号" : "输入账号"}
         autoComplete="username"
       />
-      {!isLogin ? (
-        <Field
-          label="联系邮箱"
-          value={values.email}
-          onChange={(value) => setValue("email", value)}
-          placeholder="输入邮箱地址"
-          autoComplete="email"
-          type="email"
-        />
-      ) : null}
       <Field
         label="密码"
         value={values.password}
@@ -262,18 +248,8 @@ export function AuthForm({ audience, mode, submission = "live" }: AuthFormProps)
         />
       ) : null}
 
-      {!isLogin ? (
-        <label className="auth-check">
-          <input
-            type="checkbox"
-            checked={values.terms}
-            onChange={(event) => setValue("terms", event.target.checked)}
-          />
-          <span>我同意 Morrow 的{isMerchant ? "商家" : "用户"}服务条款</span>
-        </label>
-      ) : null}
       {!isLogin && !isMerchant ? (
-        <p className="auth-field-note">邮箱绑定功能待接入，当前仅用于页面信息校验。</p>
+        <p className="auth-field-note">当前仅支持账号密码注册；邮箱绑定、找回密码和服务条款尚未接入。</p>
       ) : null}
       {error ? (
         <p className="form-error" role="alert">
@@ -305,7 +281,7 @@ export function AuthForm({ audience, mode, submission = "live" }: AuthFormProps)
       <p className="auth-switch">
         {spotlightCopy.switch} <Link href={switchHref}>{spotlightCopy.switchAction}</Link>
       </p>
-      <small className="auth-legal">继续即表示你同意以必要的会话信息完成账户操作。</small>
+      <small className="auth-legal">{submission === "demo" ? "演示商家注册不会提交或保存输入信息。" : "登录会创建必要的会话 Cookie。"}</small>
     </form>
   );
 }
