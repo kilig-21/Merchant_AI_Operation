@@ -1,12 +1,14 @@
 "use client";
 
 import { apiClient } from "@/lib/client-api";
+import { appendUniquePage, hasNextPage } from "@/lib/pagination";
 import type { MerchantProduct, MerchantPromotionActivity, ProductDetail } from "@/lib/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { MerchantShell } from "./MerchantShell";
 import { useSession } from "./SessionProvider";
 
 type Filter = "ALL" | "ACTIVE" | "SCHEDULED" | "ENDED" | "CANCELLED";
+const PRODUCT_PAGE_SIZE = 50;
 
 const labels: Record<string, string> = {
   ACTIVE: "进行中",
@@ -28,6 +30,10 @@ export function MerchantMarketing() {
   const { user, loading: sessionLoading } = useSession();
   const [activities, setActivities] = useState<MerchantPromotionActivity[]>([]);
   const [products, setProducts] = useState<MerchantProduct[]>([]);
+  const [productPage, setProductPage] = useState(1);
+  const [hasMoreProducts, setHasMoreProducts] = useState(false);
+  const [loadingMoreProducts, setLoadingMoreProducts] = useState(false);
+  const [productError, setProductError] = useState("");
   const [skus, setSkus] = useState<ProductDetail["skus"]>([]);
   const [filter, setFilter] = useState<Filter>("ALL");
   const [selectedProductId, setSelectedProductId] = useState("");
@@ -50,16 +56,35 @@ export function MerchantMarketing() {
     try {
       const [nextActivities, nextProducts] = await Promise.all([
         apiClient<MerchantPromotionActivity[]>("/api/backend/merchant/promotions"),
-        apiClient<MerchantProduct[]>("/api/backend/merchant/products?page=1&size=50"),
+        apiClient<MerchantProduct[]>(`/api/backend/merchant/products?page=1&size=${PRODUCT_PAGE_SIZE}`),
       ]);
       setActivities(nextActivities);
       setProducts(nextProducts.filter((product) => product.status === "ON_SALE"));
+      setProductPage(1);
+      setHasMoreProducts(hasNextPage(nextProducts.length, PRODUCT_PAGE_SIZE));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "真实营销活动暂时无法读取。");
     } finally {
       setLoading(false);
     }
   }, []);
+
+  async function loadMoreProducts() {
+    if (loadingMoreProducts || !hasMoreProducts) return;
+    setLoadingMoreProducts(true);
+    setProductError("");
+    const nextPage = productPage + 1;
+    try {
+      const result = await apiClient<MerchantProduct[]>(`/api/backend/merchant/products?page=${nextPage}&size=${PRODUCT_PAGE_SIZE}`);
+      setProducts((current) => appendUniquePage(current, result.filter((product) => product.status === "ON_SALE"), (product) => product.id));
+      setProductPage(nextPage);
+      setHasMoreProducts(hasNextPage(result.length, PRODUCT_PAGE_SIZE));
+    } catch (caught) {
+      setProductError(caught instanceof Error ? caught.message : "后续商品暂时无法读取。");
+    } finally {
+      setLoadingMoreProducts(false);
+    }
+  }
 
   useEffect(() => {
     if (sessionLoading || !user || user.isDemo) return;
@@ -167,6 +192,8 @@ export function MerchantMarketing() {
         <header><div><span className="eyebrow">NEW / LIMITED SALE</span><h2>创建限量促销</h2></div><p>活动库存会从普通可售库存中划拨；开始前需要手动预热。</p></header>
         <label className="form-field">活动名称<input onChange={(event) => setName(event.target.value)} required value={name} /></label>
         <label className="form-field">参与商品<select onChange={(event) => setSelectedProductId(event.target.value)} required value={selectedProductId}><option value="">选择已上架商品</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></label>
+        {hasMoreProducts ? <button className="button" disabled={loadingMoreProducts} onClick={() => void loadMoreProducts()} type="button">{loadingMoreProducts ? "加载中…" : "加载更多已上架商品"}</button> : null}
+        {productError ? <p className="form-error" role="alert">{productError}</p> : null}
         <label className="form-field">SKU<select disabled={!skus.length} onChange={(event) => { const sku = skus.find((entry) => entry.id === Number(event.target.value)); setSelectedSkuId(event.target.value); if (sku) setActivityPrice(String(sku.salePrice)); }} required value={selectedSkuId}><option value="">选择 SKU</option>{skus.map((sku) => <option key={sku.id} value={sku.id}>{sku.skuName} · 可售 {sku.availableStock}</option>)}</select></label>
         <label className="form-field">活动价格（元）<input min="0.01" onChange={(event) => setActivityPrice(event.target.value)} required step="0.01" type="number" value={activityPrice} /></label>
         <label className="form-field">活动库存<input min="1" onChange={(event) => setStockTotal(event.target.value)} required type="number" value={stockTotal} /></label>
