@@ -34,6 +34,8 @@ interface MerchantChartsProps {
   rangeLabel: string;
   demo: boolean;
   loading: boolean;
+  trendsUnavailable?: boolean;
+  productsUnavailable?: boolean;
 }
 
 const demoOrders: InteractiveTrendPoint[] = [18, 22, 16, 27, 31, 24, 36].map((value, index) => ({
@@ -339,7 +341,7 @@ function toLineData(points: MerchantDashboardTrendPoint[], key: "orderCount" | "
   });
 }
 
-export function MerchantCharts({ products, trends, rangeLabel, demo, loading }: MerchantChartsProps) {
+export function MerchantCharts({ products, trends, rangeLabel, demo, loading, trendsUnavailable = false, productsUnavailable = false }: MerchantChartsProps) {
   const realOrders = useMemo(() => toLineData(trends, "orderCount"), [trends]);
   const realRevenue = useMemo(() => toLineData(trends, "paidRevenue"), [trends]);
   const orderData = demo ? demoOrders : realOrders;
@@ -364,7 +366,7 @@ export function MerchantCharts({ products, trends, rangeLabel, demo, loading }: 
             </div>
             <span>{rangeLabel}</span>
           </div>
-          {loading ? <div className="chart-empty chart-empty--panel">正在读取真实订单趋势…</div> : <InteractiveLineChart data={orderData} unit="orders" demo={demo} showYAxis />}
+          {loading ? <div className="chart-empty chart-empty--panel">正在读取真实订单趋势…</div> : trendsUnavailable ? <div className="chart-empty chart-empty--panel">订单趋势暂时无法读取。</div> : <InteractiveLineChart data={orderData} unit="orders" demo={demo} showYAxis />}
           <div className="chart-source">HAIRLINE LINE · {source}</div>
         </article>
         <article className="panel surface chart-panel">
@@ -375,7 +377,7 @@ export function MerchantCharts({ products, trends, rangeLabel, demo, loading }: 
             </div>
             <span>人民币 / 元</span>
           </div>
-          {loading ? <div className="chart-empty chart-empty--panel">正在读取真实营业额趋势…</div> : <RevenueStroke data={revenueData} demo={demo} />}
+          {loading ? <div className="chart-empty chart-empty--panel">正在读取真实营业额趋势…</div> : trendsUnavailable ? <div className="chart-empty chart-empty--panel">营业额趋势暂时无法读取。</div> : <RevenueStroke data={revenueData} demo={demo} />}
           <div className="chart-source">DRAW-IN + COUNTER · {source}</div>
         </article>
       </div>
@@ -388,7 +390,7 @@ export function MerchantCharts({ products, trends, rangeLabel, demo, loading }: 
             </div>
             <span>{demo ? "DEMO CATALOG" : "LIVE CATALOG"}</span>
           </div>
-          <InventoryTicks products={products} />
+          {productsUnavailable ? <div className="chart-empty chart-empty--panel">商品库存暂时无法读取。</div> : <InventoryTicks products={products} />}
           <div className="chart-source">TICK ROWS · {demo ? "DEMO CATALOG" : "MERCHANT PRODUCT API"}</div>
         </article>
         <article className="panel surface chart-panel chart-note-panel">

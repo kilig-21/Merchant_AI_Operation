@@ -1739,6 +1739,23 @@ img {
   min-height: 38px;
   white-space: nowrap;
 }
+.dashboard-partial-warning {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin: 20px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--morrow-line);
+  border-radius: 14px;
+  color: var(--morrow-ink);
+  background: var(--morrow-surface);
+  font-size: 13px;
+}
+.dashboard-partial-warning .button { flex: none; }
+@media (max-width: 650px) {
+  .dashboard-partial-warning { align-items: flex-start; flex-direction: column; }
+}
 .metric {
   min-height: 145px;
   padding: 22px;

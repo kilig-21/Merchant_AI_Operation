@@ -20,6 +20,7 @@ import { StatusPill } from "./StatusPill";
 import { useSession } from "./SessionProvider";
 
 type DateRange = { startDate: string; endDate: string };
+const dashboardSections = ["商品目录", "经营汇总", "趋势图", "热销商品", "促销表现", "售后申请率"] as const;
 
 function toDateInputValue(date: Date) {
   const year = date.getFullYear();
@@ -51,21 +52,24 @@ export function MerchantDashboard() {
   const [demo, setDemo] = useState(false);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [failure, setFailure] = useState<unknown>(null);
+  const [unavailableSections, setUnavailableSections] = useState<string[]>([]);
   const { user, loading } = useSession();
 
   const loadDashboard = useCallback(async () => {
     if (loading) return;
 
     setFailure(null);
+    setUnavailableSections([]);
     setLoadingDashboard(true);
+    setProducts([]);
+    setMetrics(null);
+    setTrends([]);
+    setTopProducts([]);
+    setPromotions([]);
+    setAfterSale(null);
 
     if (user?.isDemo === true) {
       setProducts(demoMerchantProducts);
-      setMetrics(null);
-      setTrends([]);
-      setTopProducts([]);
-      setPromotions([]);
-      setAfterSale(null);
       setDemo(true);
       setLoadingDashboard(false);
       return;
@@ -73,7 +77,7 @@ export function MerchantDashboard() {
 
     try {
       const query = new URLSearchParams(activeRange).toString();
-      const [nextProducts, nextMetrics, nextTrends, nextTopProducts, nextPromotions, nextAfterSale] = await Promise.all([
+      const results = await Promise.allSettled([
         apiClient<MerchantProduct[]>("/api/backend/merchant/products?page=1&size=8"),
         apiClient<MerchantOperatingSummary>(`/api/backend/merchant/analytics/summary?${query}`),
         apiClient<MerchantDashboardTrendPoint[]>(`/api/backend/merchant/dashboard/trends?${query}`),
@@ -81,12 +85,16 @@ export function MerchantDashboard() {
         apiClient<PromotionPerformance[]>(`/api/backend/merchant/analytics/promotions?${query}&limit=5`),
         apiClient<AfterSaleRate>(`/api/backend/merchant/analytics/after-sale-rate?${query}`),
       ]);
-      setProducts(nextProducts);
-      setMetrics(nextMetrics);
-      setTrends(nextTrends);
-      setTopProducts(nextTopProducts);
-      setPromotions(nextPromotions);
-      setAfterSale(nextAfterSale);
+      const [nextProducts, nextMetrics, nextTrends, nextTopProducts, nextPromotions, nextAfterSale] = results;
+      setProducts(nextProducts.status === "fulfilled" ? nextProducts.value : []);
+      setMetrics(nextMetrics.status === "fulfilled" ? nextMetrics.value : null);
+      setTrends(nextTrends.status === "fulfilled" ? nextTrends.value : []);
+      setTopProducts(nextTopProducts.status === "fulfilled" ? nextTopProducts.value : []);
+      setPromotions(nextPromotions.status === "fulfilled" ? nextPromotions.value : []);
+      setAfterSale(nextAfterSale.status === "fulfilled" ? nextAfterSale.value : null);
+      const unavailable = results.flatMap((result, index) => result.status === "rejected" ? [dashboardSections[index]] : []);
+      setUnavailableSections(unavailable);
+      if (unavailable.length === results.length) setFailure(nextProducts.status === "rejected" ? nextProducts.reason : new Error("经营数据暂时无法读取。"));
       setDemo(false);
     } catch (caught) {
       setProducts([]);
@@ -95,6 +103,7 @@ export function MerchantDashboard() {
       setTopProducts([]);
       setPromotions([]);
       setAfterSale(null);
+      setUnavailableSections([]);
       setDemo(false);
       setFailure(caught);
     } finally {
@@ -132,6 +141,12 @@ export function MerchantDashboard() {
           onRetry={retry}
           title="经营概览暂时无法读取"
         />
+      ) : null}
+      {!failure && unavailableSections.length > 0 ? (
+        <div className="dashboard-partial-warning" role="alert">
+          <span>{unavailableSections.join("、")}暂时无法读取；其余区域仍显示真实数据。</span>
+          <button className="button" disabled={loadingDashboard} onClick={retry} type="button">{loadingDashboard ? "读取中…" : "重试缺失数据"}</button>
+        </div>
       ) : null}
       {!failure ? (
         <>
@@ -193,13 +208,22 @@ export function MerchantDashboard() {
             </article>
           </section>
 
-          <MerchantCharts demo={demo} loading={loadingDashboard} products={products} rangeLabel={period} trends={trends} />
+          <MerchantCharts
+            demo={demo}
+            loading={loadingDashboard}
+            products={products}
+            productsUnavailable={unavailableSections.includes("商品目录")}
+            rangeLabel={period}
+            trends={trends}
+            trendsUnavailable={unavailableSections.includes("趋势图")}
+          />
 
           <section className="analytics-insights" aria-label="经营洞察">
             <article className="panel surface analytics-panel">
               <span className="eyebrow">TOP PRODUCTS</span>
               <h2>热销 SKU</h2>
-              {!loadingDashboard && !topProducts.length ? <p className="chart-empty">该范围内暂无已支付商品。</p> : null}
+              {!loadingDashboard && unavailableSections.includes("热销商品") ? <p className="chart-empty">热销商品暂时无法读取。</p> : null}
+              {!loadingDashboard && !unavailableSections.includes("热销商品") && !topProducts.length ? <p className="chart-empty">{demo ? "演示会话不提供真实热销数据。" : "该范围内暂无已支付商品。"}</p> : null}
               {topProducts.map((product, index) => (
                 <div className="merchant-row" key={product.skuId}>
                   <div>
@@ -213,7 +237,8 @@ export function MerchantDashboard() {
             <article className="panel surface analytics-panel">
               <span className="eyebrow">CAMPAIGN SIGNAL</span>
               <h2>促销表现</h2>
-              {!loadingDashboard && !promotions.length ? <p className="chart-empty">该范围内暂无促销资格记录。</p> : null}
+              {!loadingDashboard && unavailableSections.includes("促销表现") ? <p className="chart-empty">促销表现暂时无法读取。</p> : null}
+              {!loadingDashboard && !unavailableSections.includes("促销表现") && !promotions.length ? <p className="chart-empty">{demo ? "演示会话不提供真实促销数据。" : "该范围内暂无促销资格记录。"}</p> : null}
               {promotions.map((promotion) => (
                 <div className="merchant-row" key={promotion.activityId}>
                   <div>
@@ -232,7 +257,7 @@ export function MerchantDashboard() {
               <p>
                 {afterSale
                   ? `${afterSale.afterSaleOrderItemCount} / ${afterSale.paidOrderItemCount} 个已支付订单明细曾发起售后`
-                  : "正在读取售后数据…"}
+                  : loadingDashboard ? "正在读取售后数据…" : demo ? "演示会话不提供真实售后数据。" : "售后申请率暂时无法读取或暂无数据。"}
               </p>
               <small>申请率不等于退款率或退款完成率</small>
             </article>
@@ -243,7 +268,8 @@ export function MerchantDashboard() {
               <span className="eyebrow">CATALOG PULSE</span>
               <h2>最近商品</h2>
               {loadingDashboard ? <p className="chart-empty">正在读取真实商品目录…</p> : null}
-              {!loadingDashboard && !products.length ? <p className="chart-empty">当前店铺还没有商品。</p> : null}
+              {!loadingDashboard && unavailableSections.includes("商品目录") ? <p className="chart-empty">商品目录暂时无法读取。</p> : null}
+              {!loadingDashboard && !unavailableSections.includes("商品目录") && !products.length ? <p className="chart-empty">当前店铺还没有商品。</p> : null}
               {products.slice(0, 5).map((product) => (
                 <div className="merchant-row" key={product.id}>
                   <div>
@@ -260,10 +286,10 @@ export function MerchantDashboard() {
               <span className="eyebrow">NEXT ACTION</span>
               <h2>经营待办</h2>
               <div className="merchant-row">
-                <span>{metrics?.lowStockProductCount ? `处理 ${metrics.lowStockProductCount} 个低库存商品` : "当前没有低库存商品"}</span>
+                <span>{demo ? "演示会话不展示真实库存待办" : metrics ? metrics.lowStockProductCount ? `处理 ${metrics.lowStockProductCount} 个低库存商品` : "当前没有低库存商品" : "库存汇总暂时无法读取"}</span>
               </div>
               <div className="merchant-row">
-                <span>{metrics?.pendingPaymentCount ? `跟进 ${metrics.pendingPaymentCount} 笔待支付订单` : "当前没有待支付订单"}</span>
+                <span>{demo ? "演示会话不展示真实订单待办" : metrics ? metrics.pendingPaymentCount ? `跟进 ${metrics.pendingPaymentCount} 笔待支付订单` : "当前没有待支付订单" : "订单汇总暂时无法读取"}</span>
               </div>
               <Link className="merchant-row merchant-row--link" href="/merchant/orders">
                 <span>查看本店真实订单</span>
